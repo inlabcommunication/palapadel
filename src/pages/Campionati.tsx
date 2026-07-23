@@ -120,7 +120,7 @@ export function CampionatiPage() {
         />
       )}
 
-      {edition && type && (
+      {edition && (
         <div className="mb-4">
           {editingEdition && isAdmin ? (
             <EditEditionForm
@@ -139,7 +139,11 @@ export function CampionatiPage() {
           ) : (
             <div className="flex items-center justify-between">
               <p className="text-[13px] text-[#7A7A75]">
-                {edition.status === "attiva" ? "Attiva" : edition.status === "conclusa" ? "Conclusa" : edition.status === "nascosta" ? "Nascosta" : "Bozza"}
+                {!type ? (
+                  <span className="text-[#993C1D] font-semibold">
+                    Tipologia non trovata — modifica l'edizione per collegarla a una tipologia valida
+                  </span>
+                ) : edition.status === "attiva" ? "Attiva" : edition.status === "conclusa" ? "Conclusa" : edition.status === "nascosta" ? "Nascosta" : "Bozza"}
               </p>
               {isAdmin && (
                 <button onClick={() => setEditingEdition(true)} className="flex items-center gap-1 text-xs text-court font-semibold">
@@ -421,6 +425,7 @@ function TeamStandings({
             <ImportTeamStandings
               editionId={editionId}
               existingEditionTeams={rows}
+              allTeams={teams}
               onDone={(msg) => {
                 showToast(msg);
                 setShowImport(false);
@@ -441,18 +446,21 @@ function TeamStandings({
 function ImportTeamStandings({
   editionId,
   existingEditionTeams,
+  allTeams,
   onDone,
   onCancel,
 }: {
   editionId: string;
   existingEditionTeams: (EditionTeam & { team?: Team })[];
+  allTeams: Team[];
   onDone: (msg: string) => void;
   onCancel: () => void;
 }) {
   const [text, setText] = useState("");
   const [preview, setPreview] = useState<{
     matched: { row: EditionTeam & { team?: Team }; num1: number; num2: number }[];
-    notFound: string[];
+    toEnroll: { team: Team; num1: number; num2: number }[];
+    toCreate: { name: string; num1: number; num2: number }[];
     missing: (EditionTeam & { team?: Team })[];
     skipped: string[];
   } | null>(null);
@@ -461,22 +469,27 @@ function ImportTeamStandings({
   const analyze = () => {
     const { rows, skippedLines } = parsePastedTable(text);
     const matched: { row: EditionTeam & { team?: Team }; num1: number; num2: number }[] = [];
-    const notFound: string[] = [];
+    const toEnroll: { team: Team; num1: number; num2: number }[] = [];
+    const toCreate: { name: string; num1: number; num2: number }[] = [];
     const matchedIds = new Set<string>();
 
     for (const parsedRow of rows) {
-      const found = existingEditionTeams.find(
-        (et) => et.team?.name.trim().toLowerCase() === parsedRow.name.trim().toLowerCase()
-      );
-      if (found) {
-        matched.push({ row: found, num1: parsedRow.num1, num2: parsedRow.num2 });
-        matchedIds.add(found.id);
+      const nameLower = parsedRow.name.trim().toLowerCase();
+      const enrolled = existingEditionTeams.find((et) => et.team?.name.trim().toLowerCase() === nameLower);
+      if (enrolled) {
+        matched.push({ row: enrolled, num1: parsedRow.num1, num2: parsedRow.num2 });
+        matchedIds.add(enrolled.id);
+        continue;
+      }
+      const existingTeam = allTeams.find((t) => t.name.trim().toLowerCase() === nameLower);
+      if (existingTeam) {
+        toEnroll.push({ team: existingTeam, num1: parsedRow.num1, num2: parsedRow.num2 });
       } else {
-        notFound.push(parsedRow.name);
+        toCreate.push({ name: parsedRow.name, num1: parsedRow.num1, num2: parsedRow.num2 });
       }
     }
     const missing = existingEditionTeams.filter((et) => !matchedIds.has(et.id));
-    setPreview({ matched, notFound, missing, skipped: skippedLines });
+    setPreview({ matched, toEnroll, toCreate, missing, skipped: skippedLines });
   };
 
   const confirm = async () => {
@@ -486,10 +499,39 @@ function ImportTeamStandings({
       for (const { row, num1, num2 } of preview.matched) {
         await updateDoc(doc(db, "editionTeams", row.id), { points: num1, played: num2 });
       }
+      for (const { team, num1, num2 } of preview.toEnroll) {
+        const id = `${editionId}_${team.id}`;
+        await setDoc(doc(db, "editionTeams", id), {
+          id,
+          editionId,
+          teamId: team.id,
+          points: num1,
+          played: num2,
+          order: 0,
+          status: "normale",
+        });
+      }
+      for (const { name, num1, num2 } of preview.toCreate) {
+        const teamRef = await addDoc(collection(db, "teams"), { name, roster: [] });
+        const id = `${editionId}_${teamRef.id}`;
+        await setDoc(doc(db, "editionTeams", id), {
+          id,
+          editionId,
+          teamId: teamRef.id,
+          points: num1,
+          played: num2,
+          order: 0,
+          status: "normale",
+        });
+      }
+      const createdCount = preview.toEnroll.length + preview.toCreate.length;
       onDone(
-        `Importazione completata: ${preview.matched.length} squadre aggiornate.` +
+        `Importazione completata: ${preview.matched.length} aggiornate, ${createdCount} create/iscritte.` +
           (preview.missing.length > 0
             ? ` ${preview.missing.length} non presenti nel testo hanno mantenuto i dati precedenti.`
+            : "") +
+          (preview.toCreate.length > 0
+            ? ` Le squadre create ex novo hanno la rosa vuota: completala da "Squadre".`
             : "")
       );
     } catch (err) {
@@ -509,8 +551,7 @@ function ImportTeamStandings({
       <p className="text-[12px] text-[#9A9A94] mb-2">
         Copia le righe da Excel o da una tabella Word e incollale qui sotto. Ogni riga deve contenere il nome
         della squadra seguito da <strong>Punti</strong> e <strong>Partite giocate</strong> (in quest'ordine). Le
-        squadre devono essere già iscritte a questa classifica: se non lo sono ancora, iscrivile prima con
-        "Aggiungi squadra a questa classifica".
+        squadre non ancora esistenti vengono create automaticamente (con rosa vuota da completare dopo).
       </p>
       <textarea
         value={text}
@@ -534,11 +575,18 @@ function ImportTeamStandings({
         <div>
           <div className="bg-[#FAF8F3] rounded-lg p-2.5 mb-2 text-[12.5px]">
             <p className="mb-1">
-              <strong>{preview.matched.length}</strong> squadre verranno aggiornate.
+              <strong>{preview.matched.length}</strong> squadre già iscritte verranno aggiornate.
             </p>
-            {preview.notFound.length > 0 && (
-              <p className="text-[#993C1D] mb-1">
-                Non trovate tra le squadre iscritte (iscrivile prima): {preview.notFound.join(", ")}
+            {preview.toEnroll.length > 0 && (
+              <p className="mb-1">
+                <strong>{preview.toEnroll.length}</strong> squadre esistenti verranno iscritte a questa
+                classifica: {preview.toEnroll.map((e) => e.team.name).join(", ")}
+              </p>
+            )}
+            {preview.toCreate.length > 0 && (
+              <p className="mb-1">
+                <strong>{preview.toCreate.length}</strong> squadre nuove verranno create (con rosa vuota) e
+                iscritte: {preview.toCreate.map((c) => c.name).join(", ")}
               </p>
             )}
             {preview.missing.length > 0 && (
@@ -554,7 +602,7 @@ function ImportTeamStandings({
           <div className="flex gap-2">
             <button
               onClick={confirm}
-              disabled={saving || preview.matched.length === 0}
+              disabled={saving}
               className="flex-1 bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
             >
               {saving ? "Importazione in corso..." : "Conferma importazione"}
