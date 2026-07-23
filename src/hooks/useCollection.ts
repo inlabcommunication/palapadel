@@ -2,7 +2,21 @@ import { useEffect, useState } from "react";
 import { collection, onSnapshot, query, type QueryConstraint } from "firebase/firestore";
 import { db } from "../firebase";
 
-export function useCollection<T>(path: string, constraints: QueryConstraint[] = []) {
+/**
+ * Legge una collezione Firestore in tempo reale.
+ *
+ * `depsKey` è FONDAMENTALE quando i `constraints` dipendono da valori che cambiano
+ * (es. where("editionId", "==", editionId), dove editionId cambia quando l'utente
+ * seleziona un'altra edizione): passare qui i valori dinamici (es. [editionId])
+ * in modo che l'hook si ri-sottoscriva davvero quando cambiano, invece di restare
+ * agganciato alla query precedente. Se i constraints sono sempre gli stessi
+ * (es. where("status", "==", "attiva") fisso), depsKey può restare vuoto.
+ */
+export function useCollection<T>(
+  path: string,
+  constraints: QueryConstraint[] = [],
+  depsKey: React.DependencyList = []
+) {
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -22,7 +36,8 @@ export function useCollection<T>(path: string, constraints: QueryConstraint[] = 
     );
     return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, JSON.stringify(constraints.map(() => path))]);
+  }, [path, ...depsKey]);
 
   return { data, loading };
 }
+
