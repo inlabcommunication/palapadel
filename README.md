@@ -39,17 +39,21 @@ firebase deploy --only firestore:rules
 
 ## 4. Crea il primo Super Amministratore (a mano, solo la prima volta)
 
-Il Super Amministratore normale si crea da dentro l'app (sezione Gestione utenti), ma il *primissimo* va creato manualmente perché nessuno è ancora loggato:
+Il Super Amministratore normale si crea da dentro l'app con solo nome utente e password (senza email, vedi sezione 8 più sotto), ma il *primissimo* va creato manualmente perché nessuno è ancora loggato:
 
-1. Firebase Console → **Authentication > Users > Aggiungi utente** → inserisci email e password.
+1. Firebase Console → **Authentication > Users > Aggiungi utente** → inserisci un'email qualsiasi (anche una vera tua, va bene) e una password.
 2. Copia lo **User UID** generato.
 3. Firebase Console → **Firestore Database > Dati** → crea manualmente una collezione `users` → documento con ID = lo UID copiato, campi:
    - `uid`: lo stesso UID
-   - `username`: il tuo nome
+   - `username`: il nome utente che vuoi usare per accedere (es. `nico`)
    - `role`: `superadmin`
    - `createdAt`: una data ISO qualsiasi, es. `2026-01-01T00:00:00.000Z`
+4. Crea anche una collezione `usernameEmails` → documento con ID = il nome utente in minuscolo senza spazi (es. `nico`), campo:
+   - `email`: l'email che hai usato al punto 1
 
-Da qui in poi, accedendo con quell'email/password nell'app, avrai i permessi da Super Amministratore e potrai creare Amministratori e Gestori risultati direttamente dall'interfaccia (sezione Gestione).
+Il passaggio 4 serve perché l'app permette il login con solo nome utente: internamente cerca l'email corrispondente in questa mappatura. Gli account creati dopo, dall'interfaccia, la generano da soli automaticamente.
+
+Da qui in poi, accedendo con quel nome utente e password nell'app, avrai i permessi da Super Amministratore e potrai creare Amministratori e Gestori risultati direttamente dall'interfaccia, indicando solo nome utente e password.
 
 ## 5. Popola i dati demo (opzionale)
 
@@ -80,6 +84,27 @@ git push -u origin main
    `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID`.
 4. Deploy. Ogni push su `main` farà un nuovo deploy automatico.
 5. Torna su Firebase Console → **Authentication > Settings > Authorized domains** → aggiungi il dominio `*.vercel.app` (o il tuo dominio custom), altrimenti il login darà errore da produzione.
+
+## 8. Abilita il cambio password (Super Amministratore) e il login con solo nome utente
+
+Da questa versione, gli account non usano più email visibili: si accede con nome utente e password, e il Super Amministratore può cambiare la password di qualsiasi account. Per far funzionare il cambio password serve una piccola funzione server (già inclusa in `api/admin/set-password.js`), perché Firebase lato client permette a un utente di cambiare solo la propria password.
+
+**Genera la chiave di servizio Firebase:**
+1. Firebase Console → icona ingranaggio → **Impostazioni progetto**
+2. Scheda **Account di servizio**
+3. Clicca **Genera nuova chiave privata** → conferma → si scarica un file `.json`
+
+**Aggiungilo come variabile d'ambiente su Vercel:**
+1. Apri il file `.json` scaricato con un editor di testo, seleziona tutto il contenuto e copialo
+2. Vercel → il tuo progetto → **Settings > Environment Variables**
+3. Key: `FIREBASE_SERVICE_ACCOUNT`
+4. Value: incolla l'intero contenuto del file JSON (tutto su una riga va bene, Vercel lo accetta come stringa)
+5. Spunta Production (e Preview/Development se vuoi testare anche lì)
+6. Salva, poi fai un **Redeploy** dall'ultima voce in Deployments
+
+Da questo momento, nella sezione Gestione, il Super Amministratore vedrà "Cambia password di un account esistente": seleziona l'utente, inserisce la nuova password (con l'occhio per mostrarla o nasconderla) e conferma.
+
+**Attenzione alla sicurezza:** il file `.json` della chiave di servizio dà accesso completo al progetto Firebase (bypassa tutte le regole). Non condividerlo, non caricarlo su GitHub, non incollarlo in chat: va solo nella variabile d'ambiente di Vercel.
 
 ## Cosa manca (fasi successive, come da specifica)
 

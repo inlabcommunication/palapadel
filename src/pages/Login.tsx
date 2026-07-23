@@ -1,11 +1,15 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../firebase";
 import { useAuth } from "../contexts/AuthContext";
+import { PasswordInput } from "../components/PasswordInput";
+import { slugifyUsername } from "../lib/username";
 
 export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -15,10 +19,18 @@ export function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
+      const slug = slugifyUsername(username);
+      const mapping = await getDoc(doc(db, "usernameEmails", slug));
+      if (!mapping.exists()) {
+        setError("Nome utente non trovato.");
+        setSubmitting(false);
+        return;
+      }
+      const { email } = mapping.data() as { email: string };
       await login(email, password);
       navigate("/gestione");
     } catch {
-      setError("Credenziali non valide. Riprova.");
+      setError("Nome utente o password non validi. Riprova.");
     } finally {
       setSubmitting(false);
     }
@@ -33,21 +45,14 @@ export function LoginPage() {
       </p>
       <form onSubmit={handleSubmit} className="flex flex-col gap-2">
         <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          type="text"
+          placeholder="Nome utente"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
           className="border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm"
           required
         />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm"
-          required
-        />
+        <PasswordInput value={password} onChange={setPassword} placeholder="Password" />
         {error && <p className="text-xs text-red-600">{error}</p>}
         <button
           type="submit"

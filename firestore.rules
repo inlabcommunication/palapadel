@@ -29,6 +29,15 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
+    // Mappatura pubblica "nome utente" -> email interna, necessaria per poter
+    // effettuare il login conoscendo solo il nome utente (senza mostrare email).
+    // In lettura è pubblica (serve anche a chi non ha ancora effettuato l'accesso),
+    // in scrittura è riservata al Super Amministratore, che è l'unico a creare account.
+    match /usernameEmails/{slug} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
     // Dati pubblici in lettura per chiunque (anche senza login), scrittura riservata.
     match /championshipTypes/{id} {
       allow read: if true;

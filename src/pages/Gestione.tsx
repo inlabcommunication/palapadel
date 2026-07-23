@@ -3,9 +3,18 @@ import { addDoc, collection, doc, serverTimestamp, setDoc, updateDoc, where } fr
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { useAuth } from "../contexts/AuthContext";
 import { useCollection } from "../hooks/useCollection";
-import { db, getSecondaryAuth } from "../firebase";
-import type { ChampionshipEdition, ChampionshipType, EditionStatus, Role } from "../types";
+import { db, auth, getSecondaryAuth } from "../firebase";
+import type { AppUser, ChampionshipEdition, ChampionshipType, EditionStatus, Role } from "../types";
 import { ROLE_LABELS } from "../types";
+import { PasswordInput } from "../components/PasswordInput";
+import { slugifyUsername, usernameToEmail } from "../lib/username";
+import {
+  ChampionshipTypeManagement,
+  EditionManagement,
+  TeamManagement,
+  EditionTeamManagement,
+  FemaleParticipantManagement,
+} from "../components/ChampionshipManagement";
 
 export function GestionePage() {
   const { appUser } = useAuth();
@@ -121,7 +130,18 @@ function AdminView({ role }: { role: Role }) {
         })}
       </div>
 
-      {role === "superadmin" && <UserManagement onDone={showToast} />}
+      <ChampionshipTypeManagement onDone={showToast} />
+      <EditionManagement onDone={showToast} />
+      <TeamManagement onDone={showToast} />
+      <EditionTeamManagement onDone={showToast} />
+      <FemaleParticipantManagement onDone={showToast} />
+
+      {role === "superadmin" && (
+        <>
+          <UserManagement onDone={showToast} />
+          <ChangePasswordManagement onDone={showToast} />
+        </>
+      )}
 
       {toast && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-[#1A1A18] text-white px-4 py-2.5 rounded-full text-[12.5px] max-w-[90%] text-center">
@@ -132,18 +152,30 @@ function AdminView({ role }: { role: Role }) {
   );
 }
 
-/** Solo il Super Amministratore crea account. Vedi src/firebase.ts per il trucco della sessione secondaria. */
+/**
+ * Solo il Super Amministratore crea account, con solo nome utente + password (niente email).
+ * Firebase Auth richiede comunque un'email valida internamente: se ne genera una "sintetica"
+ * (vedi src/lib/username.ts) mai mostrata all'utente, e si salva una mappatura pubblica
+ * nome utente -> email in usernameEmails/{slug} per permettere il login con solo username.
+ * Vedi src/firebase.ts per il trucco della sessione secondaria che evita di scollegare
+ * il Super Amministratore durante la creazione.
+ */
 function UserManagement({ onDone }: { onDone: (msg: string) => void }) {
   const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<Role>("gestore");
   const [creating, setCreating] = useState(false);
 
   const createUser = async () => {
-    if (!username.trim() || !email.trim() || !password.trim()) return;
+    if (!username.trim() || !password.trim()) return;
+    if (password.length < 6) {
+      onDone("La password deve avere almeno 6 caratteri.");
+      return;
+    }
     setCreating(true);
     try {
+      const email = usernameToEmail(username);
+      const slug = slugifyUsername(username);
       const secondaryAuth = getSecondaryAuth();
       const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
       await setDoc(doc(db, "users", cred.user.uid), {
@@ -152,42 +184,29 @@ function UserManagement({ onDone }: { onDone: (msg: string) => void }) {
         role,
         createdAt: new Date().toISOString(),
       });
+      await setDoc(doc(db, "usernameEmails", slug), { email });
       await signOut(secondaryAuth); // non tocca la sessione del Super Amministratore
       setUsername("");
-      setEmail("");
       setPassword("");
-      onDone(`Account creato: ${email} (${ROLE_LABELS[role]})`);
+      onDone(`Account creato: ${username} (${ROLE_LABELS[role]})`);
     } catch (err) {
       console.error(err);
-      onDone("Errore nella creazione dell'account. Controlla email e password (min 6 caratteri).");
+      onDone("Errore nella creazione dell'account. Il nome utente potrebbe essere già in uso.");
     } finally {
       setCreating(false);
     }
   };
 
   return (
-    <>
-      <p className="text-[13px] font-bold mt-6 mb-2">Nuovo account amministrativo</p>
+    <div className="mt-6">
+      <p className="text-[13px] font-bold mb-2">Nuovo account amministrativo</p>
       <input
         placeholder="Nome utente"
         value={username}
         onChange={(e) => setUsername(e.target.value)}
         className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2"
       />
-      <input
-        placeholder="Email"
-        type="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2"
-      />
-      <input
-        placeholder="Password provvisoria"
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2"
-      />
+      <PasswordInput value={password} onChange={setPassword} placeholder="Password" className="mb-2" />
       <select
         value={role}
         onChange={(e) => setRole(e.target.value as Role)}
@@ -203,7 +222,78 @@ function UserManagement({ onDone }: { onDone: (msg: string) => void }) {
       >
         {creating ? "Creazione in corso..." : "Crea account"}
       </button>
-    </>
+    </div>
+  );
+}
+
+/**
+ * Il Super Amministratore può sempre cambiare la password di un account esistente.
+ * Firebase Auth lato client permette di cambiare SOLO la propria password: per cambiare
+ * quella di un altro utente serve l'Admin SDK, quindi questa funzione chiama una piccola
+ * funzione serverless (api/admin/set-password) che gira su Vercel. Vedi README per la
+ * configurazione (chiave di servizio Firebase da impostare come variabile d'ambiente).
+ */
+function ChangePasswordManagement({ onDone }: { onDone: (msg: string) => void }) {
+  const { data: users } = useCollection<AppUser>("users");
+  const [targetUid, setTargetUid] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async () => {
+    const uid = targetUid || users[0]?.uid;
+    if (!uid || !newPassword.trim()) return;
+    if (newPassword.length < 6) {
+      onDone("La nuova password deve avere almeno 6 caratteri.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      const res = await fetch("/api/admin/set-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ targetUid: uid, newPassword }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Errore sconosciuto");
+      }
+      setNewPassword("");
+      onDone("Password aggiornata.");
+    } catch (err) {
+      console.error(err);
+      onDone("Errore nell'aggiornamento della password. Controlla la configurazione del backend (vedi README).");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="mt-6">
+      <p className="text-[13px] font-bold mb-2">Cambia password di un account esistente</p>
+      <select
+        value={targetUid}
+        onChange={(e) => setTargetUid(e.target.value)}
+        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white mb-2"
+      >
+        <option value="" disabled>
+          Scegli account...
+        </option>
+        {users.map((u) => (
+          <option key={u.uid} value={u.uid}>
+            {u.username} ({ROLE_LABELS[u.role]})
+          </option>
+        ))}
+      </select>
+      <PasswordInput value={newPassword} onChange={setNewPassword} placeholder="Nuova password" className="mb-2" />
+      <button
+        onClick={submit}
+        disabled={submitting}
+        className="w-full bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+      >
+        {submitting ? "Aggiornamento in corso..." : "Aggiorna password"}
+      </button>
+    </div>
   );
 }
 
