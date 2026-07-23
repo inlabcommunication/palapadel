@@ -1,0 +1,82 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function myRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && myRole() == 'superadmin';
+    }
+
+    function isAdminOrAbove() {
+      return isSignedIn() && (myRole() == 'superadmin' || myRole() == 'admin');
+    }
+
+    function isGestoreOrAbove() {
+      return isSignedIn() && (myRole() == 'superadmin' || myRole() == 'admin' || myRole() == 'gestore');
+    }
+
+    // Ognuno legge solo il proprio documento utente. Solo il Super Amministratore scrive.
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isSuperAdmin());
+      allow write: if isSuperAdmin();
+    }
+
+    // Dati pubblici in lettura per chiunque (anche senza login), scrittura riservata.
+    match /championshipTypes/{id} {
+      allow read: if true;
+      allow write: if isAdminOrAbove();
+    }
+
+    match /championshipEditions/{id} {
+      allow read: if true;
+      allow write: if isAdminOrAbove();
+    }
+
+    match /teams/{id} {
+      allow read: if true;
+      allow write: if isAdminOrAbove();
+    }
+
+    match /editionTeams/{id} {
+      allow read: if true;
+      // Il Gestore risultati aggiorna punti/partite tramite i risultati, non li modifica a mano.
+      allow write: if isAdminOrAbove();
+    }
+
+    match /femaleParticipants/{id} {
+      allow read: if true;
+      allow write: if isAdminOrAbove();
+    }
+
+    match /matchdays/{id} {
+      allow read: if true;
+      allow write: if isAdminOrAbove();
+    }
+
+    match /matches/{id} {
+      allow read: if true;
+      // Il Gestore risultati può inserire/correggere risultati, non creare giornate/campionati.
+      allow write: if isGestoreOrAbove();
+    }
+
+    match /homeNews/{id} {
+      allow read: if true;
+      allow write: if isAdminOrAbove();
+    }
+
+    // Log di controllo: scrivibile da chi opera, leggibile solo dagli amministratori.
+    match /auditLog/{id} {
+      allow read: if isAdminOrAbove();
+      allow create: if isGestoreOrAbove();
+      allow update, delete: if false;
+    }
+  }
+}
