@@ -29,6 +29,7 @@ export interface ChampionshipEdition {
   status: EditionStatus;
   bestPlayerEnabled?: boolean;
   bracketEnabled?: boolean;
+  createdAt?: string; // usato per ordinare le edizioni dello stesso tipo dalla più recente
 }
 
 /** teams/{id} — identità della squadra, indipendente dalle edizioni */
@@ -76,6 +77,32 @@ export interface Match {
   team2Id: string;
   result?: "2-0" | "2-1" | "1-2" | "0-2";
   status: MatchStatus;
+}
+
+/**
+ * bracketRounds/{id} — un turno del tabellone finale (es. "Ottavi", "Quarti", "Semifinale", "Finale").
+ * La struttura è libera e decisa dall'amministratore ogni anno (punto 18 della specifica).
+ */
+export interface BracketRound {
+  id: string;
+  editionId: string;
+  name: string;
+  order: number;
+}
+
+/**
+ * bracketMatches/{id} — un incontro del tabellone. team1Id/team2Id possono essere vuoti
+ * (slot in attesa), l'avanzamento al turno successivo è sempre manuale.
+ */
+export interface BracketMatch {
+  id: string;
+  editionId: string;
+  roundId: string;
+  order: number;
+  team1Id?: string;
+  team2Id?: string;
+  score?: string;
+  winnerTeamId?: string;
 }
 
 /** homeNews/{id} */
