@@ -1,20 +1,13 @@
 import { useState } from "react";
-import { addDoc, collection, doc, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
+import { doc, setDoc, where } from "firebase/firestore";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { useAuth } from "../contexts/AuthContext";
 import { useCollection } from "../hooks/useCollection";
 import { db, auth, getSecondaryAuth } from "../firebase";
-import type { AppUser, ChampionshipEdition, ChampionshipType, EditionStatus, Role } from "../types";
+import type { AppUser, ChampionshipEdition, ChampionshipType, Role } from "../types";
 import { ROLE_LABELS } from "../types";
 import { PasswordInput } from "../components/PasswordInput";
 import { slugifyUsername, usernameToEmail } from "../lib/username";
-import {
-  ChampionshipTypeManagement,
-  EditionManagement,
-  TeamManagement,
-  EditionTeamManagement,
-  FemaleParticipantManagement,
-} from "../components/ChampionshipManagement";
 
 export function GestionePage() {
   const { appUser } = useAuth();
@@ -52,95 +45,30 @@ function GestoreView() {
 }
 
 function AdminView({ role }: { role: Role }) {
-  const { appUser } = useAuth();
-  const { data: editions } = useCollection<ChampionshipEdition>("championshipEditions");
-  const { data: types } = useCollection<ChampionshipType>("championshipTypes");
-
-  const [newTitle, setNewTitle] = useState("");
-  const [newBody, setNewBody] = useState("");
   const [toast, setToast] = useState<string | null>(null);
-
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2500);
   };
 
-  const publishNews = async () => {
-    if (!newTitle.trim() || !newBody.trim()) return;
-    await addDoc(collection(db, "homeNews"), {
-      title: newTitle,
-      body: newBody,
-      date: new Date().toISOString().slice(0, 10),
-      status: "pubblicato",
-    });
-    await logAction(appUser?.username ?? "admin", "pubblica_news", newTitle);
-    setNewTitle("");
-    setNewBody("");
-    showToast("Novità pubblicata. Vuoi inviare una notifica? (arriva in Fase 5)");
-  };
-
-  const setEditionStatus = async (editionId: string, status: EditionStatus) => {
-    await updateDoc(doc(db, "championshipEditions", editionId), { status });
-    await logAction(appUser?.username ?? "admin", "cambia_stato_edizione", `${editionId} -> ${status}`);
-    showToast("Stato edizione aggiornato");
-  };
-
   return (
     <div className="p-4">
-      <h2 className="text-sm font-bold mb-4">Gestione — {ROLE_LABELS[role]}</h2>
+      <h2 className="text-sm font-bold mb-1">Gestione — {ROLE_LABELS[role]}</h2>
+      <p className="text-[12.5px] text-[#9A9A94] mb-4">
+        La gestione di campionati, squadre e classifiche si trova nella pagina{" "}
+        <span className="font-semibold">Campionati</span>. La pubblicazione delle novità si trova in{" "}
+        <span className="font-semibold">Home</span>.
+      </p>
 
-      <p className="text-[13px] font-bold mb-2">Pubblica una novità</p>
-      <input
-        placeholder="Titolo"
-        value={newTitle}
-        onChange={(e) => setNewTitle(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2"
-      />
-      <textarea
-        placeholder="Testo della comunicazione"
-        value={newBody}
-        onChange={(e) => setNewBody(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2 min-h-[70px]"
-      />
-      <button onClick={publishNews} className="w-full bg-court text-white rounded-lg py-2.5 text-sm font-bold">
-        Pubblica
-      </button>
-
-      <p className="text-[13px] font-bold mt-6 mb-2">Stato edizioni</p>
-      <div className="bg-white border border-[#EAE7DD] rounded-xl overflow-hidden">
-        {editions.map((e) => {
-          const t = types.find((x) => x.id === e.typeId);
-          return (
-            <div key={e.id} className="px-3.5 py-2.5 border-b border-[#F1EFE8] last:border-b-0">
-              <p className="text-sm font-semibold mb-1.5">
-                {t?.name} {e.season}
-              </p>
-              <select
-                value={e.status}
-                onChange={(ev) => setEditionStatus(e.id, ev.target.value as EditionStatus)}
-                className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white"
-              >
-                <option value="bozza">Bozza</option>
-                <option value="attiva">Attiva</option>
-                <option value="conclusa">Conclusa</option>
-                <option value="nascosta">Nascosta</option>
-              </select>
-            </div>
-          );
-        })}
-      </div>
-
-      <ChampionshipTypeManagement onDone={showToast} />
-      <EditionManagement onDone={showToast} />
-      <TeamManagement onDone={showToast} />
-      <EditionTeamManagement onDone={showToast} />
-      <FemaleParticipantManagement onDone={showToast} />
-
-      {role === "superadmin" && (
+      {role === "superadmin" ? (
         <>
           <UserManagement onDone={showToast} />
           <ChangePasswordManagement onDone={showToast} />
         </>
+      ) : (
+        <p className="text-[12.5px] text-[#9A9A94]">
+          La creazione di account è riservata al Super Amministratore.
+        </p>
       )}
 
       {toast && (
@@ -198,7 +126,7 @@ function UserManagement({ onDone }: { onDone: (msg: string) => void }) {
   };
 
   return (
-    <div className="mt-6">
+    <div className="mb-6">
       <p className="text-[13px] font-bold mb-2">Nuovo account amministrativo</p>
       <input
         placeholder="Nome utente"
@@ -230,8 +158,7 @@ function UserManagement({ onDone }: { onDone: (msg: string) => void }) {
  * Il Super Amministratore può sempre cambiare la password di un account esistente.
  * Firebase Auth lato client permette di cambiare SOLO la propria password: per cambiare
  * quella di un altro utente serve l'Admin SDK, quindi questa funzione chiama una piccola
- * funzione serverless (api/admin/set-password) che gira su Vercel. Vedi README per la
- * configurazione (chiave di servizio Firebase da impostare come variabile d'ambiente).
+ * funzione serverless (api/admin/set-password) che gira su Vercel. Vedi README.
  */
 function ChangePasswordManagement({ onDone }: { onDone: (msg: string) => void }) {
   const { data: users } = useCollection<AppUser>("users");
@@ -269,7 +196,7 @@ function ChangePasswordManagement({ onDone }: { onDone: (msg: string) => void })
   };
 
   return (
-    <div className="mt-6">
+    <div>
       <p className="text-[13px] font-bold mb-2">Cambia password di un account esistente</p>
       <select
         value={targetUid}
@@ -295,13 +222,4 @@ function ChangePasswordManagement({ onDone }: { onDone: (msg: string) => void })
       </button>
     </div>
   );
-}
-
-async function logAction(actor: string, action: string, detail: string) {
-  await addDoc(collection(db, "auditLog"), {
-    actor,
-    action,
-    detail,
-    timestamp: serverTimestamp(),
-  });
 }
