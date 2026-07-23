@@ -18,13 +18,13 @@ export function PasswordInput({ value, onChange, placeholder, className = "" }: 
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg pl-3 pr-10 py-2.5 text-sm"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg pl-3 pr-10 py-2.5 text-sm"
       />
       <button
         type="button"
         onClick={() => setVisible((v) => !v)}
         aria-label={visible ? "Nascondi password" : "Mostra password"}
-        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#9A9A94]"
+        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[rgba(251,243,222,0.35)]"
       >
         {visible ? <EyeOff size={17} /> : <Eye size={17} />}
       </button>
