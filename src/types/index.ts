@@ -88,6 +88,21 @@ export interface HomeNews {
   status: ContentStatus;
 }
 
+/**
+ * historicalWins/{id} — vittorie storiche, sia precedenti alla creazione dell'app
+ * (inserite a mano dal Super Amministratore) sia generate in futuro dalla
+ * conclusione di un campionato gestito nell'app (Fase 4).
+ * Per i campionati a squadre: teamId valorizzato. Per il Femminile: participantName valorizzato.
+ */
+export interface HistoricalWin {
+  id: string;
+  typeId: string;
+  teamId?: string;
+  participantName?: string;
+  season: string;
+  note?: string;
+}
+
 /** auditLog/{id} */
 export interface AuditLogEntry {
   id: string;
