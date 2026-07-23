@@ -15,6 +15,7 @@ import type {
   Team,
 } from "../types";
 import { ChampionshipTypeManagement, TeamManagement } from "../components/ChampionshipManagement";
+import { BracketSection } from "../components/BracketSection";
 import { parsePastedTable } from "../lib/parsePastedTable";
 
 function confirmDelete(label: string) {
@@ -238,6 +239,9 @@ export function CampionatiPage() {
       )}
 
       {edition && activeType?.hasTeams && <TeamStandings editionId={edition.id} isAdmin={isAdmin} showToast={showToast} />}
+      {edition && activeType?.hasTeams && (
+        <BracketSection edition={edition} isAdmin={isAdmin} showToast={showToast} />
+      )}
       {edition && activeType && !activeType.hasTeams && (
         <FemaleStandings editionId={edition.id} isAdmin={isAdmin} showToast={showToast} />
       )}
