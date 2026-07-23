@@ -1,0 +1,113 @@
+export type Role = "superadmin" | "admin" | "gestore";
+
+export type EditionStatus = "bozza" | "attiva" | "conclusa" | "nascosta";
+export type ParticipationStatus = "normale" | "ritirata" | "squalificata";
+export type MatchStatus = "da_giocare" | "conclusa" | "rinviata" | "annullata";
+export type ContentStatus = "bozza" | "pubblicato";
+
+/** users/{uid} — il ruolo vive qui, non nei custom claims (piano Spark = niente Cloud Functions) */
+export interface AppUser {
+  uid: string;
+  username: string;
+  role: Role;
+  createdAt: string;
+}
+
+/** championshipTypes/{id} */
+export interface ChampionshipType {
+  id: string;
+  name: string;
+  hasTeams: boolean;
+  badgeColor: "serie-b" | "serie-c" | "principianti" | "femminile" | string;
+}
+
+/** championshipEditions/{id} */
+export interface ChampionshipEdition {
+  id: string;
+  typeId: string;
+  season: string; // formato libero: "2025/2026", "2026", ecc.
+  status: EditionStatus;
+  bestPlayerEnabled?: boolean;
+  bracketEnabled?: boolean;
+}
+
+/** teams/{id} — identità della squadra, indipendente dalle edizioni */
+export interface Team {
+  id: string;
+  name: string;
+  logoUrl?: string;
+  roster: string[]; // 2-6 nomi
+}
+
+/** editionTeams/{id} — partecipazione di una squadra a una specifica edizione */
+export interface EditionTeam {
+  id: string;
+  editionId: string;
+  teamId: string;
+  points: number;
+  played: number;
+  order: number; // per spareggi manuali a pari punti
+  status: ParticipationStatus;
+}
+
+/** femaleParticipants/{id} — campionato femminile, individuale */
+export interface FemaleParticipant {
+  id: string;
+  editionId: string;
+  name: string;
+  points: number;
+  stages: number;
+  status: ParticipationStatus;
+}
+
+/** matchdays/{id} */
+export interface Matchday {
+  id: string;
+  editionId: string;
+  number: number;
+}
+
+/** matches/{id} */
+export interface Match {
+  id: string;
+  matchdayId: string;
+  editionId: string;
+  team1Id: string;
+  team2Id: string;
+  result?: "2-0" | "2-1" | "1-2" | "0-2";
+  status: MatchStatus;
+}
+
+/** homeNews/{id} */
+export interface HomeNews {
+  id: string;
+  title: string;
+  body: string;
+  date: string;
+  imageUrl?: string;
+  status: ContentStatus;
+}
+
+/** auditLog/{id} */
+export interface AuditLogEntry {
+  id: string;
+  actor: string;
+  action: string;
+  detail: string;
+  before?: unknown;
+  after?: unknown;
+  timestamp: string;
+}
+
+export const BADGE_COLORS: Record<string, { bg: string; text: string; label: string }> = {
+  "serie-b": { bg: "#E5E7EB", text: "#374151", label: "argento" },
+  "serie-c": { bg: "#E7D3C2", text: "#7C4A26", label: "bronzo" },
+  principianti: { bg: "#D8F0DB", text: "#1F6B34", label: "verde" },
+  femminile: { bg: "#FBDCEC", text: "#9D1D63", label: "fucsia" },
+};
+
+export const ROLE_LABELS: Record<Role, string> = {
+  superadmin: "Super amministratore",
+  admin: "Amministratore",
+  gestore: "Gestore risultati",
+};
