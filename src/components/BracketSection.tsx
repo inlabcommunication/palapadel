@@ -1,13 +1,11 @@
 import { useState } from "react";
-import { addDoc, collection, deleteDoc, doc, updateDoc, where } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, deleteField, doc, updateDoc, where } from "firebase/firestore";
 import { useCollection } from "../hooks/useCollection";
 import { db } from "../firebase";
+import { confirmDelete } from "../lib/confirmDelete";
 import type { BracketMatch, BracketRound, ChampionshipEdition, Team } from "../types";
 import { Plus, X, Pencil, Trash2, ChevronUp, ChevronDown, Trophy, Wand2 } from "lucide-react";
 
-function confirmDelete(label: string) {
-  return window.confirm(`Eliminare definitivamente "${label}"? L'operazione non si può annullare.`);
-}
 
 export function BracketSection({
   edition,
@@ -18,8 +16,16 @@ export function BracketSection({
   isAdmin: boolean;
   showToast: (msg: string) => void;
 }) {
-  const { data: rounds } = useCollection<BracketRound>("bracketRounds", [where("editionId", "==", edition.id)]);
-  const { data: allMatches } = useCollection<BracketMatch>("bracketMatches", [where("editionId", "==", edition.id)]);
+  const { data: rounds } = useCollection<BracketRound>(
+    "bracketRounds",
+    [where("editionId", "==", edition.id)],
+    [edition.id]
+  );
+  const { data: allMatches } = useCollection<BracketMatch>(
+    "bracketMatches",
+    [where("editionId", "==", edition.id)],
+    [edition.id]
+  );
   const { data: teams } = useCollection<Team>("teams");
   const [selectedRoundId, setSelectedRoundId] = useState<string | null>(null);
   const [showNewRound, setShowNewRound] = useState(false);
@@ -44,13 +50,13 @@ export function BracketSection({
     return (
       <div className="mt-6">
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-bold flex items-center gap-1.5">
+          <h3 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE] flex items-center gap-1.5">
             <Trophy size={15} /> Tabellone finale
           </h3>
         </div>
         <button
           onClick={() => toggleBracket(true)}
-          className="flex items-center gap-1.5 text-[13px] font-semibold text-court"
+          className="flex items-center gap-1.5 text-[13px] font-semibold text-[#BBFF5E]"
         >
           <Plus size={15} /> Attiva tabellone per questa edizione
         </button>
@@ -164,18 +170,18 @@ export function BracketSection({
   return (
     <div className="mt-6">
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-bold flex items-center gap-1.5">
+        <h3 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE] flex items-center gap-1.5">
           <Trophy size={15} /> Tabellone finale
         </h3>
         {isAdmin && (
-          <button onClick={() => toggleBracket(false)} className="text-xs text-[#9A9A94]">
+          <button onClick={() => toggleBracket(false)} className="text-xs text-[rgba(251,243,222,0.35)]">
             Disattiva
           </button>
         )}
       </div>
 
       {sortedRounds.length === 0 ? (
-        <p className="text-[12.5px] text-[#9A9A94] mb-2">Nessun turno creato ancora.</p>
+        <p className="text-[12.5px] text-[rgba(251,243,222,0.35)] mb-2">Nessun turno creato ancora.</p>
       ) : (
         <div className="flex gap-2 overflow-x-auto pb-2 mb-3">
           {sortedRounds.map((r) => (
@@ -183,7 +189,7 @@ export function BracketSection({
               key={r.id}
               onClick={() => setSelectedRoundId(r.id)}
               className={`whitespace-nowrap rounded-full px-3.5 py-2 text-[12.5px] font-semibold shrink-0 ${
-                (selectedRound?.id ?? sortedRounds[0]?.id) === r.id ? "bg-court text-white" : "bg-[#F1EFE8] text-[#3A3A36]"
+                (selectedRound?.id ?? sortedRounds[0]?.id) === r.id ? "bg-lime text-[#081208]" : "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.85)]"
               }`}
             >
               {r.name}
@@ -197,14 +203,14 @@ export function BracketSection({
           {showNewRound ? (
             <NewRoundForm onCreate={createRound} onCancel={() => setShowNewRound(false)} />
           ) : (
-            <button onClick={() => setShowNewRound(true)} className="flex items-center gap-1.5 text-[13px] font-semibold text-court">
+            <button onClick={() => setShowNewRound(true)} className="flex items-center gap-1.5 text-[13px] font-semibold text-[#BBFF5E]">
               <Plus size={15} /> Nuovo turno
             </button>
           )}
           {nextRound && (
             <button
               onClick={generateNextRound}
-              className="flex items-center gap-1.5 text-[13px] font-semibold text-court"
+              className="flex items-center gap-1.5 text-[13px] font-semibold text-[#BBFF5E]"
             >
               <Wand2 size={15} /> Genera "{nextRound.name}" dai vincitori di "{selectedRound?.name}"
             </button>
@@ -233,21 +239,21 @@ export function BracketSection({
 function NewRoundForm({ onCreate, onCancel }: { onCreate: (name: string) => void; onCancel: () => void }) {
   const [name, setName] = useState("");
   return (
-    <div className="bg-white border border-[#EAE7DD] rounded-xl p-3.5">
+    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Nuovo turno</p>
-        <button onClick={onCancel}><X size={16} className="text-[#9A9A94]" /></button>
+        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
       </div>
       <input
         placeholder="Nome turno (es. Ottavi, Quarti, Semifinale, Finale, Spareggio...)"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
       />
       <button
         onClick={() => onCreate(name)}
         disabled={!name.trim()}
-        className="w-full bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+        className="w-full bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
       >
         Crea turno
       </button>
@@ -319,20 +325,20 @@ function RoundDetail({
   return (
     <div>
       {isAdmin && (
-        <div className="flex items-center justify-between mb-3 bg-[#FAF8F3] rounded-lg p-2">
+        <div className="flex items-center justify-between mb-3 bg-[#123008] rounded-lg p-2">
           {editingRoundName ? (
             <div className="flex items-center gap-2 flex-1">
               <input
                 value={nameDraft}
                 onChange={(e) => setNameDraft(e.target.value)}
-                className="flex-1 border border-[#E5E3DC] rounded-lg px-2 py-1.5 text-[13px]"
+                className="flex-1 border border-[rgba(251,243,222,0.18)] rounded-lg px-2 py-1.5 text-[13px]"
               />
               <button
                 onClick={() => {
                   onRename(nameDraft);
                   setEditingRoundName(false);
                 }}
-                className="text-court text-xs font-semibold"
+                className="text-[#BBFF5E] text-xs font-semibold"
               >
                 Salva
               </button>
@@ -347,10 +353,10 @@ function RoundDetail({
                 <button onClick={() => onMove(1)} disabled={!canMoveDown} className="disabled:opacity-30">
                   <ChevronDown size={15} />
                 </button>
-                <button onClick={() => setEditingRoundName(true)} className="text-court">
+                <button onClick={() => setEditingRoundName(true)} className="text-[#BBFF5E]">
                   <Pencil size={14} />
                 </button>
-                <button onClick={onRemove} className="text-red-600">
+                <button onClick={onRemove} className="text-[#FF6B6B]">
                   <Trash2 size={14} />
                 </button>
               </div>
@@ -361,7 +367,7 @@ function RoundDetail({
 
       <div className="flex flex-col gap-2">
         {sortedMatches.length === 0 && (
-          <p className="text-[12.5px] text-[#9A9A94]">Nessun incontro in questo turno ancora.</p>
+          <p className="text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessun incontro in questo turno ancora.</p>
         )}
         {sortedMatches.map((m) =>
           editingMatchId === m.id ? (
@@ -376,26 +382,26 @@ function RoundDetail({
               }}
             />
           ) : (
-            <div key={m.id} className="bg-white border border-[#EAE7DD] rounded-xl p-3">
+            <div key={m.id} className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3">
               <div className="flex items-center justify-between">
-                <span className={`text-[13.5px] ${m.winnerTeamId === m.team1Id ? "font-bold" : ""}`}>
+                <span className={`text-[13.5px] ${m.winnerTeamId && m.winnerTeamId === m.team1Id ? "font-bold" : ""}`}>
                   {teamName(m.team1Id)}
                 </span>
-                {m.winnerTeamId === m.team1Id && <Trophy size={13} className="text-[#0F3B36]" />}
+                {!!m.winnerTeamId && m.winnerTeamId === m.team1Id && <Trophy size={13} className="text-[#BBFF5E]" />}
               </div>
               <div className="flex items-center justify-between mt-1">
-                <span className={`text-[13.5px] ${m.winnerTeamId === m.team2Id ? "font-bold" : ""}`}>
+                <span className={`text-[13.5px] ${m.winnerTeamId && m.winnerTeamId === m.team2Id ? "font-bold" : ""}`}>
                   {teamName(m.team2Id)}
                 </span>
-                {m.winnerTeamId === m.team2Id && <Trophy size={13} className="text-[#0F3B36]" />}
+                {!!m.winnerTeamId && m.winnerTeamId === m.team2Id && <Trophy size={13} className="text-[#BBFF5E]" />}
               </div>
-              {m.score && <p className="text-[11px] text-[#9A9A94] mt-1.5">{m.score}</p>}
+              {m.score && <p className="text-[11px] text-[rgba(251,243,222,0.35)] mt-1.5">{m.score}</p>}
               {isAdmin && (
-                <div className="flex items-center gap-3 mt-2 pt-2 border-t border-[#F1EFE8]">
-                  <button onClick={() => setEditingMatchId(m.id)} className="flex items-center gap-1 text-court text-xs font-semibold">
+                <div className="flex items-center gap-3 mt-2 pt-2 border-t border-[rgba(251,243,222,0.08)]">
+                  <button onClick={() => setEditingMatchId(m.id)} className="flex items-center gap-1 text-[#BBFF5E] text-xs font-semibold">
                     <Pencil size={12} /> Modifica
                   </button>
-                  <button onClick={() => removeMatch(m)} className="flex items-center gap-1 text-red-600 text-xs font-semibold">
+                  <button onClick={() => removeMatch(m)} className="flex items-center gap-1 text-[#FF6B6B] text-xs font-semibold">
                     <Trash2 size={12} /> Elimina
                   </button>
                 </div>
@@ -410,7 +416,7 @@ function RoundDetail({
           {showNewMatch ? (
             <NewMatchForm teams={teams} onCreate={createMatch} onCancel={() => setShowNewMatch(false)} />
           ) : (
-            <button onClick={() => setShowNewMatch(true)} className="flex items-center gap-1.5 text-[13px] font-semibold text-court">
+            <button onClick={() => setShowNewMatch(true)} className="flex items-center gap-1.5 text-[13px] font-semibold text-[#BBFF5E]">
               <Plus size={15} /> Aggiungi incontro
             </button>
           )}
@@ -433,24 +439,24 @@ function NewMatchForm({
   const [team2Id, setTeam2Id] = useState("");
 
   return (
-    <div className="bg-white border border-[#EAE7DD] rounded-xl p-3.5">
+    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Nuovo incontro</p>
-        <button onClick={onCancel}><X size={16} className="text-[#9A9A94]" /></button>
+        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
       </div>
-      <select value={team1Id} onChange={(e) => setTeam1Id(e.target.value)} className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white mb-2">
+      <select value={team1Id} onChange={(e) => setTeam1Id(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2">
         <option value="">— vuoto (slot in attesa) —</option>
         {teams.map((t) => (
           <option key={t.id} value={t.id}>{t.name}</option>
         ))}
       </select>
-      <select value={team2Id} onChange={(e) => setTeam2Id(e.target.value)} className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white mb-2">
+      <select value={team2Id} onChange={(e) => setTeam2Id(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2">
         <option value="">— vuoto (slot in attesa) —</option>
         {teams.map((t) => (
           <option key={t.id} value={t.id}>{t.name}</option>
         ))}
       </select>
-      <button onClick={() => onCreate(team1Id, team2Id)} className="w-full bg-court text-white rounded-lg py-2.5 text-sm font-bold">
+      <button onClick={() => onCreate(team1Id, team2Id)} className="w-full bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold">
         Aggiungi
       </button>
     </div>
@@ -478,10 +484,10 @@ function EditMatchForm({
     setSaving(true);
     try {
       await updateDoc(doc(db, "bracketMatches", match.id), {
-        team1Id: team1Id || null,
-        team2Id: team2Id || null,
-        score: score.trim() || null,
-        winnerTeamId: winner || null,
+        team1Id: team1Id || deleteField(),
+        team2Id: team2Id || deleteField(),
+        score: score.trim() || deleteField(),
+        winnerTeamId: winner || deleteField(),
       });
       onDone("Incontro aggiornato.");
     } catch (err) {
@@ -493,14 +499,14 @@ function EditMatchForm({
   };
 
   return (
-    <div className="bg-[#FAF8F3] border border-[#E5E3DC] rounded-xl p-3">
-      <select value={team1Id} onChange={(e) => setTeam1Id(e.target.value)} className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white mb-2">
+    <div className="bg-[#123008] border border-[rgba(251,243,222,0.18)] rounded-xl p-3">
+      <select value={team1Id} onChange={(e) => setTeam1Id(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2">
         <option value="">— vuoto —</option>
         {teams.map((t) => (
           <option key={t.id} value={t.id}>{t.name}</option>
         ))}
       </select>
-      <select value={team2Id} onChange={(e) => setTeam2Id(e.target.value)} className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white mb-2">
+      <select value={team2Id} onChange={(e) => setTeam2Id(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2">
         <option value="">— vuoto —</option>
         {teams.map((t) => (
           <option key={t.id} value={t.id}>{t.name}</option>
@@ -510,19 +516,19 @@ function EditMatchForm({
         placeholder="Risultato (es. 2-1, 6-3 6-4, ecc.)"
         value={score}
         onChange={(e) => setScore(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-sm mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm mb-2"
       />
-      <p className="text-[11px] text-[#9A9A94] mb-1">Squadra vincente</p>
-      <select value={winner} onChange={(e) => setWinner(e.target.value)} className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white mb-2">
+      <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Squadra vincente</p>
+      <select value={winner} onChange={(e) => setWinner(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2">
         <option value="">Non ancora deciso</option>
         {team1Id && <option value={team1Id}>{teams.find((t) => t.id === team1Id)?.name}</option>}
         {team2Id && <option value={team2Id}>{teams.find((t) => t.id === team2Id)?.name}</option>}
       </select>
       <div className="flex gap-2">
-        <button onClick={save} disabled={saving} className="flex-1 bg-court text-white rounded-lg py-2 text-sm font-bold disabled:opacity-50">
+        <button onClick={save} disabled={saving} className="flex-1 bg-lime text-[#081208] rounded-lg py-2 text-sm font-bold disabled:opacity-50">
           Salva
         </button>
-        <button onClick={onCancel} className="flex-1 border border-[#E5E3DC] rounded-lg py-2 text-sm font-semibold">
+        <button onClick={onCancel} className="flex-1 border border-[rgba(251,243,222,0.18)] rounded-lg py-2 text-sm font-semibold">
           Annulla
         </button>
       </div>

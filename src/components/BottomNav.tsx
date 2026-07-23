@@ -14,39 +14,44 @@ export function BottomNav() {
   const { appUser } = useAuth();
 
   return (
-    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white border-t border-[#EAE7DD] flex px-1 py-2">
-      {items.map(({ to, label, icon: Icon, end }) => (
-        <NavLink
-          key={to}
-          to={to}
-          end={end}
-          className={({ isActive }) =>
-            `flex-1 flex flex-col items-center py-1 ${isActive ? "text-court font-bold" : "text-[#8A8A85]"}`
-          }
-        >
-          {({ isActive }) => (
-            <>
-              <Icon size={20} strokeWidth={isActive ? 2.4 : 1.8} />
-              <span className="text-[10px] mt-0.5">{label}</span>
-            </>
-          )}
-        </NavLink>
-      ))}
-      {appUser && (
-        <NavLink
-          to="/gestione"
-          className={({ isActive }) =>
-            `flex-1 flex flex-col items-center py-1 ${isActive ? "text-court font-bold" : "text-[#8A8A85]"}`
-          }
-        >
-          {({ isActive }) => (
-            <>
-              <Settings size={20} strokeWidth={isActive ? 2.4 : 1.8} />
-              <span className="text-[10px] mt-0.5">Gestione</span>
-            </>
-          )}
-        </NavLink>
-      )}
-    </nav>
+    <div className="fixed left-3 right-3 bottom-4 z-40 max-w-[454px] mx-auto">
+      <nav
+        className="flex items-center justify-between rounded-3xl px-2.5 py-2.5 border border-[rgba(255,255,255,0.08)]"
+        style={{ background: "rgba(0,0,0,0.94)", backdropFilter: "blur(14px)" }}
+      >
+        {items.map(({ to, label, icon: Icon, end }) => (
+          <NavLink
+            key={to}
+            to={to}
+            end={end}
+            className={({ isActive }) =>
+              `flex-1 flex flex-col items-center gap-1 py-1 ${isActive ? "text-[#BBFF5E]" : "text-[rgba(251,243,222,0.35)]"}`
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <Icon size={19} strokeWidth={isActive ? 2.4 : 1.8} />
+                <span className={`text-[9px] ${isActive ? "font-bold" : "font-medium"}`}>{label}</span>
+              </>
+            )}
+          </NavLink>
+        ))}
+        {appUser && (
+          <NavLink
+            to="/gestione"
+            className={({ isActive }) =>
+              `flex-1 flex flex-col items-center gap-1 py-1 ${isActive ? "text-[#BBFF5E]" : "text-[rgba(251,243,222,0.35)]"}`
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <Settings size={19} strokeWidth={isActive ? 2.4 : 1.8} />
+                <span className={`text-[9px] ${isActive ? "font-bold" : "font-medium"}`}>Gestione</span>
+              </>
+            )}
+          </NavLink>
+        )}
+      </nav>
+    </div>
   );
 }
