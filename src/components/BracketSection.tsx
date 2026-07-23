@@ -3,7 +3,7 @@ import { addDoc, collection, deleteDoc, doc, updateDoc, where } from "firebase/f
 import { useCollection } from "../hooks/useCollection";
 import { db } from "../firebase";
 import type { BracketMatch, BracketRound, ChampionshipEdition, Team } from "../types";
-import { Plus, X, Pencil, Trash2, ChevronUp, ChevronDown, Trophy } from "lucide-react";
+import { Plus, X, Pencil, Trash2, ChevronUp, ChevronDown, Trophy, Wand2 } from "lucide-react";
 
 function confirmDelete(label: string) {
   return window.confirm(`Eliminare definitivamente "${label}"? L'operazione non si può annullare.`);
@@ -19,12 +19,15 @@ export function BracketSection({
   showToast: (msg: string) => void;
 }) {
   const { data: rounds } = useCollection<BracketRound>("bracketRounds", [where("editionId", "==", edition.id)]);
+  const { data: allMatches } = useCollection<BracketMatch>("bracketMatches", [where("editionId", "==", edition.id)]);
   const { data: teams } = useCollection<Team>("teams");
   const [selectedRoundId, setSelectedRoundId] = useState<string | null>(null);
   const [showNewRound, setShowNewRound] = useState(false);
 
   const sortedRounds = [...rounds].sort((a, b) => a.order - b.order);
   const selectedRound = sortedRounds.find((r) => r.id === selectedRoundId) ?? sortedRounds[0];
+  const selectedRoundIndex = selectedRound ? sortedRounds.findIndex((r) => r.id === selectedRound.id) : -1;
+  const nextRound = selectedRoundIndex >= 0 ? sortedRounds[selectedRoundIndex + 1] : undefined;
 
   const toggleBracket = async (enabled: boolean) => {
     try {
@@ -109,6 +112,55 @@ export function BracketSection({
     }
   };
 
+  const generateNextRound = async () => {
+    if (!selectedRound || !nextRound) return;
+    const currentMatches = allMatches
+      .filter((m) => m.roundId === selectedRound.id)
+      .sort((a, b) => a.order - b.order);
+    const nextRoundMatches = allMatches.filter((m) => m.roundId === nextRound.id);
+
+    if (currentMatches.length === 0) {
+      showToast(`Nessun incontro in "${selectedRound.name}" da cui generare il turno successivo.`);
+      return;
+    }
+    if (nextRoundMatches.length > 0) {
+      const proceed = window.confirm(
+        `"${nextRound.name}" contiene già ${nextRoundMatches.length} incontro/i. Vuoi eliminarli e rigenerarli dai vincitori di "${selectedRound.name}"?`
+      );
+      if (!proceed) return;
+    }
+    const missingWinners = currentMatches.filter((m) => !m.winnerTeamId).length;
+    if (missingWinners > 0) {
+      const proceed = window.confirm(
+        `${missingWinners} incontro/i di "${selectedRound.name}" non hanno ancora un vincitore assegnato: quegli slot resteranno vuoti nel turno successivo. Continuare comunque?`
+      );
+      if (!proceed) return;
+    }
+
+    try {
+      for (const m of nextRoundMatches) {
+        await deleteDoc(doc(db, "bracketMatches", m.id));
+      }
+      let order = 0;
+      for (let i = 0; i < currentMatches.length; i += 2) {
+        const winnerA = currentMatches[i]?.winnerTeamId;
+        const winnerB = currentMatches[i + 1]?.winnerTeamId;
+        await addDoc(collection(db, "bracketMatches"), {
+          editionId: edition.id,
+          roundId: nextRound.id,
+          order: order++,
+          ...(winnerA ? { team1Id: winnerA } : {}),
+          ...(winnerB ? { team2Id: winnerB } : {}),
+        });
+      }
+      setSelectedRoundId(nextRound.id);
+      showToast(`"${nextRound.name}" generato automaticamente dai vincitori di "${selectedRound.name}".`);
+    } catch (err) {
+      console.error(err);
+      showToast("Errore nella generazione automatica.");
+    }
+  };
+
   return (
     <div className="mt-6">
       <div className="flex items-center justify-between mb-2">
@@ -141,12 +193,20 @@ export function BracketSection({
       )}
 
       {isAdmin && (
-        <div className="mb-3">
+        <div className="mb-3 flex flex-col gap-2 items-start">
           {showNewRound ? (
             <NewRoundForm onCreate={createRound} onCancel={() => setShowNewRound(false)} />
           ) : (
             <button onClick={() => setShowNewRound(true)} className="flex items-center gap-1.5 text-[13px] font-semibold text-court">
               <Plus size={15} /> Nuovo turno
+            </button>
+          )}
+          {nextRound && (
+            <button
+              onClick={generateNextRound}
+              className="flex items-center gap-1.5 text-[13px] font-semibold text-court"
+            >
+              <Wand2 size={15} /> Genera "{nextRound.name}" dai vincitori di "{selectedRound?.name}"
             </button>
           )}
         </div>
@@ -155,6 +215,7 @@ export function BracketSection({
       {selectedRound && (
         <RoundDetail
           round={selectedRound}
+          matches={allMatches.filter((m) => m.roundId === selectedRound.id)}
           canMoveUp={sortedRounds.findIndex((r) => r.id === selectedRound.id) > 0}
           canMoveDown={sortedRounds.findIndex((r) => r.id === selectedRound.id) < sortedRounds.length - 1}
           onMove={(dir) => moveRound(selectedRound, dir)}
@@ -196,6 +257,7 @@ function NewRoundForm({ onCreate, onCancel }: { onCreate: (name: string) => void
 
 function RoundDetail({
   round,
+  matches,
   canMoveUp,
   canMoveDown,
   onMove,
@@ -206,6 +268,7 @@ function RoundDetail({
   showToast,
 }: {
   round: BracketRound;
+  matches: BracketMatch[];
   canMoveUp: boolean;
   canMoveDown: boolean;
   onMove: (dir: -1 | 1) => void;
@@ -215,7 +278,6 @@ function RoundDetail({
   isAdmin: boolean;
   showToast: (msg: string) => void;
 }) {
-  const { data: matches } = useCollection<BracketMatch>("bracketMatches", [where("roundId", "==", round.id)]);
   const [editingRoundName, setEditingRoundName] = useState(false);
   const [nameDraft, setNameDraft] = useState(round.name);
   const [showNewMatch, setShowNewMatch] = useState(false);
