@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { addDoc, collection, doc, setDoc } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, setDoc, updateDoc } from "firebase/firestore";
 import { useCollection } from "../hooks/useCollection";
 import { db } from "../firebase";
-import type { ChampionshipEdition, ChampionshipType, EditionStatus, Team } from "../types";
+import type { ChampionshipType, Team } from "../types";
 import { BADGE_COLORS } from "../types";
 
 function slugify(text: string) {
@@ -13,6 +13,10 @@ function slugify(text: string) {
     .replace(/(^-|-$)/g, "");
 }
 
+function confirmDelete(label: string) {
+  return window.confirm(`Eliminare definitivamente "${label}"? L'operazione non si può annullare.`);
+}
+
 /* =========================== Tipologie di campionato =========================== */
 
 export function ChampionshipTypeManagement({ onDone }: { onDone: (msg: string) => void }) {
@@ -21,6 +25,7 @@ export function ChampionshipTypeManagement({ onDone }: { onDone: (msg: string) =
   const [hasTeams, setHasTeams] = useState(true);
   const [badgeColor, setBadgeColor] = useState<string>("serie-b");
   const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const badgeOptions = Object.keys(BADGE_COLORS);
 
@@ -45,34 +50,53 @@ export function ChampionshipTypeManagement({ onDone }: { onDone: (msg: string) =
     }
   };
 
+  const remove = async (t: ChampionshipType) => {
+    if (!confirmDelete(t.name)) return;
+    try {
+      await deleteDoc(doc(db, "championshipTypes", t.id));
+      onDone(`Tipologia "${t.name}" eliminata.`);
+    } catch (err) {
+      console.error(err);
+      onDone("Errore nell'eliminazione.");
+    }
+  };
+
   return (
     <div className="mt-6">
       <p className="text-[13px] font-bold mb-2">Tipologie di campionato</p>
       <div className="bg-white border border-[#EAE7DD] rounded-xl overflow-hidden mb-3">
-        {types.map((t) => {
-          const badge = BADGE_COLORS[t.badgeColor] ?? BADGE_COLORS["serie-b"];
-          return (
+        {types.map((t) =>
+          editingId === t.id ? (
+            <EditTypeRow key={t.id} type={t} onCancel={() => setEditingId(null)} onDone={onDone} />
+          ) : (
             <div
               key={t.id}
-              className="flex items-center justify-between px-3.5 py-2.5 text-[13px] border-b border-[#F1EFE8] last:border-b-0"
+              className="flex items-center justify-between px-3.5 py-2.5 text-[13px] border-b border-[#F1EFE8] last:border-b-0 gap-2"
             >
-              <span className="font-semibold">
-                {t.name} <span className="text-[#9A9A94] font-normal">{t.hasTeams ? "· a squadre" : "· individuale"}</span>
+              <span className="font-semibold flex-1">
+                {t.name}{" "}
+                <span className="text-[#9A9A94] font-normal">{t.hasTeams ? "· a squadre" : "· individuale"}</span>
               </span>
               <span
-                className="text-[10.5px] font-bold px-2 py-1 rounded-full"
-                style={{ background: badge.bg, color: badge.text }}
+                className="text-[10.5px] font-bold px-2 py-1 rounded-full shrink-0"
+                style={{ background: BADGE_COLORS[t.badgeColor]?.bg, color: BADGE_COLORS[t.badgeColor]?.text }}
               >
-                {badge.label}
+                {BADGE_COLORS[t.badgeColor]?.label}
               </span>
+              <button onClick={() => setEditingId(t.id)} className="text-court text-xs font-semibold shrink-0">
+                Modifica
+              </button>
+              <button onClick={() => remove(t)} className="text-red-600 text-xs font-semibold shrink-0">
+                Elimina
+              </button>
             </div>
-          );
-        })}
+          )
+        )}
+        {types.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[#9A9A94]">Nessuna tipologia ancora.</p>}
       </div>
 
       <p className="text-xs text-[#9A9A94] mb-2">
-        Crea una nuova tipologia se in futuro serve un campionato diverso da Serie B/C, Principianti, Femminile
-        (punto 1 della specifica: nessuna modifica al codice necessaria).
+        Crea una nuova tipologia se in futuro serve un campionato diverso da Serie B/C, Principianti, Femminile.
       </p>
       <input
         placeholder="Nome tipologia (es. Serie A, Under 18...)"
@@ -106,78 +130,72 @@ export function ChampionshipTypeManagement({ onDone }: { onDone: (msg: string) =
   );
 }
 
-/* =========================== Edizioni =========================== */
+function EditTypeRow({
+  type,
+  onCancel,
+  onDone,
+}: {
+  type: ChampionshipType;
+  onCancel: () => void;
+  onDone: (msg: string) => void;
+}) {
+  const [name, setName] = useState(type.name);
+  const [hasTeams, setHasTeams] = useState(type.hasTeams);
+  const [badgeColor, setBadgeColor] = useState(type.badgeColor);
+  const [saving, setSaving] = useState(false);
 
-export function EditionManagement({ onDone }: { onDone: (msg: string) => void }) {
-  const { data: types } = useCollection<ChampionshipType>("championshipTypes");
-  const [typeId, setTypeId] = useState("");
-  const [season, setSeason] = useState("");
-  const [status, setStatus] = useState<EditionStatus>("bozza");
-  const [creating, setCreating] = useState(false);
-
-  const create = async () => {
-    const finalTypeId = typeId || types[0]?.id;
-    if (!finalTypeId || !season.trim()) return;
-    setCreating(true);
+  const save = async () => {
+    setSaving(true);
     try {
-      await addDoc(collection(db, "championshipEditions"), {
-        typeId: finalTypeId,
-        season: season.trim(),
-        status,
-      });
-      setSeason("");
-      onDone("Edizione creata.");
+      await updateDoc(doc(db, "championshipTypes", type.id), { name: name.trim(), hasTeams, badgeColor });
+      onDone("Tipologia aggiornata.");
+      onCancel();
     } catch (err) {
       console.error(err);
-      onDone("Errore nella creazione dell'edizione.");
+      onDone("Errore nel salvataggio.");
     } finally {
-      setCreating(false);
+      setSaving(false);
     }
   };
 
   return (
-    <div className="mt-6">
-      <p className="text-[13px] font-bold mb-2">Crea edizione</p>
+    <div className="px-3.5 py-3 border-b border-[#F1EFE8] last:border-b-0 bg-[#FAF8F3]">
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-sm mb-2"
+      />
+      <label className="flex items-center gap-2 text-[13px] mb-2">
+        <input type="checkbox" checked={hasTeams} onChange={(e) => setHasTeams(e.target.checked)} />
+        A squadre
+      </label>
       <select
-        value={typeId}
-        onChange={(e) => setTypeId(e.target.value)}
+        value={badgeColor}
+        onChange={(e) => setBadgeColor(e.target.value)}
         className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white mb-2"
       >
-        <option value="" disabled>
-          Scegli tipologia...
-        </option>
-        {types.map((t) => (
-          <option key={t.id} value={t.id}>
-            {t.name}
+        {Object.keys(BADGE_COLORS).map((k) => (
+          <option key={k} value={k}>
+            Badge {BADGE_COLORS[k].label}
           </option>
         ))}
       </select>
-      <input
-        placeholder="Stagione (es. 2025/2026 oppure 2026)"
-        value={season}
-        onChange={(e) => setSeason(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2"
-      />
-      <select
-        value={status}
-        onChange={(e) => setStatus(e.target.value as EditionStatus)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white mb-2"
-      >
-        <option value="bozza">Bozza</option>
-        <option value="attiva">Attiva</option>
-        <option value="conclusa">Conclusa</option>
-        <option value="nascosta">Nascosta</option>
-      </select>
-      <button
-        onClick={create}
-        disabled={creating || !season.trim()}
-        className="w-full bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
-      >
-        {creating ? "Creazione in corso..." : "Crea edizione"}
-      </button>
+      <div className="flex gap-2">
+        <button
+          onClick={save}
+          disabled={saving}
+          className="flex-1 bg-court text-white rounded-lg py-2 text-sm font-bold disabled:opacity-50"
+        >
+          Salva
+        </button>
+        <button onClick={onCancel} className="flex-1 border border-[#E5E3DC] rounded-lg py-2 text-sm font-semibold">
+          Annulla
+        </button>
+      </div>
     </div>
   );
 }
+
 
 /* =========================== Squadre =========================== */
 
@@ -186,6 +204,7 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
   const [name, setName] = useState("");
   const [rosterText, setRosterText] = useState("");
   const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const roster = rosterText
     .split(",")
@@ -200,10 +219,7 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
     }
     setCreating(true);
     try {
-      await addDoc(collection(db, "teams"), {
-        name: name.trim(),
-        roster,
-      });
+      await addDoc(collection(db, "teams"), { name: name.trim(), roster });
       setName("");
       setRosterText("");
       onDone(`Squadra "${name}" creata.`);
@@ -215,17 +231,40 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
     }
   };
 
+  const remove = async (t: Team) => {
+    if (!confirmDelete(t.name)) return;
+    try {
+      await deleteDoc(doc(db, "teams", t.id));
+      onDone(`Squadra "${t.name}" eliminata.`);
+    } catch (err) {
+      console.error(err);
+      onDone("Errore nell'eliminazione.");
+    }
+  };
+
   return (
     <div className="mt-6">
       <p className="text-[13px] font-bold mb-2">Squadre</p>
-      <div className="bg-white border border-[#EAE7DD] rounded-xl overflow-hidden mb-3 max-h-56 overflow-y-auto">
+      <div className="bg-white border border-[#EAE7DD] rounded-xl overflow-hidden mb-3 max-h-72 overflow-y-auto">
         {teams.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[#9A9A94]">Nessuna squadra ancora.</p>}
-        {teams.map((t) => (
-          <div key={t.id} className="px-3.5 py-2.5 text-[13px] border-b border-[#F1EFE8] last:border-b-0">
-            <p className="font-semibold">{t.name}</p>
-            <p className="text-[12px] text-[#9A9A94]">{t.roster.join(", ")}</p>
-          </div>
-        ))}
+        {teams.map((t) =>
+          editingId === t.id ? (
+            <EditTeamRow key={t.id} team={t} onCancel={() => setEditingId(null)} onDone={onDone} />
+          ) : (
+            <div key={t.id} className="px-3.5 py-2.5 text-[13px] border-b border-[#F1EFE8] last:border-b-0">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-semibold flex-1">{t.name}</p>
+                <button onClick={() => setEditingId(t.id)} className="text-court text-xs font-semibold shrink-0">
+                  Modifica
+                </button>
+                <button onClick={() => remove(t)} className="text-red-600 text-xs font-semibold shrink-0">
+                  Elimina
+                </button>
+              </div>
+              <p className="text-[12px] text-[#9A9A94]">{t.roster.join(", ")}</p>
+            </div>
+          )
+        )}
       </div>
       <input
         placeholder="Nome squadra"
@@ -250,162 +289,65 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
   );
 }
 
-/* =========================== Assegna squadra a un'edizione =========================== */
+function EditTeamRow({
+  team,
+  onCancel,
+  onDone,
+}: {
+  team: Team;
+  onCancel: () => void;
+  onDone: (msg: string) => void;
+}) {
+  const [name, setName] = useState(team.name);
+  const [rosterText, setRosterText] = useState(team.roster.join(", "));
+  const [saving, setSaving] = useState(false);
 
-export function EditionTeamManagement({ onDone }: { onDone: (msg: string) => void }) {
-  const { data: editions } = useCollection<ChampionshipEdition>("championshipEditions");
-  const { data: types } = useCollection<ChampionshipType>("championshipTypes");
-  const { data: teams } = useCollection<Team>("teams");
-
-  const teamEditions = editions.filter((e) => types.find((t) => t.id === e.typeId)?.hasTeams);
-
-  const [editionId, setEditionId] = useState("");
-  const [teamId, setTeamId] = useState("");
-  const [creating, setCreating] = useState(false);
-
-  const link = async () => {
-    const finalEditionId = editionId || teamEditions[0]?.id;
-    const finalTeamId = teamId || teams[0]?.id;
-    if (!finalEditionId || !finalTeamId) return;
-    setCreating(true);
+  const save = async () => {
+    const roster = rosterText
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (roster.length < 2 || roster.length > 6) {
+      onDone("La rosa deve avere tra 2 e 6 nomi.");
+      return;
+    }
+    setSaving(true);
     try {
-      const id = `${finalEditionId}_${finalTeamId}`;
-      await setDoc(doc(db, "editionTeams", id), {
-        id,
-        editionId: finalEditionId,
-        teamId: finalTeamId,
-        points: 0,
-        played: 0,
-        order: 0,
-        status: "normale",
-      });
-      onDone("Squadra iscritta all'edizione.");
+      await updateDoc(doc(db, "teams", team.id), { name: name.trim(), roster });
+      onDone("Squadra aggiornata.");
+      onCancel();
     } catch (err) {
       console.error(err);
-      onDone("Errore nell'iscrizione della squadra.");
+      onDone("Errore nel salvataggio.");
     } finally {
-      setCreating(false);
+      setSaving(false);
     }
   };
 
   return (
-    <div className="mt-6">
-      <p className="text-[13px] font-bold mb-2">Iscrivi una squadra a un'edizione</p>
-      <select
-        value={editionId}
-        onChange={(e) => setEditionId(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white mb-2"
-      >
-        <option value="" disabled>
-          Scegli edizione...
-        </option>
-        {teamEditions.map((e) => {
-          const t = types.find((x) => x.id === e.typeId);
-          return (
-            <option key={e.id} value={e.id}>
-              {t?.name} {e.season}
-            </option>
-          );
-        })}
-      </select>
-      <select
-        value={teamId}
-        onChange={(e) => setTeamId(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white mb-2"
-      >
-        <option value="" disabled>
-          Scegli squadra...
-        </option>
-        {teams.map((t) => (
-          <option key={t.id} value={t.id}>
-            {t.name}
-          </option>
-        ))}
-      </select>
-      <button
-        onClick={link}
-        disabled={creating}
-        className="w-full bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
-      >
-        {creating ? "Iscrizione in corso..." : "Iscrivi squadra"}
-      </button>
-      <p className="text-xs text-[#9A9A94] mt-2">
-        Punti e partite giocate partono da zero e si possono correggere manualmente in Fase 3, oppure verranno
-        aggiornati automaticamente dai risultati delle partite.
-      </p>
-    </div>
-  );
-}
-
-/* =========================== Femminile: aggiungi giocatrice =========================== */
-
-export function FemaleParticipantManagement({ onDone }: { onDone: (msg: string) => void }) {
-  const { data: editions } = useCollection<ChampionshipEdition>("championshipEditions");
-  const { data: types } = useCollection<ChampionshipType>("championshipTypes");
-
-  const femaleEditions = editions.filter((e) => types.find((t) => t.id === e.typeId)?.hasTeams === false);
-
-  const [editionId, setEditionId] = useState("");
-  const [name, setName] = useState("");
-  const [creating, setCreating] = useState(false);
-
-  const create = async () => {
-    const finalEditionId = editionId || femaleEditions[0]?.id;
-    if (!finalEditionId || !name.trim()) return;
-    setCreating(true);
-    try {
-      await addDoc(collection(db, "femaleParticipants"), {
-        editionId: finalEditionId,
-        name: name.trim(),
-        points: 0,
-        stages: 0,
-        status: "normale",
-      });
-      setName("");
-      onDone(`Giocatrice "${name}" aggiunta.`);
-    } catch (err) {
-      console.error(err);
-      onDone("Errore nell'aggiunta della giocatrice.");
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  if (femaleEditions.length === 0) return null;
-
-  return (
-    <div className="mt-6">
-      <p className="text-[13px] font-bold mb-2">Aggiungi giocatrice (campionato individuale)</p>
-      <select
-        value={editionId}
-        onChange={(e) => setEditionId(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white mb-2"
-      >
-        <option value="" disabled>
-          Scegli edizione...
-        </option>
-        {femaleEditions.map((e) => {
-          const t = types.find((x) => x.id === e.typeId);
-          return (
-            <option key={e.id} value={e.id}>
-              {t?.name} {e.season}
-            </option>
-          );
-        })}
-      </select>
+    <div className="px-3.5 py-3 border-b border-[#F1EFE8] last:border-b-0 bg-[#FAF8F3]">
       <input
-        placeholder="Nome giocatrice"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2"
+        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-sm mb-2"
       />
-      <button
-        onClick={create}
-        disabled={creating || !name.trim()}
-        className="w-full bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
-      >
-        {creating ? "Aggiunta in corso..." : "Aggiungi giocatrice"}
-      </button>
+      <input
+        value={rosterText}
+        onChange={(e) => setRosterText(e.target.value)}
+        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-sm mb-2"
+      />
+      <div className="flex gap-2">
+        <button
+          onClick={save}
+          disabled={saving}
+          className="flex-1 bg-court text-white rounded-lg py-2 text-sm font-bold disabled:opacity-50"
+        >
+          Salva
+        </button>
+        <button onClick={onCancel} className="flex-1 border border-[#E5E3DC] rounded-lg py-2 text-sm font-semibold">
+          Annulla
+        </button>
+      </div>
     </div>
   );
 }
