@@ -4,7 +4,7 @@ import { addDoc, collection, deleteDoc, doc, setDoc, updateDoc, where } from "fi
 import { useCollection } from "../hooks/useCollection";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase";
-import { Plus, Pencil, Trash2, Settings, X } from "lucide-react";
+import { Plus, Pencil, Trash2, Settings, X, Upload } from "lucide-react";
 import type {
   ChampionshipEdition,
   ChampionshipType,
@@ -15,6 +15,7 @@ import type {
   Team,
 } from "../types";
 import { ChampionshipTypeManagement, TeamManagement } from "../components/ChampionshipManagement";
+import { parsePastedTable } from "../lib/parsePastedTable";
 
 function confirmDelete(label: string) {
   return window.confirm(`Eliminare definitivamente "${label}"? L'operazione non si può annullare.`);
@@ -338,6 +339,7 @@ function TeamStandings({
   const { data: editionTeams } = useCollection<EditionTeam>("editionTeams", [where("editionId", "==", editionId)]);
   const { data: teams } = useCollection<Team>("teams");
   const [showAdd, setShowAdd] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const rows = editionTeams
@@ -395,7 +397,7 @@ function TeamStandings({
       </div>
 
       {isAdmin && (
-        <div className="mt-3">
+        <div className="mt-3 flex flex-col gap-2 items-start">
           {showAdd ? (
             <AddTeamToEdition
               editionId={editionId}
@@ -414,6 +416,156 @@ function TeamStandings({
               <Plus size={15} /> Aggiungi squadra a questa classifica
             </button>
           )}
+
+          {showImport ? (
+            <ImportTeamStandings
+              editionId={editionId}
+              existingEditionTeams={rows}
+              onDone={(msg) => {
+                showToast(msg);
+                setShowImport(false);
+              }}
+              onCancel={() => setShowImport(false)}
+            />
+          ) : (
+            <button onClick={() => setShowImport(true)} className="flex items-center gap-1.5 text-[13px] font-semibold text-court">
+              <Upload size={15} /> Importa da Excel/Word (incolla i dati)
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ImportTeamStandings({
+  editionId,
+  existingEditionTeams,
+  onDone,
+  onCancel,
+}: {
+  editionId: string;
+  existingEditionTeams: (EditionTeam & { team?: Team })[];
+  onDone: (msg: string) => void;
+  onCancel: () => void;
+}) {
+  const [text, setText] = useState("");
+  const [preview, setPreview] = useState<{
+    matched: { row: EditionTeam & { team?: Team }; num1: number; num2: number }[];
+    notFound: string[];
+    missing: (EditionTeam & { team?: Team })[];
+    skipped: string[];
+  } | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const analyze = () => {
+    const { rows, skippedLines } = parsePastedTable(text);
+    const matched: { row: EditionTeam & { team?: Team }; num1: number; num2: number }[] = [];
+    const notFound: string[] = [];
+    const matchedIds = new Set<string>();
+
+    for (const parsedRow of rows) {
+      const found = existingEditionTeams.find(
+        (et) => et.team?.name.trim().toLowerCase() === parsedRow.name.trim().toLowerCase()
+      );
+      if (found) {
+        matched.push({ row: found, num1: parsedRow.num1, num2: parsedRow.num2 });
+        matchedIds.add(found.id);
+      } else {
+        notFound.push(parsedRow.name);
+      }
+    }
+    const missing = existingEditionTeams.filter((et) => !matchedIds.has(et.id));
+    setPreview({ matched, notFound, missing, skipped: skippedLines });
+  };
+
+  const confirm = async () => {
+    if (!preview) return;
+    setSaving(true);
+    try {
+      for (const { row, num1, num2 } of preview.matched) {
+        await updateDoc(doc(db, "editionTeams", row.id), { points: num1, played: num2 });
+      }
+      onDone(
+        `Importazione completata: ${preview.matched.length} squadre aggiornate.` +
+          (preview.missing.length > 0
+            ? ` ${preview.missing.length} non presenti nel testo hanno mantenuto i dati precedenti.`
+            : "")
+      );
+    } catch (err) {
+      console.error(err);
+      onDone("Errore durante l'importazione.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-white border border-[#EAE7DD] rounded-xl p-3.5 w-full">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[13px] font-bold">Importa classifica (incolla da Excel/Word)</p>
+        <button onClick={onCancel}><X size={16} className="text-[#9A9A94]" /></button>
+      </div>
+      <p className="text-[12px] text-[#9A9A94] mb-2">
+        Copia le righe da Excel o da una tabella Word e incollale qui sotto. Ogni riga deve contenere il nome
+        della squadra seguito da <strong>Punti</strong> e <strong>Partite giocate</strong> (in quest'ordine). Le
+        squadre devono essere già iscritte a questa classifica: se non lo sono ancora, iscrivile prima con
+        "Aggiungi squadra a questa classifica".
+      </p>
+      <textarea
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          setPreview(null);
+        }}
+        placeholder={"Los Locos Padel\t9\t4\nSmash Taranto\t7\t4\n..."}
+        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2 min-h-[120px] font-mono"
+      />
+
+      {!preview ? (
+        <button
+          onClick={analyze}
+          disabled={!text.trim()}
+          className="w-full bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+        >
+          Analizza
+        </button>
+      ) : (
+        <div>
+          <div className="bg-[#FAF8F3] rounded-lg p-2.5 mb-2 text-[12.5px]">
+            <p className="mb-1">
+              <strong>{preview.matched.length}</strong> squadre verranno aggiornate.
+            </p>
+            {preview.notFound.length > 0 && (
+              <p className="text-[#993C1D] mb-1">
+                Non trovate tra le squadre iscritte (iscrivile prima): {preview.notFound.join(", ")}
+              </p>
+            )}
+            {preview.missing.length > 0 && (
+              <p className="text-[#9A9A94]">
+                Non presenti nel testo (manterranno i dati attuali):{" "}
+                {preview.missing.map((m) => m.team?.name).join(", ")}
+              </p>
+            )}
+            {preview.skipped.length > 0 && (
+              <p className="text-[#9A9A94] mt-1">{preview.skipped.length} riga/righe non riconosciute e ignorate.</p>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={confirm}
+              disabled={saving || preview.matched.length === 0}
+              className="flex-1 bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+            >
+              {saving ? "Importazione in corso..." : "Conferma importazione"}
+            </button>
+            <button
+              onClick={() => setPreview(null)}
+              className="flex-1 border border-[#E5E3DC] rounded-lg py-2.5 text-sm font-semibold"
+            >
+              Modifica testo
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -641,6 +793,7 @@ function FemaleStandings({
     where("editionId", "==", editionId),
   ]);
   const [showAdd, setShowAdd] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const rows = [...participants].sort((a, b) => {
@@ -685,7 +838,7 @@ function FemaleStandings({
       </div>
 
       {isAdmin && (
-        <div className="mt-3">
+        <div className="mt-3 flex flex-col gap-2 items-start">
           {showAdd ? (
             <AddFemaleParticipant
               editionId={editionId}
@@ -698,6 +851,22 @@ function FemaleStandings({
           ) : (
             <button onClick={() => setShowAdd(true)} className="flex items-center gap-1.5 text-[13px] font-semibold text-court">
               <Plus size={15} /> Aggiungi giocatrice
+            </button>
+          )}
+
+          {showImport ? (
+            <ImportFemaleParticipants
+              editionId={editionId}
+              existing={participants}
+              onDone={(msg) => {
+                showToast(msg);
+                setShowImport(false);
+              }}
+              onCancel={() => setShowImport(false)}
+            />
+          ) : (
+            <button onClick={() => setShowImport(true)} className="flex items-center gap-1.5 text-[13px] font-semibold text-court">
+              <Upload size={15} /> Importa da Excel/Word (incolla i dati)
             </button>
           )}
         </div>
@@ -753,6 +922,141 @@ function AddFemaleParticipant({
       <button onClick={submit} disabled={saving} className="w-full bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50">
         {saving ? "In corso..." : "Aggiungi"}
       </button>
+    </div>
+  );
+}
+
+function ImportFemaleParticipants({
+  editionId,
+  existing,
+  onDone,
+  onCancel,
+}: {
+  editionId: string;
+  existing: FemaleParticipant[];
+  onDone: (msg: string) => void;
+  onCancel: () => void;
+}) {
+  const [text, setText] = useState("");
+  const [preview, setPreview] = useState<{
+    matched: { existing: FemaleParticipant; num1: number; num2: number }[];
+    fresh: { name: string; num1: number; num2: number }[];
+    missing: FemaleParticipant[];
+    skipped: string[];
+  } | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const analyze = () => {
+    const { rows, skippedLines } = parsePastedTable(text);
+    const matched: { existing: FemaleParticipant; num1: number; num2: number }[] = [];
+    const fresh: { name: string; num1: number; num2: number }[] = [];
+    const matchedNames = new Set<string>();
+
+    for (const row of rows) {
+      const found = existing.find((e) => e.name.trim().toLowerCase() === row.name.trim().toLowerCase());
+      if (found) {
+        matched.push({ existing: found, num1: row.num1, num2: row.num2 });
+        matchedNames.add(found.id);
+      } else {
+        fresh.push(row);
+      }
+    }
+    const missing = existing.filter((e) => !matchedNames.has(e.id));
+    setPreview({ matched, fresh, missing, skipped: skippedLines });
+  };
+
+  const confirm = async () => {
+    if (!preview) return;
+    setSaving(true);
+    try {
+      for (const { existing: e, num1, num2 } of preview.matched) {
+        await updateDoc(doc(db, "femaleParticipants", e.id), { points: num1, stages: num2 });
+      }
+      for (const row of preview.fresh) {
+        await addDoc(collection(db, "femaleParticipants"), {
+          editionId,
+          name: row.name,
+          points: row.num1,
+          stages: row.num2,
+          status: "normale",
+        });
+      }
+      onDone(
+        `Importazione completata: ${preview.matched.length} aggiornate, ${preview.fresh.length} create.` +
+          (preview.missing.length > 0
+            ? ` ${preview.missing.length} non presenti nel testo hanno mantenuto i dati precedenti.`
+            : "")
+      );
+    } catch (err) {
+      console.error(err);
+      onDone("Errore durante l'importazione.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-white border border-[#EAE7DD] rounded-xl p-3.5 w-full">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[13px] font-bold">Importa classifica (incolla da Excel/Word)</p>
+        <button onClick={onCancel}><X size={16} className="text-[#9A9A94]" /></button>
+      </div>
+      <p className="text-[12px] text-[#9A9A94] mb-2">
+        Copia le righe da Excel o da una tabella Word e incollale qui sotto. Ogni riga deve contenere il nome
+        della giocatrice seguito da <strong>Punti</strong> e <strong>Tappe disputate</strong> (in quest'ordine).
+        Il numero di posizione iniziale, se presente, viene ignorato automaticamente.
+      </p>
+      <textarea
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          setPreview(null);
+        }}
+        placeholder={"Gabriella Schino\t19\t4\nFrancesca Boccardi\t16\t4\n..."}
+        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2 min-h-[120px] font-mono"
+      />
+
+      {!preview ? (
+        <button
+          onClick={analyze}
+          disabled={!text.trim()}
+          className="w-full bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+        >
+          Analizza
+        </button>
+      ) : (
+        <div>
+          <div className="bg-[#FAF8F3] rounded-lg p-2.5 mb-2 text-[12.5px]">
+            <p className="mb-1">
+              <strong>{preview.matched.length}</strong> giocatrici verranno aggiornate,{" "}
+              <strong>{preview.fresh.length}</strong> verranno create come nuove.
+            </p>
+            {preview.missing.length > 0 && (
+              <p className="text-[#9A9A94]">
+                Non presenti nel testo (manterranno i dati attuali): {preview.missing.map((m) => m.name).join(", ")}
+              </p>
+            )}
+            {preview.skipped.length > 0 && (
+              <p className="text-[#9A9A94] mt-1">{preview.skipped.length} riga/righe non riconosciute e ignorate.</p>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={confirm}
+              disabled={saving}
+              className="flex-1 bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+            >
+              {saving ? "Importazione in corso..." : "Conferma importazione"}
+            </button>
+            <button
+              onClick={() => setPreview(null)}
+              className="flex-1 border border-[#E5E3DC] rounded-lg py-2.5 text-sm font-semibold"
+            >
+              Modifica testo
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
