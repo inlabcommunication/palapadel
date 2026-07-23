@@ -4,7 +4,7 @@ import { addDoc, collection, deleteDoc, doc, setDoc, updateDoc, where } from "fi
 import { useCollection } from "../hooks/useCollection";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase";
-import { Plus, Pencil, Trash2, Settings, X, Upload } from "lucide-react";
+import { Plus, Pencil, Trash2, Settings, X, Upload, ChevronDown } from "lucide-react";
 import type {
   ChampionshipEdition,
   ChampionshipType,
@@ -21,6 +21,27 @@ function confirmDelete(label: string) {
   return window.confirm(`Eliminare definitivamente "${label}"? L'operazione non si può annullare.`);
 }
 
+function statusLabel(status: EditionStatus) {
+  return status === "attiva" ? "Attiva" : status === "conclusa" ? "Conclusa" : status === "nascosta" ? "Nascosta" : "Bozza";
+}
+
+/** Ordina le edizioni dalla più recente: usa createdAt se presente, altrimenti la stagione come testo. */
+function sortEditionsRecentFirst(list: ChampionshipEdition[]) {
+  return [...list].sort((a, b) => {
+    if (a.createdAt && b.createdAt) return b.createdAt.localeCompare(a.createdAt);
+    return b.season.localeCompare(a.season);
+  });
+}
+
+/** Sceglie l'edizione da mostrare di default per una tipologia: quella attiva, altrimenti la più recente conclusa, altrimenti la più recente in assoluto. */
+function pickDefaultEdition(editionsOfType: ChampionshipEdition[]) {
+  const active = editionsOfType.find((e) => e.status === "attiva");
+  if (active) return active;
+  const sorted = sortEditionsRecentFirst(editionsOfType);
+  const concluded = sorted.find((e) => e.status === "conclusa");
+  return concluded ?? sorted[0];
+}
+
 export function CampionatiPage() {
   const { editionId } = useParams();
   const navigate = useNavigate();
@@ -33,7 +54,9 @@ export function CampionatiPage() {
   const [showNewEdition, setShowNewEdition] = useState(false);
   const [showTypeSettings, setShowTypeSettings] = useState(false);
   const [showTeamSettings, setShowTeamSettings] = useState(false);
+  const [showSeasonPicker, setShowSeasonPicker] = useState(false);
   const [editingEdition, setEditingEdition] = useState(false);
+  const [manualTypeId, setManualTypeId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -41,9 +64,36 @@ export function CampionatiPage() {
     setTimeout(() => setToast(null), 2500);
   };
 
-  const selected = editionId ?? editions[0]?.id;
-  const edition = editions.find((e) => e.id === selected);
-  const type = edition && types.find((t) => t.id === edition.typeId);
+  // L'edizione corrente dall'URL determina la tipologia selezionata, a meno che
+  // l'utente non abbia appena cliccato un altro chip di tipologia (manualTypeId).
+  const editionFromUrl = editionId ? editions.find((e) => e.id === editionId) : undefined;
+  const activeTypeId = manualTypeId ?? editionFromUrl?.typeId ?? types[0]?.id;
+  const activeType = types.find((t) => t.id === activeTypeId);
+
+  const editionsOfActiveType = activeTypeId ? editions.filter((e) => e.typeId === activeTypeId) : [];
+  const sortedEditionsOfType = sortEditionsRecentFirst(editionsOfActiveType);
+
+  // Se l'edizione dall'URL appartiene alla tipologia selezionata, usa quella; altrimenti la scelta di default.
+  const edition =
+    editionFromUrl && editionFromUrl.typeId === activeTypeId
+      ? editionFromUrl
+      : pickDefaultEdition(editionsOfActiveType);
+
+  const selectType = (typeId: string) => {
+    setManualTypeId(typeId);
+    setEditingEdition(false);
+    setShowSeasonPicker(false);
+    const def = pickDefaultEdition(editions.filter((e) => e.typeId === typeId));
+    if (def) navigate(`/campionati/${def.id}`);
+    else navigate("/campionati");
+  };
+
+  const selectEdition = (ed: ChampionshipEdition) => {
+    setManualTypeId(ed.typeId);
+    setShowSeasonPicker(false);
+    setEditingEdition(false);
+    navigate(`/campionati/${ed.id}`);
+  };
 
   return (
     <div className="p-4">
@@ -79,38 +129,68 @@ export function CampionatiPage() {
         </div>
       )}
 
-      <div className="flex gap-2 overflow-x-auto pb-2 mb-4">
-        {editions.map((e) => {
-          const t = types.find((x) => x.id === e.typeId);
-          const isSel = e.id === selected;
+      {/* Riga 1: una scheda per ogni tipologia di campionato (Serie B, Serie C, Principianti, Femminile...) */}
+      <div className="flex gap-2 overflow-x-auto pb-2 mb-2">
+        {types.map((t) => {
+          const isSel = t.id === activeTypeId;
           return (
             <button
-              key={e.id}
-              onClick={() => {
-                navigate(`/campionati/${e.id}`);
-                setEditingEdition(false);
-              }}
+              key={t.id}
+              onClick={() => selectType(t.id)}
               className={`whitespace-nowrap rounded-full px-3.5 py-2 text-[12.5px] font-semibold shrink-0 ${
                 isSel ? "bg-court text-white" : "bg-[#F1EFE8] text-[#3A3A36]"
               }`}
             >
-              {t?.name} {e.season}
+              {t.name}
             </button>
           );
         })}
+      </div>
+
+      {/* Riga 2: selettore di stagione per la tipologia scelta, + azioni admin */}
+      <div className="flex items-center gap-2 mb-4 relative">
+        {edition ? (
+          <button
+            onClick={() => setShowSeasonPicker((v) => !v)}
+            className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] font-semibold bg-white border border-[#E5E3DC]"
+          >
+            {edition.season}
+            <ChevronDown size={13} />
+          </button>
+        ) : (
+          <span className="text-[12.5px] text-[#9A9A94]">Nessuna edizione ancora per questa tipologia.</span>
+        )}
         {isAdmin && (
           <button
             onClick={() => setShowNewEdition((v) => !v)}
-            className="rounded-full px-3 py-2 text-[12.5px] font-semibold shrink-0 border border-dashed border-[#B9B6AC] text-[#7A7A75] flex items-center gap-1"
+            className="rounded-full px-3 py-1.5 text-[12.5px] font-semibold shrink-0 border border-dashed border-[#B9B6AC] text-[#7A7A75] flex items-center gap-1"
           >
-            <Plus size={14} /> Nuova edizione
+            <Plus size={13} /> Nuova edizione
           </button>
+        )}
+
+        {showSeasonPicker && sortedEditionsOfType.length > 0 && (
+          <div className="absolute top-9 left-0 z-10 bg-white border border-[#EAE7DD] rounded-xl shadow-md overflow-hidden min-w-[180px]">
+            {sortedEditionsOfType.map((e) => (
+              <button
+                key={e.id}
+                onClick={() => selectEdition(e)}
+                className={`w-full text-left px-3.5 py-2.5 text-[13px] flex items-center justify-between gap-2 border-b border-[#F1EFE8] last:border-b-0 ${
+                  e.id === edition?.id ? "bg-[#EAF3EF] font-semibold" : ""
+                }`}
+              >
+                <span>{e.season}</span>
+                <span className="text-[10px] text-[#9A9A94]">{statusLabel(e.status)}</span>
+              </button>
+            ))}
+          </div>
         )}
       </div>
 
       {showNewEdition && isAdmin && (
         <NewEditionForm
           types={types}
+          defaultTypeId={activeTypeId}
           onDone={(msg, newId) => {
             showToast(msg);
             setShowNewEdition(false);
@@ -139,11 +219,13 @@ export function CampionatiPage() {
           ) : (
             <div className="flex items-center justify-between">
               <p className="text-[13px] text-[#7A7A75]">
-                {!type ? (
+                {!activeType ? (
                   <span className="text-[#993C1D] font-semibold">
                     Tipologia non trovata — modifica l'edizione per collegarla a una tipologia valida
                   </span>
-                ) : edition.status === "attiva" ? "Attiva" : edition.status === "conclusa" ? "Conclusa" : edition.status === "nascosta" ? "Nascosta" : "Bozza"}
+                ) : (
+                  statusLabel(edition.status)
+                )}
               </p>
               {isAdmin && (
                 <button onClick={() => setEditingEdition(true)} className="flex items-center gap-1 text-xs text-court font-semibold">
@@ -155,8 +237,8 @@ export function CampionatiPage() {
         </div>
       )}
 
-      {edition && type?.hasTeams && <TeamStandings editionId={edition.id} isAdmin={isAdmin} showToast={showToast} />}
-      {edition && type && !type.hasTeams && (
+      {edition && activeType?.hasTeams && <TeamStandings editionId={edition.id} isAdmin={isAdmin} showToast={showToast} />}
+      {edition && activeType && !activeType.hasTeams && (
         <FemaleStandings editionId={edition.id} isAdmin={isAdmin} showToast={showToast} />
       )}
 
@@ -173,14 +255,16 @@ export function CampionatiPage() {
 
 function NewEditionForm({
   types,
+  defaultTypeId,
   onDone,
   onCancel,
 }: {
   types: ChampionshipType[];
+  defaultTypeId?: string;
   onDone: (msg: string, newId?: string) => void;
   onCancel: () => void;
 }) {
-  const [typeId, setTypeId] = useState(types[0]?.id ?? "");
+  const [typeId, setTypeId] = useState(defaultTypeId ?? types[0]?.id ?? "");
   const [season, setSeason] = useState("");
   const [status, setStatus] = useState<EditionStatus>("bozza");
   const [saving, setSaving] = useState(false);
@@ -193,6 +277,7 @@ function NewEditionForm({
         typeId,
         season: season.trim(),
         status,
+        createdAt: new Date().toISOString(),
       });
       onDone("Edizione creata.", ref.id);
     } catch (err) {
