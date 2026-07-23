@@ -11,7 +11,7 @@ import { GestionePage } from "./pages/Gestione";
 
 export default function App() {
   return (
-    <div className="min-h-screen max-w-[480px] mx-auto flex flex-col bg-[#FAF8F3]">
+    <div className="min-h-screen max-w-[480px] mx-auto flex flex-col bg-[#123008]">
       <TopBar />
       <main className="flex-1 pb-24">
         <Routes>
