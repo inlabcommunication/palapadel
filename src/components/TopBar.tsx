@@ -10,12 +10,7 @@ export function TopBar() {
   return (
     <header className="sticky top-0 z-10 bg-[#FAF8F3] border-b border-[#EAE7DD]">
       <div className="flex items-center justify-between px-4 py-3 max-w-[480px] mx-auto">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-court flex items-center justify-center text-ball text-[11px] font-extrabold">
-            PP
-          </div>
-          <span className="font-bold text-court">PalaPadel</span>
-        </div>
+        <img src="/logo.png" alt="PalaPadel Club" className="h-7 w-auto" />
         {appUser ? (
           <button
             onClick={logout}
