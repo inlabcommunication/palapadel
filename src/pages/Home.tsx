@@ -1,16 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { addDoc, collection, deleteDoc, doc, updateDoc } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, updateDoc, where } from "firebase/firestore";
 import { useCollection } from "../hooks/useCollection";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase";
+import { confirmDelete } from "../lib/confirmDelete";
 import type { ChampionshipEdition, ChampionshipType, ContentStatus, HomeNews } from "../types";
 import { BADGE_COLORS } from "../types";
 import { ChevronRight, AlertCircle, Plus, X, Pencil, Trash2 } from "lucide-react";
 
-function confirmDelete(label: string) {
-  return window.confirm(`Eliminare definitivamente "${label}"? L'operazione non si può annullare.`);
-}
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -18,9 +16,19 @@ export function HomePage() {
   const isAdmin = appUser?.role === "admin" || appUser?.role === "superadmin";
 
   const { data: types } = useCollection<ChampionshipType>("championshipTypes");
-  const { data: editions, loading } = useCollection<ChampionshipEdition>("championshipEditions");
-  const { data: allNews } = useCollection<HomeNews>("homeNews");
-  const news = isAdmin ? allNews : allNews.filter((n) => n.status === "pubblicato");
+  // Il pubblico non deve nemmeno interrogare edizioni bozza/nascoste o novità in bozza:
+  // le regole Firestore rifiuterebbero comunque la query, quindi il filtro va fatto qui,
+  // non scaricando tutto e nascondendo il resto solo visivamente.
+  const { data: editions, loading } = useCollection<ChampionshipEdition>(
+    "championshipEditions",
+    isAdmin ? [] : [where("status", "in", ["attiva", "conclusa"])],
+    [isAdmin]
+  );
+  const { data: news } = useCollection<HomeNews>(
+    "homeNews",
+    isAdmin ? [] : [where("status", "==", "pubblicato")],
+    [isAdmin]
+  );
 
   const [showNewsForm, setShowNewsForm] = useState(false);
   const [editingNewsId, setEditingNewsId] = useState<string | null>(null);
@@ -83,9 +91,9 @@ export function HomePage() {
       )}
 
       <div className="flex items-center justify-between mt-7 mb-3">
-        <h2 className="text-sm font-bold">Novità PalaPadel</h2>
+        <h2 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE]">Novità PalaPadel</h2>
         {isAdmin && (
-          <button onClick={() => setShowNewsForm((v) => !v)} className="flex items-center gap-1 text-xs font-semibold text-court">
+          <button onClick={() => setShowNewsForm((v) => !v)} className="flex items-center gap-1 text-xs font-semibold text-[#BBFF5E]">
             {showNewsForm ? <X size={14} /> : <Plus size={14} />}
             {showNewsForm ? "Annulla" : "Nuova"}
           </button>
@@ -115,29 +123,29 @@ export function HomePage() {
               }}
             />
           ) : (
-            <div key={n.id} className="bg-white border border-[#EAE7DD] rounded-xl px-3.5 py-3">
+            <div key={n.id} className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl px-3.5 py-3">
               <div className="flex items-start justify-between gap-2">
                 <p className="font-bold text-sm flex-1">{n.title}</p>
                 {isAdmin && n.status === "bozza" && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F1EFE8] text-[#7A7A75] shrink-0">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.58)] shrink-0">
                     bozza
                   </span>
                 )}
               </div>
-              <p className="text-[13px] text-[#5F5E5A] mt-1">{n.body}</p>
+              <p className="text-[13px] text-[rgba(251,243,222,0.58)] mt-1">{n.body}</p>
               <div className="flex items-center justify-between mt-2">
-                <p className="text-[11px] text-[#9A9A94]">{formatDate(n.date)}</p>
+                <p className="text-[11px] text-[rgba(251,243,222,0.35)]">{formatDate(n.date)}</p>
                 {isAdmin && (
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => setEditingNewsId(n.id)}
-                      className="flex items-center gap-1 text-court text-xs font-semibold"
+                      className="flex items-center gap-1 text-[#BBFF5E] text-xs font-semibold"
                     >
                       <Pencil size={13} /> Modifica
                     </button>
                     <button
                       onClick={() => removeNews(n)}
-                      className="flex items-center gap-1 text-red-600 text-xs font-semibold"
+                      className="flex items-center gap-1 text-[#FF6B6B] text-xs font-semibold"
                     >
                       <Trash2 size={13} /> Elimina
                     </button>
@@ -150,7 +158,7 @@ export function HomePage() {
       </div>
 
       {toast && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-[#1A1A18] text-white px-4 py-2.5 rounded-full text-[12.5px] max-w-[90%] text-center z-20">
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-[#0A0B08] text-[#FBF3DE] border border-[rgba(187,255,94,0.3)] px-4 py-2.5 rounded-full text-[12.5px] max-w-[90%] text-center z-20">
           {toast}
         </div>
       )}
@@ -184,29 +192,29 @@ function NewsForm({ onDone }: { onDone: (msg: string) => void }) {
   };
 
   return (
-    <div className="bg-white border border-[#EAE7DD] rounded-xl p-3.5 mb-3">
+    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5 mb-3">
       <input
         placeholder="Titolo"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
       />
       <textarea
         placeholder="Testo della comunicazione"
         value={body}
         onChange={(e) => setBody(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2 min-h-[70px]"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2 min-h-[70px]"
       />
       <div className="flex gap-2 mb-2">
         <button
           onClick={() => setStatus("pubblicato")}
-          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${status === "pubblicato" ? "bg-court text-white" : "bg-[#F1EFE8] text-[#3A3A36]"}`}
+          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${status === "pubblicato" ? "bg-lime text-[#081208]" : "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.85)]"}`}
         >
           Pubblica subito
         </button>
         <button
           onClick={() => setStatus("bozza")}
-          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${status === "bozza" ? "bg-court text-white" : "bg-[#F1EFE8] text-[#3A3A36]"}`}
+          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${status === "bozza" ? "bg-lime text-[#081208]" : "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.85)]"}`}
         >
           Salva come bozza
         </button>
@@ -214,7 +222,7 @@ function NewsForm({ onDone }: { onDone: (msg: string) => void }) {
       <button
         onClick={submit}
         disabled={saving || !title.trim() || !body.trim()}
-        className="w-full bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+        className="w-full bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
       >
         {saving ? "In corso..." : "Salva"}
       </button>
@@ -255,27 +263,27 @@ function EditNewsForm({
   };
 
   return (
-    <div className="bg-white border border-[#EAE7DD] rounded-xl p-3.5">
+    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5">
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
       />
       <textarea
         value={body}
         onChange={(e) => setBody(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2 min-h-[70px]"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2 min-h-[70px]"
       />
       <div className="flex gap-2 mb-2">
         <button
           onClick={() => setStatus("pubblicato")}
-          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${status === "pubblicato" ? "bg-court text-white" : "bg-[#F1EFE8] text-[#3A3A36]"}`}
+          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${status === "pubblicato" ? "bg-lime text-[#081208]" : "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.85)]"}`}
         >
           Pubblicato
         </button>
         <button
           onClick={() => setStatus("bozza")}
-          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${status === "bozza" ? "bg-court text-white" : "bg-[#F1EFE8] text-[#3A3A36]"}`}
+          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${status === "bozza" ? "bg-lime text-[#081208]" : "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.85)]"}`}
         >
           Bozza
         </button>
@@ -284,11 +292,11 @@ function EditNewsForm({
         <button
           onClick={save}
           disabled={saving || !title.trim() || !body.trim()}
-          className="flex-1 bg-court text-white rounded-lg py-2 text-sm font-bold disabled:opacity-50"
+          className="flex-1 bg-lime text-[#081208] rounded-lg py-2 text-sm font-bold disabled:opacity-50"
         >
           Salva
         </button>
-        <button onClick={onCancel} className="flex-1 border border-[#E5E3DC] rounded-lg py-2 text-sm font-semibold">
+        <button onClick={onCancel} className="flex-1 border border-[rgba(251,243,222,0.18)] rounded-lg py-2 text-sm font-semibold">
           Annulla
         </button>
       </div>
@@ -311,13 +319,13 @@ function ChampionshipCard({
   return (
     <button
       onClick={onClick}
-      className="text-left bg-white border border-[#EAE7DD] rounded-2xl px-4 py-3.5 w-full"
+      className="text-left bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl px-4 py-3.5 w-full"
       style={{ opacity: muted ? 0.7 : 1 }}
     >
       <div className="flex justify-between items-start">
         <div>
           <p className="font-bold text-[15px]">{type?.name}</p>
-          <p className="text-[12.5px] text-[#7A7A75] mt-0.5">{edition.season}</p>
+          <p className="text-[12.5px] text-[rgba(251,243,222,0.58)] mt-0.5">{edition.season}</p>
         </div>
         <span
           className="text-[10.5px] font-bold px-2 py-1 rounded-full"
@@ -326,7 +334,7 @@ function ChampionshipCard({
           {edition.status === "conclusa" ? "conclusa" : "attiva"}
         </span>
       </div>
-      <div className="flex items-center mt-3 text-court text-[12.5px] font-semibold">
+      <div className="flex items-center mt-3 text-[#BBFF5E] text-[12.5px] font-semibold">
         Vedi dettagli <ChevronRight size={14} className="ml-0.5" />
       </div>
     </button>
@@ -334,12 +342,12 @@ function ChampionshipCard({
 }
 
 function SectionTitle({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <h2 className={`text-sm font-bold mb-3 ${className}`}>{children}</h2>;
+  return <h2 className={`text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE] mb-3 ${className}`}>{children}</h2>;
 }
 
 function EmptyHint({ text }: { text: string }) {
   return (
-    <div className="text-[12.5px] text-[#9A9A94] py-3 flex items-center">
+    <div className="text-[12.5px] text-[rgba(251,243,222,0.35)] py-3 flex items-center">
       <AlertCircle size={14} className="mr-1.5 shrink-0" />
       {text}
     </div>

@@ -4,6 +4,7 @@ import { addDoc, collection, deleteDoc, doc, setDoc, updateDoc, where } from "fi
 import { useCollection } from "../hooks/useCollection";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase";
+import { confirmDelete } from "../lib/confirmDelete";
 import { Plus, Pencil, Trash2, Settings, X, Upload, ChevronDown } from "lucide-react";
 import type {
   ChampionshipEdition,
@@ -18,9 +19,6 @@ import { ChampionshipTypeManagement, TeamManagement } from "../components/Champi
 import { BracketSection } from "../components/BracketSection";
 import { parsePastedTable } from "../lib/parsePastedTable";
 
-function confirmDelete(label: string) {
-  return window.confirm(`Eliminare definitivamente "${label}"? L'operazione non si può annullare.`);
-}
 
 function statusLabel(status: EditionStatus) {
   return status === "attiva" ? "Attiva" : status === "conclusa" ? "Conclusa" : status === "nascosta" ? "Nascosta" : "Bozza";
@@ -50,7 +48,13 @@ export function CampionatiPage() {
   const isAdmin = appUser?.role === "admin" || appUser?.role === "superadmin";
 
   const { data: types } = useCollection<ChampionshipType>("championshipTypes");
-  const { data: editions } = useCollection<ChampionshipEdition>("championshipEditions");
+  // Come in Home: il pubblico non deve interrogare edizioni bozza/nascoste, non solo
+  // "non vederle" — altrimenti la query verrebbe comunque rifiutata dalle regole Firestore.
+  const { data: editions } = useCollection<ChampionshipEdition>(
+    "championshipEditions",
+    isAdmin ? [] : [where("status", "in", ["attiva", "conclusa"])],
+    [isAdmin]
+  );
 
   const [showNewEdition, setShowNewEdition] = useState(false);
   const [showTypeSettings, setShowTypeSettings] = useState(false);
@@ -99,18 +103,18 @@ export function CampionatiPage() {
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-bold">Campionati</h2>
+        <h2 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE]">Campionati</h2>
         {isAdmin && (
           <div className="flex items-center gap-3">
             <button
               onClick={() => setShowTeamSettings((v) => !v)}
-              className="flex items-center gap-1 text-xs text-[#7A7A75]"
+              className="flex items-center gap-1 text-xs text-[rgba(251,243,222,0.58)]"
             >
               <Settings size={14} /> Squadre
             </button>
             <button
               onClick={() => setShowTypeSettings((v) => !v)}
-              className="flex items-center gap-1 text-xs text-[#7A7A75]"
+              className="flex items-center gap-1 text-xs text-[rgba(251,243,222,0.58)]"
             >
               <Settings size={14} /> Tipologie
             </button>
@@ -119,13 +123,13 @@ export function CampionatiPage() {
       </div>
 
       {showTeamSettings && (
-        <div className="mb-4 bg-white border border-[#EAE7DD] rounded-xl p-3.5">
+        <div className="mb-4 bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5">
           <TeamManagement onDone={showToast} />
         </div>
       )}
 
       {showTypeSettings && (
-        <div className="mb-4 bg-white border border-[#EAE7DD] rounded-xl p-3.5">
+        <div className="mb-4 bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5">
           <ChampionshipTypeManagement onDone={showToast} />
         </div>
       )}
@@ -139,7 +143,7 @@ export function CampionatiPage() {
               key={t.id}
               onClick={() => selectType(t.id)}
               className={`whitespace-nowrap rounded-full px-3.5 py-2 text-[12.5px] font-semibold shrink-0 ${
-                isSel ? "bg-court text-white" : "bg-[#F1EFE8] text-[#3A3A36]"
+                isSel ? "bg-lime text-[#081208]" : "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.85)]"
               }`}
             >
               {t.name}
@@ -153,35 +157,35 @@ export function CampionatiPage() {
         {edition ? (
           <button
             onClick={() => setShowSeasonPicker((v) => !v)}
-            className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] font-semibold bg-white border border-[#E5E3DC]"
+            className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] font-semibold bg-[#0A0B08] border border-[rgba(251,243,222,0.18)]"
           >
             {edition.season}
             <ChevronDown size={13} />
           </button>
         ) : (
-          <span className="text-[12.5px] text-[#9A9A94]">Nessuna edizione ancora per questa tipologia.</span>
+          <span className="text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna edizione ancora per questa tipologia.</span>
         )}
         {isAdmin && (
           <button
             onClick={() => setShowNewEdition((v) => !v)}
-            className="rounded-full px-3 py-1.5 text-[12.5px] font-semibold shrink-0 border border-dashed border-[#B9B6AC] text-[#7A7A75] flex items-center gap-1"
+            className="rounded-full px-3 py-1.5 text-[12.5px] font-semibold shrink-0 border border-dashed border-[rgba(251,243,222,0.30)] text-[rgba(251,243,222,0.58)] flex items-center gap-1"
           >
             <Plus size={13} /> Nuova edizione
           </button>
         )}
 
         {showSeasonPicker && sortedEditionsOfType.length > 0 && (
-          <div className="absolute top-9 left-0 z-10 bg-white border border-[#EAE7DD] rounded-xl shadow-md overflow-hidden min-w-[180px]">
+          <div className="absolute top-9 left-0 z-10 bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl shadow-md overflow-hidden min-w-[180px]">
             {sortedEditionsOfType.map((e) => (
               <button
                 key={e.id}
                 onClick={() => selectEdition(e)}
-                className={`w-full text-left px-3.5 py-2.5 text-[13px] flex items-center justify-between gap-2 border-b border-[#F1EFE8] last:border-b-0 ${
-                  e.id === edition?.id ? "bg-[#EAF3EF] font-semibold" : ""
+                className={`w-full text-left px-3.5 py-2.5 text-[13px] flex items-center justify-between gap-2 border-b border-[rgba(251,243,222,0.08)] last:border-b-0 ${
+                  e.id === edition?.id ? "bg-[rgba(187,255,94,0.14)] font-semibold" : ""
                 }`}
               >
                 <span>{e.season}</span>
-                <span className="text-[10px] text-[#9A9A94]">{statusLabel(e.status)}</span>
+                <span className="text-[10px] text-[rgba(251,243,222,0.35)]">{statusLabel(e.status)}</span>
               </button>
             ))}
           </div>
@@ -219,9 +223,9 @@ export function CampionatiPage() {
             />
           ) : (
             <div className="flex items-center justify-between">
-              <p className="text-[13px] text-[#7A7A75]">
+              <p className="text-[13px] text-[rgba(251,243,222,0.58)]">
                 {!activeType ? (
-                  <span className="text-[#993C1D] font-semibold">
+                  <span className="text-[#FF9B6B] font-semibold">
                     Tipologia non trovata — modifica l'edizione per collegarla a una tipologia valida
                   </span>
                 ) : (
@@ -229,7 +233,7 @@ export function CampionatiPage() {
                 )}
               </p>
               {isAdmin && (
-                <button onClick={() => setEditingEdition(true)} className="flex items-center gap-1 text-xs text-court font-semibold">
+                <button onClick={() => setEditingEdition(true)} className="flex items-center gap-1 text-xs text-[#BBFF5E] font-semibold">
                   <Pencil size={13} /> Modifica edizione
                 </button>
               )}
@@ -247,7 +251,7 @@ export function CampionatiPage() {
       )}
 
       {toast && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-[#1A1A18] text-white px-4 py-2.5 rounded-full text-[12.5px] max-w-[90%] text-center z-20">
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-[#0A0B08] text-[#FBF3DE] border border-[rgba(187,255,94,0.3)] px-4 py-2.5 rounded-full text-[12.5px] max-w-[90%] text-center z-20">
           {toast}
         </div>
       )}
@@ -293,15 +297,15 @@ function NewEditionForm({
   };
 
   return (
-    <div className="mb-4 bg-white border border-[#EAE7DD] rounded-xl p-3.5">
+    <div className="mb-4 bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Nuova edizione</p>
-        <button onClick={onCancel}><X size={16} className="text-[#9A9A94]" /></button>
+        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
       </div>
       <select
         value={typeId}
         onChange={(e) => setTypeId(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2"
       >
         {types.map((t) => (
           <option key={t.id} value={t.id}>{t.name}</option>
@@ -311,12 +315,12 @@ function NewEditionForm({
         placeholder="Stagione (es. 2025/2026 oppure 2026)"
         value={season}
         onChange={(e) => setSeason(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
       />
       <select
         value={status}
         onChange={(e) => setStatus(e.target.value as EditionStatus)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2"
       >
         <option value="bozza">Bozza</option>
         <option value="attiva">Attiva</option>
@@ -326,7 +330,7 @@ function NewEditionForm({
       <button
         onClick={create}
         disabled={saving || !season.trim()}
-        className="w-full bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+        className="w-full bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
       >
         {saving ? "Creazione in corso..." : "Crea edizione"}
       </button>
@@ -378,11 +382,11 @@ function EditEditionForm({
   };
 
   return (
-    <div className="bg-white border border-[#EAE7DD] rounded-xl p-3.5">
+    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5">
       <select
         value={typeId}
         onChange={(e) => setTypeId(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2"
       >
         {types.map((t) => (
           <option key={t.id} value={t.id}>{t.name}</option>
@@ -391,12 +395,12 @@ function EditEditionForm({
       <input
         value={season}
         onChange={(e) => setSeason(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-sm mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm mb-2"
       />
       <select
         value={status}
         onChange={(e) => setStatus(e.target.value as EditionStatus)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2"
       >
         <option value="bozza">Bozza</option>
         <option value="attiva">Attiva</option>
@@ -404,14 +408,14 @@ function EditEditionForm({
         <option value="nascosta">Nascosta</option>
       </select>
       <div className="flex gap-2">
-        <button onClick={save} disabled={saving} className="flex-1 bg-court text-white rounded-lg py-2 text-sm font-bold disabled:opacity-50">
+        <button onClick={save} disabled={saving} className="flex-1 bg-lime text-[#081208] rounded-lg py-2 text-sm font-bold disabled:opacity-50">
           Salva
         </button>
-        <button onClick={onCancel} className="flex-1 border border-[#E5E3DC] rounded-lg py-2 text-sm font-semibold">
+        <button onClick={onCancel} className="flex-1 border border-[rgba(251,243,222,0.18)] rounded-lg py-2 text-sm font-semibold">
           Annulla
         </button>
       </div>
-      <button onClick={remove} className="w-full text-red-600 text-xs font-semibold mt-2">
+      <button onClick={remove} className="w-full text-[#FF6B6B] text-xs font-semibold mt-2">
         Elimina questa edizione
       </button>
     </div>
@@ -429,7 +433,11 @@ function TeamStandings({
   isAdmin: boolean;
   showToast: (msg: string) => void;
 }) {
-  const { data: editionTeams } = useCollection<EditionTeam>("editionTeams", [where("editionId", "==", editionId)]);
+  const { data: editionTeams } = useCollection<EditionTeam>(
+    "editionTeams",
+    [where("editionId", "==", editionId)],
+    [editionId]
+  );
   const { data: teams } = useCollection<Team>("teams");
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -449,8 +457,8 @@ function TeamStandings({
 
   return (
     <div>
-      <div className="bg-white border border-[#EAE7DD] rounded-xl overflow-hidden">
-        <div className="flex items-center px-3.5 py-2.5 text-xs font-bold text-[#7A7A75] border-b border-[#F1EFE8]">
+      <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl overflow-hidden">
+        <div className="flex items-center px-3.5 py-2.5 text-xs font-bold text-[rgba(251,243,222,0.58)] border-b border-[rgba(251,243,222,0.08)]">
           <span className="w-6">#</span>
           <span className="flex-1">Squadra</span>
           <span className="w-10 text-center">PG</span>
@@ -467,26 +475,26 @@ function TeamStandings({
               onDone={showToast}
             />
           ) : (
-            <div key={r.id} className="flex items-center px-3.5 py-2.5 text-[13px] border-b border-[#F1EFE8] last:border-b-0">
-              <span className="w-6 text-[#9A9A94]">{i + 1}</span>
+            <div key={r.id} className="flex items-center px-3.5 py-2.5 text-[13px] border-b border-[rgba(251,243,222,0.08)] last:border-b-0">
+              <span className="w-6 text-[rgba(251,243,222,0.35)]">{i + 1}</span>
               <span className="flex-1 font-semibold">{r.team?.name}</span>
               <span className="w-10 text-center">{r.played}</span>
               <span className="w-14 text-center font-bold">
                 {r.status === "normale" ? r.points : (
-                  <span className="text-[11px] font-bold text-[#993C1D]">
+                  <span className="text-[11px] font-bold text-[#FF9B6B]">
                     {r.status === "ritirata" ? "Ritirata" : "Squalificata"}
                   </span>
                 )}
               </span>
               {isAdmin && (
-                <button onClick={() => setEditingId(r.id)} className="w-16 text-court text-xs font-semibold text-right">
+                <button onClick={() => setEditingId(r.id)} className="w-16 text-[#BBFF5E] text-xs font-semibold text-right">
                   Modifica
                 </button>
               )}
             </div>
           )
         )}
-        {rows.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[#9A9A94]">Nessuna squadra iscritta.</p>}
+        {rows.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna squadra iscritta.</p>}
       </div>
 
       {isAdmin && (
@@ -504,7 +512,7 @@ function TeamStandings({
           ) : (
             <button
               onClick={() => setShowAdd(true)}
-              className="flex items-center gap-1.5 text-[13px] font-semibold text-court"
+              className="flex items-center gap-1.5 text-[13px] font-semibold text-[#BBFF5E]"
             >
               <Plus size={15} /> Aggiungi squadra a questa classifica
             </button>
@@ -522,8 +530,8 @@ function TeamStandings({
               onCancel={() => setShowImport(false)}
             />
           ) : (
-            <button onClick={() => setShowImport(true)} className="flex items-center gap-1.5 text-[13px] font-semibold text-court">
-              <Upload size={15} /> Importa da Excel/Word (incolla i dati)
+            <button onClick={() => setShowImport(true)} className="flex items-center gap-1.5 text-[13px] font-semibold text-[#BBFF5E]">
+              <Upload size={15} /> Incolla classifica da Excel o Word
             </button>
           )}
         </div>
@@ -632,12 +640,12 @@ function ImportTeamStandings({
   };
 
   return (
-    <div className="bg-white border border-[#EAE7DD] rounded-xl p-3.5 w-full">
+    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5 w-full">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Importa classifica (incolla da Excel/Word)</p>
-        <button onClick={onCancel}><X size={16} className="text-[#9A9A94]" /></button>
+        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
       </div>
-      <p className="text-[12px] text-[#9A9A94] mb-2">
+      <p className="text-[12px] text-[rgba(251,243,222,0.35)] mb-2">
         Copia le righe da Excel o da una tabella Word e incollale qui sotto. Ogni riga deve contenere il nome
         della squadra seguito da <strong>Punti</strong> e <strong>Partite giocate</strong> (in quest'ordine). Le
         squadre non ancora esistenti vengono create automaticamente (con rosa vuota da completare dopo).
@@ -649,20 +657,20 @@ function ImportTeamStandings({
           setPreview(null);
         }}
         placeholder={"Los Locos Padel\t9\t4\nSmash Taranto\t7\t4\n..."}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2 min-h-[120px] font-mono"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2 min-h-[120px] font-mono"
       />
 
       {!preview ? (
         <button
           onClick={analyze}
           disabled={!text.trim()}
-          className="w-full bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+          className="w-full bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
         >
           Analizza
         </button>
       ) : (
         <div>
-          <div className="bg-[#FAF8F3] rounded-lg p-2.5 mb-2 text-[12.5px]">
+          <div className="bg-[#123008] rounded-lg p-2.5 mb-2 text-[12.5px]">
             <p className="mb-1">
               <strong>{preview.matched.length}</strong> squadre già iscritte verranno aggiornate.
             </p>
@@ -679,26 +687,26 @@ function ImportTeamStandings({
               </p>
             )}
             {preview.missing.length > 0 && (
-              <p className="text-[#9A9A94]">
+              <p className="text-[rgba(251,243,222,0.35)]">
                 Non presenti nel testo (manterranno i dati attuali):{" "}
                 {preview.missing.map((m) => m.team?.name).join(", ")}
               </p>
             )}
             {preview.skipped.length > 0 && (
-              <p className="text-[#9A9A94] mt-1">{preview.skipped.length} riga/righe non riconosciute e ignorate.</p>
+              <p className="text-[rgba(251,243,222,0.35)] mt-1">{preview.skipped.length} riga/righe non riconosciute e ignorate.</p>
             )}
           </div>
           <div className="flex gap-2">
             <button
               onClick={confirm}
               disabled={saving}
-              className="flex-1 bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+              className="flex-1 bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
             >
               {saving ? "Importazione in corso..." : "Conferma importazione"}
             </button>
             <button
               onClick={() => setPreview(null)}
-              className="flex-1 border border-[#E5E3DC] rounded-lg py-2.5 text-sm font-semibold"
+              className="flex-1 border border-[rgba(251,243,222,0.18)] rounded-lg py-2.5 text-sm font-semibold"
             >
               Modifica testo
             </button>
@@ -766,33 +774,33 @@ function AddTeamToEdition({
   };
 
   return (
-    <div className="bg-white border border-[#EAE7DD] rounded-xl p-3.5">
+    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Aggiungi squadra</p>
-        <button onClick={onCancel}><X size={16} className="text-[#9A9A94]" /></button>
+        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
       </div>
       <div className="flex gap-2 mb-3">
         <button
           onClick={() => setMode("existing")}
-          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${mode === "existing" ? "bg-court text-white" : "bg-[#F1EFE8] text-[#3A3A36]"}`}
+          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${mode === "existing" ? "bg-lime text-[#081208]" : "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.85)]"}`}
         >
           Squadra esistente
         </button>
         <button
           onClick={() => setMode("new")}
-          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${mode === "new" ? "bg-court text-white" : "bg-[#F1EFE8] text-[#3A3A36]"}`}
+          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${mode === "new" ? "bg-lime text-[#081208]" : "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.85)]"}`}
         >
           Nuova squadra
         </button>
       </div>
       {mode === "existing" ? (
         availableTeams.length === 0 ? (
-          <p className="text-[12.5px] text-[#9A9A94] mb-2">Tutte le squadre esistenti sono già iscritte. Creane una nuova.</p>
+          <p className="text-[12.5px] text-[rgba(251,243,222,0.35)] mb-2">Tutte le squadre esistenti sono già iscritte. Creane una nuova.</p>
         ) : (
           <select
             value={teamId}
             onChange={(e) => setTeamId(e.target.value)}
-            className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white mb-2"
+            className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2"
           >
             {availableTeams.map((t) => (
               <option key={t.id} value={t.id}>{t.name}</option>
@@ -805,20 +813,20 @@ function AddTeamToEdition({
             placeholder="Nome squadra"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2"
+            className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
           />
           <input
             placeholder="Giocatori separati da virgola (min 2, max 6)"
             value={rosterText}
             onChange={(e) => setRosterText(e.target.value)}
-            className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2"
+            className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
           />
         </>
       )}
       <button
         onClick={submit}
         disabled={saving}
-        className="w-full bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+        className="w-full bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
       >
         {saving ? "In corso..." : "Aggiungi"}
       </button>
@@ -875,40 +883,40 @@ function EditionTeamEditRow({
   };
 
   return (
-    <div className="px-3.5 py-3 border-b border-[#F1EFE8] last:border-b-0 bg-[#FAF8F3]">
+    <div className="px-3.5 py-3 border-b border-[rgba(251,243,222,0.08)] last:border-b-0 bg-[#123008]">
       <p className="text-[12.5px] font-semibold mb-2">{label}</p>
       <div className="flex gap-2 mb-2">
         <div className="flex-1">
-          <p className="text-[11px] text-[#9A9A94] mb-1">PG</p>
-          <input type="number" value={played} onChange={(e) => setPlayed(e.target.value)} className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-sm" />
+          <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">PG</p>
+          <input type="number" value={played} onChange={(e) => setPlayed(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
         </div>
         <div className="flex-1">
-          <p className="text-[11px] text-[#9A9A94] mb-1">Punti</p>
-          <input type="number" value={points} onChange={(e) => setPoints(e.target.value)} className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-sm" />
+          <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Punti</p>
+          <input type="number" value={points} onChange={(e) => setPoints(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
         </div>
         <div className="w-16">
-          <p className="text-[11px] text-[#9A9A94] mb-1">Ordine</p>
-          <input type="number" value={order} onChange={(e) => setOrder(e.target.value)} className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-sm" />
+          <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Ordine</p>
+          <input type="number" value={order} onChange={(e) => setOrder(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
         </div>
       </div>
       <select
         value={status}
         onChange={(e) => setStatus(e.target.value as ParticipationStatus)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2"
       >
         <option value="normale">Normale</option>
         <option value="ritirata">Ritirata</option>
         <option value="squalificata">Squalificata</option>
       </select>
       <div className="flex gap-2 mb-2">
-        <button onClick={save} disabled={saving} className="flex-1 bg-court text-white rounded-lg py-2 text-sm font-bold disabled:opacity-50">
+        <button onClick={save} disabled={saving} className="flex-1 bg-lime text-[#081208] rounded-lg py-2 text-sm font-bold disabled:opacity-50">
           Salva
         </button>
-        <button onClick={onCancel} className="flex-1 border border-[#E5E3DC] rounded-lg py-2 text-sm font-semibold">
+        <button onClick={onCancel} className="flex-1 border border-[rgba(251,243,222,0.18)] rounded-lg py-2 text-sm font-semibold">
           Annulla
         </button>
       </div>
-      <button onClick={remove} className="w-full flex items-center justify-center gap-1 text-red-600 text-xs font-semibold">
+      <button onClick={remove} className="w-full flex items-center justify-center gap-1 text-[#FF6B6B] text-xs font-semibold">
         <Trash2 size={13} /> Rimuovi dalla classifica
       </button>
     </div>
@@ -926,9 +934,11 @@ function FemaleStandings({
   isAdmin: boolean;
   showToast: (msg: string) => void;
 }) {
-  const { data: participants } = useCollection<FemaleParticipant>("femaleParticipants", [
-    where("editionId", "==", editionId),
-  ]);
+  const { data: participants } = useCollection<FemaleParticipant>(
+    "femaleParticipants",
+    [where("editionId", "==", editionId)],
+    [editionId]
+  );
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -942,8 +952,8 @@ function FemaleStandings({
 
   return (
     <div>
-      <div className="bg-white border border-[#EAE7DD] rounded-xl overflow-hidden">
-        <div className="flex items-center px-3.5 py-2.5 text-xs font-bold text-[#7A7A75] border-b border-[#F1EFE8]">
+      <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl overflow-hidden">
+        <div className="flex items-center px-3.5 py-2.5 text-xs font-bold text-[rgba(251,243,222,0.58)] border-b border-[rgba(251,243,222,0.08)]">
           <span className="w-6">#</span>
           <span className="flex-1">Giocatrice</span>
           <span className="w-14 text-center">Tappe</span>
@@ -954,24 +964,24 @@ function FemaleStandings({
           editingId === r.id ? (
             <FemaleEditRow key={r.id} participant={r} onCancel={() => setEditingId(null)} onDone={showToast} />
           ) : (
-            <div key={r.id} className="flex items-center px-3.5 py-2.5 text-[13px] border-b border-[#F1EFE8] last:border-b-0">
-              <span className="w-6 text-[#9A9A94]">{i + 1}</span>
+            <div key={r.id} className="flex items-center px-3.5 py-2.5 text-[13px] border-b border-[rgba(251,243,222,0.08)] last:border-b-0">
+              <span className="w-6 text-[rgba(251,243,222,0.35)]">{i + 1}</span>
               <span className="flex-1 font-semibold">{r.name}</span>
               <span className="w-14 text-center">{r.stages}</span>
               <span className="w-12 text-center font-bold">
                 {r.status === "normale" ? r.points : (
-                  <span className="text-[11px] font-bold text-[#993C1D]">{r.status === "ritirata" ? "Rit." : "Sq."}</span>
+                  <span className="text-[11px] font-bold text-[#FF9B6B]">{r.status === "ritirata" ? "Rit." : "Sq."}</span>
                 )}
               </span>
               {isAdmin && (
-                <button onClick={() => setEditingId(r.id)} className="w-16 text-court text-xs font-semibold text-right">
+                <button onClick={() => setEditingId(r.id)} className="w-16 text-[#BBFF5E] text-xs font-semibold text-right">
                   Modifica
                 </button>
               )}
             </div>
           )
         )}
-        {rows.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[#9A9A94]">Nessuna giocatrice ancora.</p>}
+        {rows.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna giocatrice ancora.</p>}
       </div>
 
       {isAdmin && (
@@ -986,7 +996,7 @@ function FemaleStandings({
               onCancel={() => setShowAdd(false)}
             />
           ) : (
-            <button onClick={() => setShowAdd(true)} className="flex items-center gap-1.5 text-[13px] font-semibold text-court">
+            <button onClick={() => setShowAdd(true)} className="flex items-center gap-1.5 text-[13px] font-semibold text-[#BBFF5E]">
               <Plus size={15} /> Aggiungi giocatrice
             </button>
           )}
@@ -1002,8 +1012,8 @@ function FemaleStandings({
               onCancel={() => setShowImport(false)}
             />
           ) : (
-            <button onClick={() => setShowImport(true)} className="flex items-center gap-1.5 text-[13px] font-semibold text-court">
-              <Upload size={15} /> Importa da Excel/Word (incolla i dati)
+            <button onClick={() => setShowImport(true)} className="flex items-center gap-1.5 text-[13px] font-semibold text-[#BBFF5E]">
+              <Upload size={15} /> Incolla classifica da Excel o Word
             </button>
           )}
         </div>
@@ -1045,18 +1055,18 @@ function AddFemaleParticipant({
   };
 
   return (
-    <div className="bg-white border border-[#EAE7DD] rounded-xl p-3.5">
+    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Aggiungi giocatrice</p>
-        <button onClick={onCancel}><X size={16} className="text-[#9A9A94]" /></button>
+        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
       </div>
       <input
         placeholder="Nome giocatrice"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
       />
-      <button onClick={submit} disabled={saving} className="w-full bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50">
+      <button onClick={submit} disabled={saving} className="w-full bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50">
         {saving ? "In corso..." : "Aggiungi"}
       </button>
     </div>
@@ -1133,12 +1143,12 @@ function ImportFemaleParticipants({
   };
 
   return (
-    <div className="bg-white border border-[#EAE7DD] rounded-xl p-3.5 w-full">
+    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5 w-full">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Importa classifica (incolla da Excel/Word)</p>
-        <button onClick={onCancel}><X size={16} className="text-[#9A9A94]" /></button>
+        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
       </div>
-      <p className="text-[12px] text-[#9A9A94] mb-2">
+      <p className="text-[12px] text-[rgba(251,243,222,0.35)] mb-2">
         Copia le righe da Excel o da una tabella Word e incollale qui sotto. Ogni riga deve contenere il nome
         della giocatrice seguito da <strong>Punti</strong> e <strong>Tappe disputate</strong> (in quest'ordine).
         Il numero di posizione iniziale, se presente, viene ignorato automaticamente.
@@ -1150,44 +1160,44 @@ function ImportFemaleParticipants({
           setPreview(null);
         }}
         placeholder={"Gabriella Schino\t19\t4\nFrancesca Boccardi\t16\t4\n..."}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2 min-h-[120px] font-mono"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2 min-h-[120px] font-mono"
       />
 
       {!preview ? (
         <button
           onClick={analyze}
           disabled={!text.trim()}
-          className="w-full bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+          className="w-full bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
         >
           Analizza
         </button>
       ) : (
         <div>
-          <div className="bg-[#FAF8F3] rounded-lg p-2.5 mb-2 text-[12.5px]">
+          <div className="bg-[#123008] rounded-lg p-2.5 mb-2 text-[12.5px]">
             <p className="mb-1">
               <strong>{preview.matched.length}</strong> giocatrici verranno aggiornate,{" "}
               <strong>{preview.fresh.length}</strong> verranno create come nuove.
             </p>
             {preview.missing.length > 0 && (
-              <p className="text-[#9A9A94]">
+              <p className="text-[rgba(251,243,222,0.35)]">
                 Non presenti nel testo (manterranno i dati attuali): {preview.missing.map((m) => m.name).join(", ")}
               </p>
             )}
             {preview.skipped.length > 0 && (
-              <p className="text-[#9A9A94] mt-1">{preview.skipped.length} riga/righe non riconosciute e ignorate.</p>
+              <p className="text-[rgba(251,243,222,0.35)] mt-1">{preview.skipped.length} riga/righe non riconosciute e ignorate.</p>
             )}
           </div>
           <div className="flex gap-2">
             <button
               onClick={confirm}
               disabled={saving}
-              className="flex-1 bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+              className="flex-1 bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
             >
               {saving ? "Importazione in corso..." : "Conferma importazione"}
             </button>
             <button
               onClick={() => setPreview(null)}
-              className="flex-1 border border-[#E5E3DC] rounded-lg py-2.5 text-sm font-semibold"
+              className="flex-1 border border-[rgba(251,243,222,0.18)] rounded-lg py-2.5 text-sm font-semibold"
             >
               Modifica testo
             </button>
@@ -1245,40 +1255,40 @@ function FemaleEditRow({
   };
 
   return (
-    <div className="px-3.5 py-3 border-b border-[#F1EFE8] last:border-b-0 bg-[#FAF8F3]">
+    <div className="px-3.5 py-3 border-b border-[rgba(251,243,222,0.08)] last:border-b-0 bg-[#123008]">
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-sm mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm mb-2"
       />
       <div className="flex gap-2 mb-2">
         <div className="flex-1">
-          <p className="text-[11px] text-[#9A9A94] mb-1">Tappe</p>
-          <input type="number" value={stages} onChange={(e) => setStages(e.target.value)} className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-sm" />
+          <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Tappe</p>
+          <input type="number" value={stages} onChange={(e) => setStages(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
         </div>
         <div className="flex-1">
-          <p className="text-[11px] text-[#9A9A94] mb-1">Punti</p>
-          <input type="number" value={points} onChange={(e) => setPoints(e.target.value)} className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-sm" />
+          <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Punti</p>
+          <input type="number" value={points} onChange={(e) => setPoints(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
         </div>
       </div>
       <select
         value={status}
         onChange={(e) => setStatus(e.target.value as ParticipationStatus)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2"
       >
         <option value="normale">Normale</option>
         <option value="ritirata">Ritirata</option>
         <option value="squalificata">Squalificata</option>
       </select>
       <div className="flex gap-2 mb-2">
-        <button onClick={save} disabled={saving} className="flex-1 bg-court text-white rounded-lg py-2 text-sm font-bold disabled:opacity-50">
+        <button onClick={save} disabled={saving} className="flex-1 bg-lime text-[#081208] rounded-lg py-2 text-sm font-bold disabled:opacity-50">
           Salva
         </button>
-        <button onClick={onCancel} className="flex-1 border border-[#E5E3DC] rounded-lg py-2 text-sm font-semibold">
+        <button onClick={onCancel} className="flex-1 border border-[rgba(251,243,222,0.18)] rounded-lg py-2 text-sm font-semibold">
           Annulla
         </button>
       </div>
-      <button onClick={remove} className="w-full flex items-center justify-center gap-1 text-red-600 text-xs font-semibold">
+      <button onClick={remove} className="w-full flex items-center justify-center gap-1 text-[#FF6B6B] text-xs font-semibold">
         <Trash2 size={13} /> Elimina giocatrice
       </button>
     </div>

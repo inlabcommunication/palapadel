@@ -3,13 +3,11 @@ import { addDoc, collection, deleteDoc, doc, updateDoc } from "firebase/firestor
 import { useCollection } from "../hooks/useCollection";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase";
+import { confirmDelete } from "../lib/confirmDelete";
 import type { ChampionshipType, HistoricalWin, Team } from "../types";
 import { BADGE_COLORS } from "../types";
 import { Plus, X, Pencil, Trash2 } from "lucide-react";
 
-function confirmDelete(label: string) {
-  return window.confirm(`Eliminare definitivamente "${label}"? L'operazione non si può annullare.`);
-}
 
 export function AlboPage() {
   const { appUser } = useAuth();
@@ -58,7 +56,7 @@ export function AlboPage() {
 
   return (
     <div className="p-4">
-      <h2 className="text-sm font-bold mb-3">Albo d'oro</h2>
+      <h2 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE] mb-3">Albo d'oro</h2>
 
       <div className="flex gap-2 overflow-x-auto pb-2 mb-4">
         {types.map((t) => (
@@ -66,7 +64,7 @@ export function AlboPage() {
             key={t.id}
             onClick={() => setSelectedType(t.id)}
             className={`whitespace-nowrap rounded-full px-3.5 py-2 text-[12.5px] font-semibold shrink-0 ${
-              activeType === t.id ? "bg-court text-white" : "bg-[#F1EFE8] text-[#3A3A36]"
+              activeType === t.id ? "bg-lime text-[#081208]" : "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.85)]"
             }`}
           >
             {t.name}
@@ -74,12 +72,12 @@ export function AlboPage() {
         ))}
       </div>
 
-      <div className="bg-white border border-[#EAE7DD] rounded-xl overflow-hidden mb-3">
+      <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl overflow-hidden mb-3">
         {rows.length === 0 && (
-          <p className="px-3.5 py-3 text-[12.5px] text-[#9A9A94]">Nessun titolo registrato per questa categoria.</p>
+          <p className="px-3.5 py-3 text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessun titolo registrato per questa categoria.</p>
         )}
         {rows.map((r) => (
-          <div key={r.label} className="px-3.5 py-3 border-b border-[#F1EFE8] last:border-b-0">
+          <div key={r.label} className="px-3.5 py-3 border-b border-[rgba(251,243,222,0.08)] last:border-b-0">
             <div className="flex items-center justify-between gap-2 mb-1">
               <p className="font-bold text-sm">{r.label}</p>
               <span
@@ -105,17 +103,17 @@ export function AlboPage() {
                     }}
                   />
                 ) : (
-                  <div key={w.id} className="flex items-center justify-between text-[12.5px] text-[#7A7A75] gap-2">
+                  <div key={w.id} className="flex items-center justify-between text-[12.5px] text-[rgba(251,243,222,0.58)] gap-2">
                     <span>
                       {w.season}
-                      {w.note && <span className="text-[#9A9A94]"> · {w.note}</span>}
+                      {w.note && <span className="text-[rgba(251,243,222,0.35)]"> · {w.note}</span>}
                     </span>
                     {isAdmin && (
                       <div className="flex items-center gap-2 shrink-0">
-                        <button onClick={() => setEditingId(w.id)} className="text-court font-semibold">
+                        <button onClick={() => setEditingId(w.id)} className="text-[#BBFF5E] font-semibold">
                           <Pencil size={12} />
                         </button>
-                        <button onClick={() => remove(w, r.label)} className="text-red-600 font-semibold">
+                        <button onClick={() => remove(w, r.label)} className="text-[#FF6B6B] font-semibold">
                           <Trash2 size={12} />
                         </button>
                       </div>
@@ -141,20 +139,20 @@ export function AlboPage() {
               onCancel={() => setShowAdd(false)}
             />
           ) : (
-            <button onClick={() => setShowAdd(true)} className="flex items-center gap-1.5 text-[13px] font-semibold text-court">
+            <button onClick={() => setShowAdd(true)} className="flex items-center gap-1.5 text-[13px] font-semibold text-[#BBFF5E]">
               <Plus size={15} /> Aggiungi vittoria passata
             </button>
           )}
         </div>
       )}
 
-      <p className="text-[12px] text-[#9A9A94] mt-4">
+      <p className="text-[12px] text-[rgba(251,243,222,0.35)] mt-4">
         Qui aggiungi le vittorie precedenti alla creazione dell'app. Quando in futuro un campionato gestito
         nell'app verrà concluso (Fase 4), l'Albo d'oro si aggiornerà automaticamente da solo.
       </p>
 
       {toast && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-[#1A1A18] text-white px-4 py-2.5 rounded-full text-[12.5px] max-w-[90%] text-center z-20">
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-[#0A0B08] text-[#FBF3DE] border border-[rgba(187,255,94,0.3)] px-4 py-2.5 rounded-full text-[12.5px] max-w-[90%] text-center z-20">
           {toast}
         </div>
       )}
@@ -204,22 +202,22 @@ function AddWinForm({
   };
 
   return (
-    <div className="bg-white border border-[#EAE7DD] rounded-xl p-3.5">
+    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Aggiungi vittoria — {type.name}</p>
-        <button onClick={onCancel}><X size={16} className="text-[#9A9A94]" /></button>
+        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
       </div>
 
       {type.hasTeams ? (
         teams.length === 0 ? (
-          <p className="text-[12.5px] text-[#9A9A94] mb-2">
+          <p className="text-[12.5px] text-[rgba(251,243,222,0.35)] mb-2">
             Nessuna squadra esistente. Creane una prima nella pagina Campionati.
           </p>
         ) : (
           <select
             value={teamId}
             onChange={(e) => setTeamId(e.target.value)}
-            className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white mb-2"
+            className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2"
           >
             {teams.map((t) => (
               <option key={t.id} value={t.id}>{t.name}</option>
@@ -231,7 +229,7 @@ function AddWinForm({
           placeholder="Nome giocatrice"
           value={participantName}
           onChange={(e) => setParticipantName(e.target.value)}
-          className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2"
+          className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
         />
       )}
 
@@ -239,18 +237,18 @@ function AddWinForm({
         placeholder="Stagione o anno (es. 2019/2020 oppure 2019)"
         value={season}
         onChange={(e) => setSeason(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
       />
       <input
         placeholder="Nota facoltativa"
         value={note}
         onChange={(e) => setNote(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
       />
       <button
         onClick={submit}
         disabled={saving || !season.trim()}
-        className="w-full bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+        className="w-full bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
       >
         {saving ? "In corso..." : "Aggiungi"}
       </button>
@@ -290,31 +288,31 @@ function EditWinForm({
   };
 
   return (
-    <div className="bg-[#FAF8F3] border border-[#E5E3DC] rounded-lg p-2.5 my-1">
+    <div className="bg-[#123008] border border-[rgba(251,243,222,0.18)] rounded-lg p-2.5 my-1">
       {win.participantName !== undefined && (
         <input
           value={participantName}
           onChange={(e) => setParticipantName(e.target.value)}
-          className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-sm mb-2"
+          className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm mb-2"
           placeholder="Nome giocatrice"
         />
       )}
       <input
         value={season}
         onChange={(e) => setSeason(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-sm mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm mb-2"
       />
       <input
         value={note}
         onChange={(e) => setNote(e.target.value)}
         placeholder="Nota facoltativa"
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-sm mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm mb-2"
       />
       <div className="flex gap-2">
-        <button onClick={save} disabled={saving} className="flex-1 bg-court text-white rounded-lg py-1.5 text-xs font-bold disabled:opacity-50">
+        <button onClick={save} disabled={saving} className="flex-1 bg-lime text-[#081208] rounded-lg py-1.5 text-xs font-bold disabled:opacity-50">
           Salva
         </button>
-        <button onClick={onCancel} className="flex-1 border border-[#E5E3DC] rounded-lg py-1.5 text-xs font-semibold">
+        <button onClick={onCancel} className="flex-1 border border-[rgba(251,243,222,0.18)] rounded-lg py-1.5 text-xs font-semibold">
           Annulla
         </button>
       </div>

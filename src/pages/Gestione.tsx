@@ -11,7 +11,7 @@ import { slugifyUsername, usernameToEmail } from "../lib/username";
 
 export function GestionePage() {
   const { appUser } = useAuth();
-  if (!appUser) return <div className="p-4 text-sm text-[#7A7A75]">Devi accedere per vedere questa pagina.</div>;
+  if (!appUser) return <div className="p-4 text-sm text-[rgba(251,243,222,0.58)]">Devi accedere per vedere questa pagina.</div>;
 
   if (appUser.role === "gestore") return <GestoreView />;
   return <AdminView role={appUser.role} />;
@@ -25,18 +25,18 @@ function GestoreView() {
 
   return (
     <div className="p-4">
-      <h2 className="text-sm font-bold mb-1">Campionati attivi</h2>
-      <p className="text-[12.5px] text-[#9A9A94] mb-4">
+      <h2 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE] mb-1">Campionati attivi</h2>
+      <p className="text-[12.5px] text-[rgba(251,243,222,0.35)] mb-4">
         Inserimento risultati per giornata arriva in Fase 3.
       </p>
       {editions.map((e) => {
         const t = types.find((x) => x.id === e.typeId);
         return (
-          <div key={e.id} className="bg-white border border-[#EAE7DD] rounded-xl px-3.5 py-3 mb-2">
+          <div key={e.id} className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl px-3.5 py-3 mb-2">
             <p className="font-bold">
               {t?.name} {e.season}
             </p>
-            <p className="text-xs text-[#9A9A94] mt-1">Aggiorna giornata · Vedi classifica (Fase 3)</p>
+            <p className="text-xs text-[rgba(251,243,222,0.35)] mt-1">Aggiorna giornata · Vedi classifica (Fase 3)</p>
           </div>
         );
       })}
@@ -53,8 +53,8 @@ function AdminView({ role }: { role: Role }) {
 
   return (
     <div className="p-4">
-      <h2 className="text-sm font-bold mb-1">Gestione — {ROLE_LABELS[role]}</h2>
-      <p className="text-[12.5px] text-[#9A9A94] mb-4">
+      <h2 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE] mb-1">Gestione — {ROLE_LABELS[role]}</h2>
+      <p className="text-[12.5px] text-[rgba(251,243,222,0.35)] mb-4">
         La gestione di campionati, squadre e classifiche si trova nella pagina{" "}
         <span className="font-semibold">Campionati</span>. La pubblicazione delle novità si trova in{" "}
         <span className="font-semibold">Home</span>.
@@ -66,13 +66,13 @@ function AdminView({ role }: { role: Role }) {
           <ChangePasswordManagement onDone={showToast} />
         </>
       ) : (
-        <p className="text-[12.5px] text-[#9A9A94]">
+        <p className="text-[12.5px] text-[rgba(251,243,222,0.35)]">
           La creazione di account è riservata al Super Amministratore.
         </p>
       )}
 
       {toast && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-[#1A1A18] text-white px-4 py-2.5 rounded-full text-[12.5px] max-w-[90%] text-center">
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-[#0A0B08] text-[#FBF3DE] border border-[rgba(187,255,94,0.3)] px-4 py-2.5 rounded-full text-[12.5px] max-w-[90%] text-center">
           {toast}
         </div>
       )}
@@ -132,13 +132,13 @@ function UserManagement({ onDone }: { onDone: (msg: string) => void }) {
         placeholder="Nome utente"
         value={username}
         onChange={(e) => setUsername(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
       />
       <PasswordInput value={password} onChange={setPassword} placeholder="Password" className="mb-2" />
       <select
         value={role}
         onChange={(e) => setRole(e.target.value as Role)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2"
       >
         <option value="admin">Amministratore</option>
         <option value="gestore">Gestore risultati</option>
@@ -146,7 +146,7 @@ function UserManagement({ onDone }: { onDone: (msg: string) => void }) {
       <button
         onClick={createUser}
         disabled={creating}
-        className="w-full bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+        className="w-full bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
       >
         {creating ? "Creazione in corso..." : "Crea account"}
       </button>
@@ -201,7 +201,7 @@ function ChangePasswordManagement({ onDone }: { onDone: (msg: string) => void })
       <select
         value={targetUid}
         onChange={(e) => setTargetUid(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2"
       >
         <option value="" disabled>
           Scegli account...
@@ -216,7 +216,7 @@ function ChangePasswordManagement({ onDone }: { onDone: (msg: string) => void })
       <button
         onClick={submit}
         disabled={submitting}
-        className="w-full bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+        className="w-full bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
       >
         {submitting ? "Aggiornamento in corso..." : "Aggiorna password"}
       </button>
