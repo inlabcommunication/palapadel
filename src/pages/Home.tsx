@@ -1,12 +1,16 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { addDoc, collection } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { useCollection } from "../hooks/useCollection";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase";
-import type { ChampionshipEdition, ChampionshipType, HomeNews } from "../types";
+import type { ChampionshipEdition, ChampionshipType, ContentStatus, HomeNews } from "../types";
 import { BADGE_COLORS } from "../types";
-import { ChevronRight, AlertCircle, Plus, X } from "lucide-react";
+import { ChevronRight, AlertCircle, Plus, X, Pencil, Trash2 } from "lucide-react";
+
+function confirmDelete(label: string) {
+  return window.confirm(`Eliminare definitivamente "${label}"? L'operazione non si può annullare.`);
+}
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -19,6 +23,7 @@ export function HomePage() {
   const news = isAdmin ? allNews : allNews.filter((n) => n.status === "pubblicato");
 
   const [showNewsForm, setShowNewsForm] = useState(false);
+  const [editingNewsId, setEditingNewsId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const showToast = (msg: string) => {
     setToast(msg);
@@ -32,6 +37,17 @@ export function HomePage() {
     .slice(0, 4);
 
   const typeById = (id: string) => types.find((t) => t.id === id);
+
+  const removeNews = async (n: HomeNews) => {
+    if (!confirmDelete(n.title)) return;
+    try {
+      await deleteDoc(doc(db, "homeNews", n.id));
+      showToast("Novità eliminata.");
+    } catch (err) {
+      console.error(err);
+      showToast("Errore nell'eliminazione.");
+    }
+  };
 
   return (
     <div className="p-4 pb-6">
@@ -87,20 +103,50 @@ export function HomePage() {
 
       <div className="flex flex-col gap-2.5">
         {news.length === 0 && <EmptyHint text="Nessuna comunicazione pubblicata." />}
-        {news.map((n) => (
-          <div key={n.id} className="bg-white border border-[#EAE7DD] rounded-xl px-3.5 py-3">
-            <div className="flex items-center justify-between gap-2">
-              <p className="font-bold text-sm">{n.title}</p>
-              {isAdmin && n.status === "bozza" && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F1EFE8] text-[#7A7A75] shrink-0">
-                  bozza
-                </span>
-              )}
+        {news.map((n) =>
+          editingNewsId === n.id ? (
+            <EditNewsForm
+              key={n.id}
+              news={n}
+              onCancel={() => setEditingNewsId(null)}
+              onDone={(msg) => {
+                showToast(msg);
+                setEditingNewsId(null);
+              }}
+            />
+          ) : (
+            <div key={n.id} className="bg-white border border-[#EAE7DD] rounded-xl px-3.5 py-3">
+              <div className="flex items-start justify-between gap-2">
+                <p className="font-bold text-sm flex-1">{n.title}</p>
+                {isAdmin && n.status === "bozza" && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F1EFE8] text-[#7A7A75] shrink-0">
+                    bozza
+                  </span>
+                )}
+              </div>
+              <p className="text-[13px] text-[#5F5E5A] mt-1">{n.body}</p>
+              <div className="flex items-center justify-between mt-2">
+                <p className="text-[11px] text-[#9A9A94]">{formatDate(n.date)}</p>
+                {isAdmin && (
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setEditingNewsId(n.id)}
+                      className="flex items-center gap-1 text-court text-xs font-semibold"
+                    >
+                      <Pencil size={13} /> Modifica
+                    </button>
+                    <button
+                      onClick={() => removeNews(n)}
+                      className="flex items-center gap-1 text-red-600 text-xs font-semibold"
+                    >
+                      <Trash2 size={13} /> Elimina
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
-            <p className="text-[13px] text-[#5F5E5A] mt-1">{n.body}</p>
-            <p className="text-[11px] text-[#9A9A94] mt-2">{formatDate(n.date)}</p>
-          </div>
-        ))}
+          )
+        )}
       </div>
 
       {toast && (
@@ -115,7 +161,7 @@ export function HomePage() {
 function NewsForm({ onDone }: { onDone: (msg: string) => void }) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  const [status, setStatus] = useState<"pubblicato" | "bozza">("pubblicato");
+  const [status, setStatus] = useState<ContentStatus>("pubblicato");
   const [saving, setSaving] = useState(false);
 
   const submit = async () => {
@@ -172,6 +218,80 @@ function NewsForm({ onDone }: { onDone: (msg: string) => void }) {
       >
         {saving ? "In corso..." : "Salva"}
       </button>
+    </div>
+  );
+}
+
+function EditNewsForm({
+  news,
+  onCancel,
+  onDone,
+}: {
+  news: HomeNews;
+  onCancel: () => void;
+  onDone: (msg: string) => void;
+}) {
+  const [title, setTitle] = useState(news.title);
+  const [body, setBody] = useState(news.body);
+  const [status, setStatus] = useState<ContentStatus>(news.status);
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (!title.trim() || !body.trim()) return;
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, "homeNews", news.id), {
+        title: title.trim(),
+        body: body.trim(),
+        status,
+      });
+      onDone("Novità aggiornata.");
+    } catch (err) {
+      console.error(err);
+      onDone("Errore nel salvataggio.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-white border border-[#EAE7DD] rounded-xl p-3.5">
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2"
+      />
+      <textarea
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2 min-h-[70px]"
+      />
+      <div className="flex gap-2 mb-2">
+        <button
+          onClick={() => setStatus("pubblicato")}
+          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${status === "pubblicato" ? "bg-court text-white" : "bg-[#F1EFE8] text-[#3A3A36]"}`}
+        >
+          Pubblicato
+        </button>
+        <button
+          onClick={() => setStatus("bozza")}
+          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${status === "bozza" ? "bg-court text-white" : "bg-[#F1EFE8] text-[#3A3A36]"}`}
+        >
+          Bozza
+        </button>
+      </div>
+      <div className="flex gap-2">
+        <button
+          onClick={save}
+          disabled={saving || !title.trim() || !body.trim()}
+          className="flex-1 bg-court text-white rounded-lg py-2 text-sm font-bold disabled:opacity-50"
+        >
+          Salva
+        </button>
+        <button onClick={onCancel} className="flex-1 border border-[#E5E3DC] rounded-lg py-2 text-sm font-semibold">
+          Annulla
+        </button>
+      </div>
     </div>
   );
 }
