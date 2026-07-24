@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { addDoc, collection, deleteDoc, doc, setDoc, updateDoc } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, deleteField, doc, setDoc, updateDoc } from "firebase/firestore";
 import { useCollection } from "../hooks/useCollection";
 import { db } from "../firebase";
 import { confirmDelete } from "../lib/confirmDelete";
@@ -201,6 +201,7 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
   const { data: teams } = useCollection<Team>("teams");
   const [name, setName] = useState("");
   const [rosterText, setRosterText] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -217,9 +218,10 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
     }
     setCreating(true);
     try {
-      await addDoc(collection(db, "teams"), { name: name.trim(), roster });
+      await addDoc(collection(db, "teams"), { name: name.trim(), roster, ...(logoUrl.trim() ? { logoUrl: logoUrl.trim() } : {}) });
       setName("");
       setRosterText("");
+      setLogoUrl("");
       onDone(`Squadra "${name}" creata.`);
     } catch (err) {
       console.error(err);
@@ -251,7 +253,16 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
           ) : (
             <div key={t.id} className="px-3.5 py-2.5 text-[13px] border-b border-[rgba(251,243,222,0.08)] last:border-b-0">
               <div className="flex items-center justify-between gap-2">
-                <p className="font-semibold flex-1">{t.name}</p>
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  {t.logoUrl ? (
+                    <img src={t.logoUrl} alt={t.name} className="w-7 h-7 rounded-lg object-cover shrink-0" />
+                  ) : (
+                    <div className="w-7 h-7 rounded-lg shrink-0 flex items-center justify-center bg-[#123008] text-[9px] font-extrabold text-[#BBFF5E]">
+                      {t.name.slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                  <p className="font-semibold truncate">{t.name}</p>
+                </div>
                 <button onClick={() => setEditingId(t.id)} className="text-[#BBFF5E] text-xs font-semibold shrink-0">
                   Modifica
                 </button>
@@ -276,6 +287,12 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
         onChange={(e) => setRosterText(e.target.value)}
         className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
       />
+      <input
+        placeholder="Link foto squadra (opzionale)"
+        value={logoUrl}
+        onChange={(e) => setLogoUrl(e.target.value)}
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
+      />
       <button
         onClick={create}
         disabled={creating || !name.trim()}
@@ -298,6 +315,7 @@ function EditTeamRow({
 }) {
   const [name, setName] = useState(team.name);
   const [rosterText, setRosterText] = useState(team.roster.join(", "));
+  const [logoUrl, setLogoUrl] = useState(team.logoUrl ?? "");
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
@@ -311,7 +329,11 @@ function EditTeamRow({
     }
     setSaving(true);
     try {
-      await updateDoc(doc(db, "teams", team.id), { name: name.trim(), roster });
+      await updateDoc(doc(db, "teams", team.id), {
+        name: name.trim(),
+        roster,
+        ...(logoUrl.trim() ? { logoUrl: logoUrl.trim() } : { logoUrl: deleteField() }),
+      });
       onDone("Squadra aggiornata.");
       onCancel();
     } catch (err) {
@@ -332,6 +354,12 @@ function EditTeamRow({
       <input
         value={rosterText}
         onChange={(e) => setRosterText(e.target.value)}
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm mb-2"
+      />
+      <input
+        placeholder="Link foto squadra (opzionale)"
+        value={logoUrl}
+        onChange={(e) => setLogoUrl(e.target.value)}
         className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm mb-2"
       />
       <div className="flex gap-2">
