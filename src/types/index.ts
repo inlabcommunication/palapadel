@@ -81,10 +81,17 @@ export interface EditionTeam {
   id: string;
   editionId: string;
   teamId: string;
-  points: number;
+  points: number; // finale mostrato ovunque = calculatedPoints + manualPointsAdjustment
   played: number;
   order: number; // per spareggi manuali a pari punti
   status: ParticipationStatus;
+  /**
+   * Punti "grezzi" dall'ultimo inserimento manuale o import Excel. Un nuovo import
+   * sovrascrive solo questo campo, mai manualPointsAdjustment, così una penalità o
+   * correzione manuale non va persa quando arriva una nuova importazione.
+   */
+  calculatedPoints?: number;
+  manualPointsAdjustment?: number;
 }
 
 /** femaleParticipants/{id} — campionato femminile, individuale */
@@ -92,9 +99,11 @@ export interface FemaleParticipant {
   id: string;
   editionId: string;
   name: string;
-  points: number;
+  points: number; // finale mostrato ovunque = calculatedPoints + manualPointsAdjustment
   stages: number;
   status: ParticipationStatus;
+  calculatedPoints?: number;
+  manualPointsAdjustment?: number;
 }
 
 /** matchdays/{id} */
