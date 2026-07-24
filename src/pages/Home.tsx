@@ -7,7 +7,7 @@ import { db } from "../firebase";
 import { confirmDelete } from "../lib/confirmDelete";
 import type { ChampionshipEdition, ChampionshipType, ContentStatus, HomeNews } from "../types";
 import { BADGE_COLORS } from "../types";
-import { ChevronRight, AlertCircle, Plus, X, Pencil, Trash2 } from "lucide-react";
+import { ChevronRight, AlertCircle, Plus, X, Pencil, Trash2, Trophy, Megaphone } from "lucide-react";
 
 
 export function HomePage() {
@@ -59,8 +59,52 @@ export function HomePage() {
 
   return (
     <div className="p-4 pb-6">
+      <div className="relative overflow-hidden rounded-2xl mb-8 px-5 py-6 bg-gradient-to-br from-[#1F4A15] via-[#123008] to-[#0A0B08]">
+        <svg
+          className="absolute inset-0 w-full h-full opacity-[0.14] pointer-events-none"
+          viewBox="0 0 300 220"
+          preserveAspectRatio="xMidYMid slice"
+          aria-hidden="true"
+        >
+          <g transform="rotate(-16 150 110)" stroke="#FBF3DE" strokeWidth="1.4" fill="none">
+            <rect x="20" y="30" width="260" height="160" />
+            <line x1="150" y1="30" x2="150" y2="190" />
+            <line x1="20" y1="70" x2="280" y2="70" />
+            <line x1="20" y1="150" x2="280" y2="150" />
+            <line x1="80" y1="30" x2="80" y2="190" />
+            <line x1="220" y1="30" x2="220" y2="190" />
+          </g>
+        </svg>
+        <svg
+          className="absolute -top-3 -right-6 w-36 h-36 opacity-90 pointer-events-none"
+          viewBox="0 0 210 210"
+          aria-hidden="true"
+        >
+          <defs>
+            <linearGradient id="heroArc" x1="0" y1="1" x2="1" y2="0">
+              <stop offset="0" stopColor="#BBFF5E" stopOpacity="0" />
+              <stop offset="1" stopColor="#BBFF5E" stopOpacity="0.9" />
+            </linearGradient>
+          </defs>
+          <path d="M10 190 Q 40 60 190 20" stroke="url(#heroArc)" strokeWidth="3" fill="none" strokeLinecap="round" />
+          <circle cx="190" cy="20" r="5" fill="#BBFF5E" />
+        </svg>
+        <div className="relative">
+          <span className="inline-flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-wider text-[#123008] bg-[#BBFF5E] rounded-full px-2.5 py-1 mb-3">
+            <Trophy size={11} /> Stagione in corso
+          </span>
+          <h1 className="font-display text-[26px] uppercase leading-[1.05] text-[#FBF3DE] max-w-[80%]">
+            Tornei, campionati
+            <br />e classifiche
+          </h1>
+          <p className="text-[12.5px] text-[rgba(251,243,222,0.6)] mt-2 max-w-[75%]">
+            Tutto il campionato PalaPadel in un posto solo.
+          </p>
+        </div>
+      </div>
+
       <SectionTitle>Campionati attivi</SectionTitle>
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-3">
         {loading && <EmptyHint text="Carico i campionati..." />}
         {!loading && active.length === 0 && <EmptyHint text="Nessun campionato attivo al momento." />}
         {active.map((ed) => (
@@ -75,8 +119,8 @@ export function HomePage() {
 
       {concluded.length > 0 && (
         <>
-          <SectionTitle className="mt-7">Campionati conclusi di recente</SectionTitle>
-          <div className="flex flex-col gap-2.5">
+          <SectionTitle className="mt-8">Campionati conclusi di recente</SectionTitle>
+          <div className="flex flex-col gap-3">
             {concluded.map((ed) => (
               <ChampionshipCard
                 key={ed.id}
@@ -90,7 +134,7 @@ export function HomePage() {
         </>
       )}
 
-      <div className="flex items-center justify-between mt-7 mb-3">
+      <div className="flex items-center justify-between mt-8 mb-3">
         <h2 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE]">Novità PalaPadel</h2>
         {isAdmin && (
           <button onClick={() => setShowNewsForm((v) => !v)} className="flex items-center gap-1 text-xs font-semibold text-[#BBFF5E]">
@@ -109,7 +153,7 @@ export function HomePage() {
         />
       )}
 
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-3">
         {news.length === 0 && <EmptyHint text="Nessuna comunicazione pubblicata." />}
         {news.map((n) =>
           editingNewsId === n.id ? (
@@ -123,9 +167,13 @@ export function HomePage() {
               }}
             />
           ) : (
-            <div key={n.id} className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl px-3.5 py-3">
+            <div key={n.id} className="relative overflow-hidden bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl pl-4 pr-3.5 py-3.5">
+              <span className="absolute left-0 top-0 bottom-0 w-1 bg-[#BBFF5E]" aria-hidden="true" />
               <div className="flex items-start justify-between gap-2">
-                <p className="font-bold text-sm flex-1">{n.title}</p>
+                <p className="font-bold text-sm flex-1 flex items-center gap-1.5">
+                  <Megaphone size={13} className="text-[#BBFF5E] shrink-0" />
+                  {n.title}
+                </p>
                 {isAdmin && n.status === "bozza" && (
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.58)] shrink-0">
                     bozza
@@ -319,16 +367,25 @@ function ChampionshipCard({
   return (
     <button
       onClick={onClick}
-      className="text-left bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl px-4 py-3.5 w-full"
+      className="relative text-left bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl pl-4 pr-4 py-3.5 w-full overflow-hidden"
       style={{ opacity: muted ? 0.7 : 1 }}
     >
-      <div className="flex justify-between items-start">
-        <div>
-          <p className="font-bold text-[15px]">{type?.name}</p>
-          <p className="text-[12.5px] text-[rgba(251,243,222,0.58)] mt-0.5">{edition.season}</p>
+      <span className="absolute left-0 top-0 bottom-0 w-1" style={{ background: badge.text }} aria-hidden="true" />
+      <div className="flex justify-between items-start gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <span
+            className="flex items-center justify-center w-9 h-9 rounded-xl shrink-0 text-[11px] font-extrabold"
+            style={{ background: badge.bg, color: badge.text }}
+          >
+            {(type?.name ?? "?").slice(0, 2).toUpperCase()}
+          </span>
+          <div className="min-w-0">
+            <p className="font-bold text-[15px] truncate">{type?.name}</p>
+            <p className="text-[12.5px] text-[rgba(251,243,222,0.58)] mt-0.5">{edition.season}</p>
+          </div>
         </div>
         <span
-          className="text-[10.5px] font-bold px-2 py-1 rounded-full"
+          className="text-[10.5px] font-bold px-2 py-1 rounded-full shrink-0"
           style={{ background: badge.bg, color: badge.text }}
         >
           {edition.status === "conclusa" ? "conclusa" : "attiva"}
