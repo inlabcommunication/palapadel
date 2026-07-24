@@ -41,6 +41,12 @@ function pickDefaultEdition(editionsOfType: ChampionshipEdition[]) {
   return concluded ?? sorted[0];
 }
 
+const RANK_COLORS = [
+  { bg: "#F5C842", text: "#4A2E00" },
+  { bg: "#D8D8D8", text: "#3A3A3A" },
+  { bg: "#D8A066", text: "#4A2A0A" },
+];
+
 export function CampionatiPage() {
   const { editionId } = useParams();
   const navigate = useNavigate();
@@ -123,13 +129,13 @@ export function CampionatiPage() {
       </div>
 
       {showTeamSettings && (
-        <div className="mb-4 bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5">
+        <div className="mb-4 bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
           <TeamManagement onDone={showToast} />
         </div>
       )}
 
       {showTypeSettings && (
-        <div className="mb-4 bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5">
+        <div className="mb-4 bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
           <ChampionshipTypeManagement onDone={showToast} />
         </div>
       )}
@@ -175,7 +181,7 @@ export function CampionatiPage() {
         )}
 
         {showSeasonPicker && sortedEditionsOfType.length > 0 && (
-          <div className="absolute top-9 left-0 z-10 bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl shadow-md overflow-hidden min-w-[180px]">
+          <div className="absolute top-9 left-0 z-10 bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl shadow-md overflow-hidden min-w-[180px]">
             {sortedEditionsOfType.map((e) => (
               <button
                 key={e.id}
@@ -297,7 +303,7 @@ function NewEditionForm({
   };
 
   return (
-    <div className="mb-4 bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5">
+    <div className="mb-4 bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Nuova edizione</p>
         <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
@@ -382,7 +388,7 @@ function EditEditionForm({
   };
 
   return (
-    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5">
+    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
       <select
         value={typeId}
         onChange={(e) => setTypeId(e.target.value)}
@@ -457,7 +463,7 @@ function TeamStandings({
 
   return (
     <div>
-      <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl overflow-hidden">
+      <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl overflow-hidden">
         <div className="flex items-center px-3.5 py-2.5 text-xs font-bold text-[rgba(251,243,222,0.58)] border-b border-[rgba(251,243,222,0.08)]">
           <span className="w-6">#</span>
           <span className="flex-1">Squadra</span>
@@ -476,11 +482,24 @@ function TeamStandings({
             />
           ) : (
             <div key={r.id} className="flex items-center px-3.5 py-2.5 text-[13px] border-b border-[rgba(251,243,222,0.08)] last:border-b-0">
-              <span className="w-6 text-[rgba(251,243,222,0.35)]">{i + 1}</span>
+              <span className="w-6 flex items-center justify-center shrink-0">
+                {i < 3 ? (
+                  <span
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-extrabold"
+                    style={{ background: RANK_COLORS[i].bg, color: RANK_COLORS[i].text }}
+                  >
+                    {i + 1}
+                  </span>
+                ) : (
+                  <span className="text-[rgba(251,243,222,0.35)]">{i + 1}</span>
+                )}
+              </span>
               <span className="flex-1 font-semibold">{r.team?.name}</span>
               <span className="w-10 text-center">{r.played}</span>
-              <span className="w-14 text-center font-bold">
-                {r.status === "normale" ? r.points : (
+              <span className="w-14 text-center">
+                {r.status === "normale" ? (
+                  <span className="font-display text-[15px] text-[#BBFF5E]">{r.points}</span>
+                ) : (
                   <span className="text-[11px] font-bold text-[#FF9B6B]">
                     {r.status === "ritirata" ? "Ritirata" : "Squalificata"}
                   </span>
@@ -640,7 +659,7 @@ function ImportTeamStandings({
   };
 
   return (
-    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5 w-full">
+    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5 w-full">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Importa classifica (incolla da Excel/Word)</p>
         <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
@@ -774,7 +793,7 @@ function AddTeamToEdition({
   };
 
   return (
-    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5">
+    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Aggiungi squadra</p>
         <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
@@ -952,7 +971,7 @@ function FemaleStandings({
 
   return (
     <div>
-      <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl overflow-hidden">
+      <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl overflow-hidden">
         <div className="flex items-center px-3.5 py-2.5 text-xs font-bold text-[rgba(251,243,222,0.58)] border-b border-[rgba(251,243,222,0.08)]">
           <span className="w-6">#</span>
           <span className="flex-1">Giocatrice</span>
@@ -965,11 +984,24 @@ function FemaleStandings({
             <FemaleEditRow key={r.id} participant={r} onCancel={() => setEditingId(null)} onDone={showToast} />
           ) : (
             <div key={r.id} className="flex items-center px-3.5 py-2.5 text-[13px] border-b border-[rgba(251,243,222,0.08)] last:border-b-0">
-              <span className="w-6 text-[rgba(251,243,222,0.35)]">{i + 1}</span>
+              <span className="w-6 flex items-center justify-center shrink-0">
+                {i < 3 ? (
+                  <span
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-extrabold"
+                    style={{ background: RANK_COLORS[i].bg, color: RANK_COLORS[i].text }}
+                  >
+                    {i + 1}
+                  </span>
+                ) : (
+                  <span className="text-[rgba(251,243,222,0.35)]">{i + 1}</span>
+                )}
+              </span>
               <span className="flex-1 font-semibold">{r.name}</span>
               <span className="w-14 text-center">{r.stages}</span>
-              <span className="w-12 text-center font-bold">
-                {r.status === "normale" ? r.points : (
+              <span className="w-12 text-center">
+                {r.status === "normale" ? (
+                  <span className="font-display text-[15px] text-[#BBFF5E]">{r.points}</span>
+                ) : (
                   <span className="text-[11px] font-bold text-[#FF9B6B]">{r.status === "ritirata" ? "Rit." : "Sq."}</span>
                 )}
               </span>
@@ -1055,7 +1087,7 @@ function AddFemaleParticipant({
   };
 
   return (
-    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5">
+    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Aggiungi giocatrice</p>
         <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
@@ -1143,7 +1175,7 @@ function ImportFemaleParticipants({
   };
 
   return (
-    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5 w-full">
+    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5 w-full">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Importa classifica (incolla da Excel/Word)</p>
         <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
