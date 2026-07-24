@@ -81,6 +81,24 @@ service cloud.firestore {
       allow write: if isAdminOrAbove();
     }
 
+    match /bracketRounds/{id} {
+      allow read: if true;
+      allow write: if isAdminOrAbove();
+    }
+
+    match /bracketMatches/{id} {
+      allow read: if true;
+      allow write: if isAdminOrAbove();
+    }
+
+    // Vittorie storiche (Albo d'oro): quelle precedenti all'app sono inserite a mano dal
+    // Super Amministratore, quelle successive vengono create automaticamente alla chiusura
+    // di un'edizione (vedi src/lib/freezeEdition.ts), sempre con permessi da amministratore.
+    match /historicalWins/{id} {
+      allow read: if true;
+      allow write: if isAdminOrAbove();
+    }
+
     // Log di controllo: scrivibile da chi opera, leggibile solo dagli amministratori.
     match /auditLog/{id} {
       allow read: if isAdminOrAbove();
