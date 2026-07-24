@@ -5,9 +5,10 @@ import { useAuth } from "../contexts/AuthContext";
 import { useCollection } from "../hooks/useCollection";
 import { db, auth, getSecondaryAuth } from "../firebase";
 import type { AppUser, ChampionshipEdition, ChampionshipType, Role } from "../types";
-import { ROLE_LABELS } from "../types";
+import { ROLE_LABELS, BADGE_COLORS } from "../types";
 import { PasswordInput } from "../components/PasswordInput";
 import { slugifyUsername, usernameToEmail } from "../lib/username";
+import { Settings, UserPlus, KeyRound } from "lucide-react";
 
 export function GestionePage() {
   const { appUser } = useAuth();
@@ -24,22 +25,37 @@ function GestoreView() {
   const { data: types } = useCollection<ChampionshipType>("championshipTypes");
 
   return (
-    <div className="p-4">
+    <div className="p-4 pb-6">
       <h2 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE] mb-1">Campionati attivi</h2>
       <p className="text-[12.5px] text-[rgba(251,243,222,0.35)] mb-4">
         Inserimento risultati per giornata arriva in Fase 3.
       </p>
-      {editions.map((e) => {
-        const t = types.find((x) => x.id === e.typeId);
-        return (
-          <div key={e.id} className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl px-3.5 py-3 mb-2">
-            <p className="font-bold">
-              {t?.name} {e.season}
-            </p>
-            <p className="text-xs text-[rgba(251,243,222,0.35)] mt-1">Aggiorna giornata · Vedi classifica (Fase 3)</p>
-          </div>
-        );
-      })}
+      <div className="flex flex-col gap-3">
+        {editions.map((e) => {
+          const t = types.find((x) => x.id === e.typeId);
+          const badge = BADGE_COLORS[t?.badgeColor ?? "serie-b"];
+          return (
+            <div
+              key={e.id}
+              className="relative overflow-hidden flex items-center gap-3 bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl pl-4 pr-4 py-3.5"
+            >
+              <span className="absolute left-0 top-0 bottom-0 w-1" style={{ background: badge.text }} aria-hidden="true" />
+              <span
+                className="flex items-center justify-center w-9 h-9 rounded-xl shrink-0 text-[11px] font-extrabold"
+                style={{ background: badge.bg, color: badge.text }}
+              >
+                {(t?.name ?? "?").slice(0, 2).toUpperCase()}
+              </span>
+              <div className="min-w-0">
+                <p className="font-bold truncate">
+                  {t?.name} {e.season}
+                </p>
+                <p className="text-xs text-[rgba(251,243,222,0.35)] mt-1">Aggiorna giornata · Vedi classifica (Fase 3)</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -52,8 +68,11 @@ function AdminView({ role }: { role: Role }) {
   };
 
   return (
-    <div className="p-4">
-      <h2 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE] mb-1">Gestione — {ROLE_LABELS[role]}</h2>
+    <div className="p-4 pb-6">
+      <div className="flex items-center gap-2 mb-1">
+        <Settings size={15} className="text-[#BBFF5E]" />
+        <h2 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE]">Gestione — {ROLE_LABELS[role]}</h2>
+      </div>
       <p className="text-[12.5px] text-[rgba(251,243,222,0.35)] mb-4">
         La gestione di campionati, squadre e classifiche si trova nella pagina{" "}
         <span className="font-semibold">Campionati</span>. La pubblicazione delle novità si trova in{" "}
@@ -61,10 +80,10 @@ function AdminView({ role }: { role: Role }) {
       </p>
 
       {role === "superadmin" ? (
-        <>
+        <div className="flex flex-col gap-4">
           <UserManagement onDone={showToast} />
           <ChangePasswordManagement onDone={showToast} />
-        </>
+        </div>
       ) : (
         <p className="text-[12.5px] text-[rgba(251,243,222,0.35)]">
           La creazione di account è riservata al Super Amministratore.
@@ -126,8 +145,11 @@ function UserManagement({ onDone }: { onDone: (msg: string) => void }) {
   };
 
   return (
-    <div className="mb-6">
-      <p className="text-[13px] font-bold mb-2">Nuovo account amministrativo</p>
+    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <UserPlus size={15} className="text-[#BBFF5E]" />
+        <p className="text-[13px] font-bold">Nuovo account amministrativo</p>
+      </div>
       <input
         placeholder="Nome utente"
         value={username}
@@ -196,8 +218,11 @@ function ChangePasswordManagement({ onDone }: { onDone: (msg: string) => void })
   };
 
   return (
-    <div>
-      <p className="text-[13px] font-bold mb-2">Cambia password di un account esistente</p>
+    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <KeyRound size={15} className="text-[#BBFF5E]" />
+        <p className="text-[13px] font-bold">Cambia password di un account esistente</p>
+      </div>
       <select
         value={targetUid}
         onChange={(e) => setTargetUid(e.target.value)}
