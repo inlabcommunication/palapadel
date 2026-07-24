@@ -20,6 +20,7 @@ export function GestionePage() {
 }
 
 function GestoreView() {
+  const navigate = useNavigate();
   const { data: editions } = useCollection<ChampionshipEdition>("championshipEditions", [
     where("status", "==", "attiva"),
   ]);
@@ -28,17 +29,16 @@ function GestoreView() {
   return (
     <div className="p-4 pb-6">
       <h2 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE] mb-1">Campionati attivi</h2>
-      <p className="text-[12.5px] text-[rgba(251,243,222,0.35)] mb-4">
-        Inserimento risultati per giornata arriva in Fase 3.
-      </p>
+      <p className="text-[12.5px] text-[rgba(251,243,222,0.35)] mb-4">Tocca un campionato per aggiornare le giornate.</p>
       <div className="flex flex-col gap-3">
         {editions.map((e) => {
           const t = types.find((x) => x.id === e.typeId);
           const badge = BADGE_COLORS[t?.badgeColor ?? "serie-b"];
           return (
-            <div
+            <button
               key={e.id}
-              className="relative overflow-hidden flex items-center gap-3 bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl pl-4 pr-4 py-3.5"
+              onClick={() => navigate(`/gestione/edizione/${e.id}`)}
+              className="w-full text-left relative overflow-hidden flex items-center gap-3 bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl pl-4 pr-4 py-3.5"
             >
               <span className="absolute left-0 top-0 bottom-0 w-1" style={{ background: badge.text }} aria-hidden="true" />
               <span
@@ -51,11 +51,14 @@ function GestoreView() {
                 <p className="font-bold truncate">
                   {t?.name} {e.season}
                 </p>
-                <p className="text-xs text-[rgba(251,243,222,0.35)] mt-1">Aggiorna giornata · Vedi classifica (Fase 3)</p>
+                <p className="text-xs text-[rgba(251,243,222,0.35)] mt-1">Aggiorna giornata · Vedi classifica</p>
               </div>
-            </div>
+            </button>
           );
         })}
+        {editions.length === 0 && (
+          <p className="text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessun campionato attivo al momento.</p>
+        )}
       </div>
     </div>
   );
@@ -168,7 +171,7 @@ function AdminDashboard() {
               return (
                 <button
                   key={e.id}
-                  onClick={() => navigate(`/campionati/${e.id}`)}
+                  onClick={() => navigate(t?.hasTeams ? `/gestione/edizione/${e.id}` : `/campionati/${e.id}`)}
                   className="w-full text-left relative overflow-hidden flex items-center gap-3 bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl pl-4 pr-4 py-3"
                 >
                   <span className="absolute left-0 top-0 bottom-0 w-1" style={{ background: badge.text }} aria-hidden="true" />
