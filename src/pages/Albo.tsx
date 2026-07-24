@@ -41,7 +41,7 @@ export function AlboPage() {
   const grouped = new Map<string, { label: string; seasons: string[]; wins: HistoricalWin[] }>();
   for (const w of winsForType) {
     const key = w.teamId ?? w.participantName ?? "sconosciuto";
-    const label = w.teamId ? teams.find((t) => t.id === w.teamId)?.name ?? "Squadra eliminata" : w.participantName ?? "—";
+    const label = w.winnerNameSnapshot ?? (w.teamId ? teams.find((t) => t.id === w.teamId)?.name ?? "Squadra eliminata" : w.participantName ?? "—");
     if (!grouped.has(key)) grouped.set(key, { label, seasons: [], wins: [] });
     const entry = grouped.get(key)!;
     entry.seasons.push(w.season);
