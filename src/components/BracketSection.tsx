@@ -239,7 +239,7 @@ export function BracketSection({
 function NewRoundForm({ onCreate, onCancel }: { onCreate: (name: string) => void; onCancel: () => void }) {
   const [name, setName] = useState("");
   return (
-    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5">
+    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Nuovo turno</p>
         <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
@@ -382,20 +382,23 @@ function RoundDetail({
               }}
             />
           ) : (
-            <div key={m.id} className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3">
-              <div className="flex items-center justify-between">
-                <span className={`text-[13.5px] ${m.winnerTeamId && m.winnerTeamId === m.team1Id ? "font-bold" : ""}`}>
+            <div key={m.id} className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
+              <div className={`flex items-center justify-between rounded-lg px-2 py-1.5 ${m.winnerTeamId && m.winnerTeamId === m.team1Id ? "bg-[rgba(187,255,94,0.08)]" : ""}`}>
+                <span className={`text-[13.5px] ${m.winnerTeamId && m.winnerTeamId === m.team1Id ? "font-bold text-[#BBFF5E]" : ""}`}>
                   {teamName(m.team1Id)}
                 </span>
                 {!!m.winnerTeamId && m.winnerTeamId === m.team1Id && <Trophy size={13} className="text-[#BBFF5E]" />}
               </div>
-              <div className="flex items-center justify-between mt-1">
-                <span className={`text-[13.5px] ${m.winnerTeamId && m.winnerTeamId === m.team2Id ? "font-bold" : ""}`}>
+              <div className="flex items-center justify-center">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-[rgba(251,243,222,0.3)]">vs</span>
+              </div>
+              <div className={`flex items-center justify-between rounded-lg px-2 py-1.5 ${m.winnerTeamId && m.winnerTeamId === m.team2Id ? "bg-[rgba(187,255,94,0.08)]" : ""}`}>
+                <span className={`text-[13.5px] ${m.winnerTeamId && m.winnerTeamId === m.team2Id ? "font-bold text-[#BBFF5E]" : ""}`}>
                   {teamName(m.team2Id)}
                 </span>
                 {!!m.winnerTeamId && m.winnerTeamId === m.team2Id && <Trophy size={13} className="text-[#BBFF5E]" />}
               </div>
-              {m.score && <p className="text-[11px] text-[rgba(251,243,222,0.35)] mt-1.5">{m.score}</p>}
+              {m.score && <p className="font-display text-[15px] tracking-wide text-[#FBF3DE] text-center mt-2">{m.score}</p>}
               {isAdmin && (
                 <div className="flex items-center gap-3 mt-2 pt-2 border-t border-[rgba(251,243,222,0.08)]">
                   <button onClick={() => setEditingMatchId(m.id)} className="flex items-center gap-1 text-[#BBFF5E] text-xs font-semibold">
@@ -439,7 +442,7 @@ function NewMatchForm({
   const [team2Id, setTeam2Id] = useState("");
 
   return (
-    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5">
+    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Nuovo incontro</p>
         <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
@@ -499,7 +502,7 @@ function EditMatchForm({
   };
 
   return (
-    <div className="bg-[#123008] border border-[rgba(251,243,222,0.18)] rounded-xl p-3">
+    <div className="bg-[#123008] border border-[rgba(251,243,222,0.18)] rounded-2xl p-3">
       <select value={team1Id} onChange={(e) => setTeam1Id(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2">
         <option value="">— vuoto —</option>
         {teams.map((t) => (
