@@ -30,6 +30,42 @@ export interface ChampionshipEdition {
   bestPlayerEnabled?: boolean;
   bracketEnabled?: boolean;
   createdAt?: string; // usato per ordinare le edizioni dello stesso tipo dalla più recente
+  /**
+   * Storico congelato: valorizzato automaticamente quando l'edizione passa a "conclusa"
+   * (vedi src/lib/freezeEdition.ts). Da quel momento la vista pubblica e quella di default
+   * per l'admin mostrano questi dati invece di ricalcolarli dal vivo, così una squadra
+   * rinominata o eliminata in futuro non altera la classifica/il tabellone di quell'anno.
+   * L'amministratore può comunque correggere i dati live e poi rilanciare il congelamento.
+   */
+  closedAt?: string;
+  frozenStandings?: FrozenStandingRow[];
+  frozenBracket?: FrozenBracketRound[];
+  winnerId?: string;
+  winnerName?: string;
+}
+
+/** Riga di classifica congelata al momento della conclusione dell'edizione. */
+export interface FrozenStandingRow {
+  id: string; // teamId (a squadre) o id del/la partecipante (femminile)
+  name: string; // nome al momento del congelamento
+  points: number;
+  played?: number; // PG, solo campionati a squadre
+  stages?: number; // Tappe, solo femminile
+  status: ParticipationStatus;
+}
+
+export interface FrozenBracketMatch {
+  team1Name?: string;
+  team2Name?: string;
+  score?: string;
+  winnerName?: string;
+  winnerSide?: 1 | 2; // evita ambiguità se due squadre avessero lo stesso nome
+}
+
+export interface FrozenBracketRound {
+  name: string;
+  order: number;
+  matches: FrozenBracketMatch[];
 }
 
 /** teams/{id} — identità della squadra, indipendente dalle edizioni */
@@ -128,6 +164,13 @@ export interface HistoricalWin {
   participantName?: string;
   season: string;
   note?: string;
+  /** Presente solo per le vittorie generate automaticamente dalla conclusione di un'edizione nell'app. */
+  editionId?: string;
+  /**
+   * Nome della squadra/giocatrice al momento della vittoria: l'Albo d'oro deve mostrare
+   * questo nome anche se la squadra viene rinominata o eliminata in seguito.
+   */
+  winnerNameSnapshot?: string;
 }
 
 /** auditLog/{id} */
