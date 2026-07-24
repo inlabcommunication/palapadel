@@ -122,6 +122,8 @@ export interface Match {
   team2Id: string;
   result?: "2-0" | "2-1" | "1-2" | "0-2";
   status: MatchStatus;
+  /** Presente se per questo risultato è già stata creata una novità/notifica (vedi src/pages/Giornate.tsx). */
+  notifiedAt?: string;
 }
 
 /**
