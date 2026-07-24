@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { doc, setDoc, where } from "firebase/firestore";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useCollection } from "../hooks/useCollection";
 import { db, auth, getSecondaryAuth } from "../firebase";
-import type { AppUser, ChampionshipEdition, ChampionshipType, Role } from "../types";
+import type { AppUser, ChampionshipEdition, ChampionshipType, EditionTeam, FemaleParticipant, HomeNews, Role, Team } from "../types";
 import { ROLE_LABELS, BADGE_COLORS } from "../types";
 import { PasswordInput } from "../components/PasswordInput";
 import { slugifyUsername, usernameToEmail } from "../lib/username";
-import { Settings, UserPlus, KeyRound } from "lucide-react";
+import { Settings, UserPlus, KeyRound, LayoutDashboard } from "lucide-react";
 
 export function GestionePage() {
   const { appUser } = useAuth();
@@ -79,6 +80,8 @@ function AdminView({ role }: { role: Role }) {
         <span className="font-semibold">Home</span>.
       </p>
 
+      <AdminDashboard />
+
       {role === "superadmin" ? (
         <div className="flex flex-col gap-4">
           <UserManagement onDone={showToast} />
@@ -93,6 +96,138 @@ function AdminView({ role }: { role: Role }) {
       {toast && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-[#0A0B08] text-[#FBF3DE] border border-[rgba(187,255,94,0.3)] px-4 py-2.5 rounded-full text-[12.5px] max-w-[90%] text-center">
           {toast}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Dashboard iniziale per l'amministrazione: raccoglie in un colpo d'occhio ciò che serve
+ * sapere subito — campionati attivi, classifiche con una correzione manuale applicata
+ * (vedi src/pages/Campionati.tsx, calculatedPoints/manualPointsAdjustment) e bozze in Home
+ * non ancora pubblicate. "Ultima giornata aggiornata", "risultati mancanti" e "partite
+ * rinviate" arriveranno insieme al Gestore risultati partita-per-partita (Fase 3, non
+ * ancora costruito): mostrarli ora significherebbe inventare dati che non esistono.
+ */
+function AdminDashboard() {
+  const navigate = useNavigate();
+  const { data: editions } = useCollection<ChampionshipEdition>("championshipEditions");
+  const { data: types } = useCollection<ChampionshipType>("championshipTypes");
+  const { data: editionTeams } = useCollection<EditionTeam>("editionTeams");
+  const { data: femaleParticipants } = useCollection<FemaleParticipant>("femaleParticipants");
+  const { data: teams } = useCollection<Team>("teams");
+  const { data: news } = useCollection<HomeNews>("homeNews");
+
+  const activeEditions = editions.filter((e) => e.status === "attiva");
+  const draftNews = news.filter((n) => n.status === "bozza");
+
+  const context = (editionId: string) => {
+    const edition = editions.find((e) => e.id === editionId);
+    const type = edition ? types.find((t) => t.id === edition.typeId) : undefined;
+    return edition && type ? `${type.name} ${edition.season}` : "";
+  };
+
+  const adjustedRows = [
+    ...editionTeams
+      .filter((et) => (et.manualPointsAdjustment ?? 0) !== 0)
+      .map((et) => ({
+        id: et.id,
+        label: teams.find((t) => t.id === et.teamId)?.name ?? "Squadra eliminata",
+        context: context(et.editionId),
+        adjustment: et.manualPointsAdjustment!,
+        editionId: et.editionId,
+      })),
+    ...femaleParticipants
+      .filter((p) => (p.manualPointsAdjustment ?? 0) !== 0)
+      .map((p) => ({
+        id: p.id,
+        label: p.name,
+        context: context(p.editionId),
+        adjustment: p.manualPointsAdjustment!,
+        editionId: p.editionId,
+      })),
+  ];
+
+  return (
+    <div className="flex flex-col gap-4 mb-4">
+      <div className="flex items-center gap-2">
+        <LayoutDashboard size={14} className="text-[#BBFF5E]" />
+        <p className="text-[11px] uppercase tracking-wider font-bold text-[rgba(251,243,222,0.35)]">Dashboard</p>
+      </div>
+
+      <div>
+        <p className="text-[11px] uppercase tracking-wider font-bold text-[rgba(251,243,222,0.35)] mb-2">Campionati attivi</p>
+        {activeEditions.length === 0 ? (
+          <p className="text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessun campionato attivo al momento.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {activeEditions.map((e) => {
+              const t = types.find((x) => x.id === e.typeId);
+              const badge = BADGE_COLORS[t?.badgeColor ?? "serie-b"];
+              return (
+                <button
+                  key={e.id}
+                  onClick={() => navigate(`/campionati/${e.id}`)}
+                  className="w-full text-left relative overflow-hidden flex items-center gap-3 bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl pl-4 pr-4 py-3"
+                >
+                  <span className="absolute left-0 top-0 bottom-0 w-1" style={{ background: badge.text }} aria-hidden="true" />
+                  <span
+                    className="flex items-center justify-center w-9 h-9 rounded-xl shrink-0 text-[11px] font-extrabold"
+                    style={{ background: badge.bg, color: badge.text }}
+                  >
+                    {(t?.name ?? "?").slice(0, 2).toUpperCase()}
+                  </span>
+                  <p className="font-bold truncate">
+                    {t?.name} {e.season}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {adjustedRows.length > 0 && (
+        <div>
+          <p className="text-[11px] uppercase tracking-wider font-bold text-[rgba(251,243,222,0.35)] mb-2">
+            Classifiche modificate manualmente
+          </p>
+          <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl overflow-hidden">
+            {adjustedRows.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => navigate(`/campionati/${r.editionId}`)}
+                className="w-full text-left flex items-center justify-between px-3.5 py-2.5 text-[13px] border-b border-[rgba(251,243,222,0.08)] last:border-b-0 gap-2"
+              >
+                <div className="min-w-0">
+                  <p className="font-semibold truncate">{r.label}</p>
+                  <p className="text-[11px] text-[rgba(251,243,222,0.35)]">{r.context}</p>
+                </div>
+                <span className={`font-display text-[15px] shrink-0 ${r.adjustment > 0 ? "text-[#BBFF5E]" : "text-[#FF9B6B]"}`}>
+                  {r.adjustment > 0 ? "+" : ""}
+                  {r.adjustment}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {draftNews.length > 0 && (
+        <div>
+          <p className="text-[11px] uppercase tracking-wider font-bold text-[rgba(251,243,222,0.35)] mb-2">Bozze Home</p>
+          <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl overflow-hidden">
+            {draftNews.map((n) => (
+              <button
+                key={n.id}
+                onClick={() => navigate("/")}
+                className="w-full text-left px-3.5 py-2.5 text-[13px] border-b border-[rgba(251,243,222,0.08)] last:border-b-0 truncate"
+              >
+                {n.title}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>
