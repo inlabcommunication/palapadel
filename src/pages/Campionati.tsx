@@ -1,17 +1,19 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { addDoc, collection, deleteDoc, doc, setDoc, updateDoc, where } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, getDocs, query, setDoc, updateDoc, where } from "firebase/firestore";
 import { useCollection } from "../hooks/useCollection";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase";
 import { confirmDelete } from "../lib/confirmDelete";
-import { Plus, Pencil, Trash2, Settings, X, Upload, ChevronDown } from "lucide-react";
+import { freezeEdition } from "../lib/freezeEdition";
+import { Plus, Pencil, Trash2, Settings, X, Upload, ChevronDown, Lock, RefreshCw, Trophy } from "lucide-react";
 import type {
   ChampionshipEdition,
   ChampionshipType,
   EditionStatus,
   EditionTeam,
   FemaleParticipant,
+  HistoricalWin,
   ParticipationStatus,
   Team,
 } from "../types";
@@ -229,31 +231,56 @@ export function CampionatiPage() {
             />
           ) : (
             <div className="flex items-center justify-between">
-              <p className="text-[13px] text-[rgba(251,243,222,0.58)]">
+              <p className="text-[13px] text-[rgba(251,243,222,0.58)] flex items-center gap-1.5">
                 {!activeType ? (
                   <span className="text-[#FF9B6B] font-semibold">
                     Tipologia non trovata — modifica l'edizione per collegarla a una tipologia valida
                   </span>
                 ) : (
-                  statusLabel(edition.status)
+                  <>
+                    {statusLabel(edition.status)}
+                    {edition.status === "conclusa" && edition.closedAt && (
+                      <span className="text-[rgba(251,243,222,0.35)] flex items-center gap-1">
+                        <Lock size={11} /> storico congelato
+                      </span>
+                    )}
+                  </>
                 )}
               </p>
-              {isAdmin && (
-                <button onClick={() => setEditingEdition(true)} className="flex items-center gap-1 text-xs text-[#BBFF5E] font-semibold">
-                  <Pencil size={13} /> Modifica edizione
-                </button>
-              )}
+              <div className="flex items-center gap-3">
+                {isAdmin && edition.status === "conclusa" && activeType && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        await freezeEdition(edition, activeType);
+                        showToast("Storico ricongelato con i dati attuali.");
+                      } catch (err) {
+                        console.error(err);
+                        showToast("Errore nel ricongelamento.");
+                      }
+                    }}
+                    className="flex items-center gap-1 text-xs text-[#BBFF5E] font-semibold"
+                  >
+                    <RefreshCw size={13} /> Ricongela
+                  </button>
+                )}
+                {isAdmin && (
+                  <button onClick={() => setEditingEdition(true)} className="flex items-center gap-1 text-xs text-[#BBFF5E] font-semibold">
+                    <Pencil size={13} /> Modifica edizione
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
       )}
 
-      {edition && activeType?.hasTeams && <TeamStandings editionId={edition.id} isAdmin={isAdmin} showToast={showToast} />}
+      {edition && activeType?.hasTeams && <TeamStandings edition={edition} isAdmin={isAdmin} showToast={showToast} />}
       {edition && activeType?.hasTeams && (
         <BracketSection edition={edition} isAdmin={isAdmin} showToast={showToast} />
       )}
       {edition && activeType && !activeType.hasTeams && (
-        <FemaleStandings editionId={edition.id} isAdmin={isAdmin} showToast={showToast} />
+        <FemaleStandings edition={edition} isAdmin={isAdmin} showToast={showToast} />
       )}
 
       {toast && (
@@ -365,8 +392,16 @@ function EditEditionForm({
   const save = async () => {
     setSaving(true);
     try {
-      await updateDoc(doc(db, "championshipEditions", edition.id), { typeId, season: season.trim(), status });
-      onDone("Edizione aggiornata.");
+      const newStatus = status;
+      await updateDoc(doc(db, "championshipEditions", edition.id), { typeId, season: season.trim(), status: newStatus });
+      const isNewlyConcluded = newStatus === "conclusa" && edition.status !== "conclusa";
+      if (isNewlyConcluded) {
+        const type = types.find((t) => t.id === typeId);
+        if (type) {
+          await freezeEdition({ ...edition, typeId, season: season.trim(), status: newStatus }, type);
+        }
+      }
+      onDone(isNewlyConcluded ? "Edizione conclusa: classifica, tabellone e vincitore sono stati congelati." : "Edizione aggiornata.");
     } catch (err) {
       console.error(err);
       onDone("Errore nel salvataggio.");
@@ -431,14 +466,15 @@ function EditEditionForm({
 /* =========================== Classifica squadre (con gestione contestuale) =========================== */
 
 function TeamStandings({
-  editionId,
+  edition,
   isAdmin,
   showToast,
 }: {
-  editionId: string;
+  edition: ChampionshipEdition;
   isAdmin: boolean;
   showToast: (msg: string) => void;
 }) {
+  const editionId = edition.id;
   const { data: editionTeams } = useCollection<EditionTeam>(
     "editionTeams",
     [where("editionId", "==", editionId)],
@@ -448,6 +484,10 @@ function TeamStandings({
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [showLive, setShowLive] = useState(false);
+
+  const isFrozen = edition.status === "conclusa" && !!edition.frozenStandings;
 
   const rows = editionTeams
     .map((et) => ({ ...et, team: teams.find((t) => t.id === et.teamId) }))
@@ -461,8 +501,67 @@ function TeamStandings({
 
   const availableTeams = teams.filter((t) => !editionTeams.some((et) => et.teamId === t.id));
 
+  if (isFrozen && !showLive) {
+    const frozenRows = edition.frozenStandings!;
+    return (
+      <div>
+        <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl overflow-hidden">
+          <div className="flex items-center px-3.5 py-2.5 text-xs font-bold text-[rgba(251,243,222,0.58)] border-b border-[rgba(251,243,222,0.08)]">
+            <span className="w-6">#</span>
+            <span className="flex-1">Squadra</span>
+            <span className="w-10 text-center">PG</span>
+            <span className="w-14 text-center">Pt</span>
+          </div>
+          {frozenRows.map((r, i) => (
+            <div key={r.id} className="flex items-center px-3.5 py-2.5 text-[13px] border-b border-[rgba(251,243,222,0.08)] last:border-b-0">
+              <span className="w-6 flex items-center justify-center shrink-0">
+                {i < 3 ? (
+                  <span
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-extrabold"
+                    style={{ background: RANK_COLORS[i].bg, color: RANK_COLORS[i].text }}
+                  >
+                    {i + 1}
+                  </span>
+                ) : (
+                  <span className="text-[rgba(251,243,222,0.35)]">{i + 1}</span>
+                )}
+              </span>
+              <button onClick={() => setSelectedTeamId(r.id)} className="flex-1 text-left font-semibold truncate">
+                {r.name}
+              </button>
+              <span className="w-10 text-center">{r.played ?? "—"}</span>
+              <span className="w-14 text-center">
+                {r.status === "normale" ? (
+                  <span className="font-display text-[15px] text-[#BBFF5E]">{r.points}</span>
+                ) : (
+                  <span className="text-[11px] font-bold text-[#FF9B6B]">
+                    {r.status === "ritirata" ? "Ritirata" : "Squalificata"}
+                  </span>
+                )}
+              </span>
+            </div>
+          ))}
+          {frozenRows.length === 0 && (
+            <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna squadra iscritta.</p>
+          )}
+        </div>
+        {isAdmin && (
+          <button onClick={() => setShowLive(true)} className="mt-2 flex items-center gap-1 text-xs text-[rgba(251,243,222,0.35)]">
+            <Lock size={11} /> Correggi dati e ricongela
+          </button>
+        )}
+        {selectedTeamId && <TeamProfileModal teamId={selectedTeamId} onClose={() => setSelectedTeamId(null)} />}
+      </div>
+    );
+  }
+
   return (
     <div>
+      {isFrozen && isAdmin && (
+        <button onClick={() => setShowLive(false)} className="mb-2 flex items-center gap-1 text-xs text-[#BBFF5E] font-semibold">
+          <Lock size={11} /> Torna alla classifica congelata
+        </button>
+      )}
       <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl overflow-hidden">
         <div className="flex items-center px-3.5 py-2.5 text-xs font-bold text-[rgba(251,243,222,0.58)] border-b border-[rgba(251,243,222,0.08)]">
           <span className="w-6">#</span>
@@ -494,7 +593,12 @@ function TeamStandings({
                   <span className="text-[rgba(251,243,222,0.35)]">{i + 1}</span>
                 )}
               </span>
-              <span className="flex-1 font-semibold">{r.team?.name}</span>
+              <button
+                onClick={() => r.team && setSelectedTeamId(r.team.id)}
+                className="flex-1 text-left font-semibold truncate"
+              >
+                {r.team?.name}
+              </button>
               <span className="w-10 text-center">{r.played}</span>
               <span className="w-14 text-center">
                 {r.status === "normale" ? (
@@ -555,6 +659,71 @@ function TeamStandings({
           )}
         </div>
       )}
+
+      {selectedTeamId && <TeamProfileModal teamId={selectedTeamId} onClose={() => setSelectedTeamId(null)} />}
+    </div>
+  );
+}
+
+/**
+ * Popup con il profilo di una squadra: nome, foto (o iniziali se assente), rosa
+ * giocatori e i titoli vinti (dall'Albo d'oro, sia storici che generati automaticamente).
+ */
+function TeamProfileModal({ teamId, onClose }: { teamId: string; onClose: () => void }) {
+  const { data: teams } = useCollection<Team>("teams");
+  const { data: wins } = useCollection<HistoricalWin>("historicalWins", [where("teamId", "==", teamId)], [teamId]);
+  const { data: types } = useCollection<ChampionshipType>("championshipTypes");
+  const team = teams.find((t) => t.id === teamId);
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-sm bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-4 max-h-[85vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[15px] font-bold">{team?.name ?? "Squadra"}</p>
+          <button onClick={onClose}>
+            <X size={18} className="text-[rgba(251,243,222,0.35)]" />
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3 mb-4">
+          {team?.logoUrl ? (
+            <img src={team.logoUrl} alt={team.name} className="w-14 h-14 rounded-xl object-cover shrink-0" />
+          ) : (
+            <div className="w-14 h-14 rounded-xl shrink-0 flex items-center justify-center bg-[#123008] text-[15px] font-extrabold text-[#BBFF5E]">
+              {(team?.name ?? "?").slice(0, 2).toUpperCase()}
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="text-[11px] uppercase tracking-wider text-[rgba(251,243,222,0.35)] font-bold mb-1">Rosa</p>
+            <p className="text-[13px] text-[rgba(251,243,222,0.85)] leading-snug">
+              {team && team.roster.length > 0 ? team.roster.join(", ") : "Nessun giocatore registrato."}
+            </p>
+          </div>
+        </div>
+
+        <p className="text-[11px] uppercase tracking-wider text-[rgba(251,243,222,0.35)] font-bold mb-2">Titoli vinti</p>
+        {wins.length === 0 ? (
+          <p className="text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessun titolo vinto ancora.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {wins.map((w) => {
+              const t = types.find((x) => x.id === w.typeId);
+              return (
+                <div key={w.id} className="flex items-center gap-2.5 bg-[#123008] rounded-lg px-3 py-2">
+                  <Trophy size={15} className="text-[#F5C842] shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-semibold truncate">{t?.name ?? "Campionato"}</p>
+                    <p className="text-[11px] text-[rgba(251,243,222,0.35)]">{w.season}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -945,14 +1114,15 @@ function EditionTeamEditRow({
 /* =========================== Classifica femminile (con gestione contestuale) =========================== */
 
 function FemaleStandings({
-  editionId,
+  edition,
   isAdmin,
   showToast,
 }: {
-  editionId: string;
+  edition: ChampionshipEdition;
   isAdmin: boolean;
   showToast: (msg: string) => void;
 }) {
+  const editionId = edition.id;
   const { data: participants } = useCollection<FemaleParticipant>(
     "femaleParticipants",
     [where("editionId", "==", editionId)],
@@ -961,6 +1131,9 @@ function FemaleStandings({
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [showLive, setShowLive] = useState(false);
+
+  const isFrozen = edition.status === "conclusa" && !!edition.frozenStandings;
 
   const rows = [...participants].sort((a, b) => {
     const aOut = a.status !== "normale";
@@ -969,8 +1142,62 @@ function FemaleStandings({
     return b.points - a.points;
   });
 
+  if (isFrozen && !showLive) {
+    const frozenRows = edition.frozenStandings!;
+    return (
+      <div>
+        <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl overflow-hidden">
+          <div className="flex items-center px-3.5 py-2.5 text-xs font-bold text-[rgba(251,243,222,0.58)] border-b border-[rgba(251,243,222,0.08)]">
+            <span className="w-6">#</span>
+            <span className="flex-1">Giocatrice</span>
+            <span className="w-14 text-center">Tappe</span>
+            <span className="w-12 text-center">Pt</span>
+          </div>
+          {frozenRows.map((r, i) => (
+            <div key={r.id} className="flex items-center px-3.5 py-2.5 text-[13px] border-b border-[rgba(251,243,222,0.08)] last:border-b-0">
+              <span className="w-6 flex items-center justify-center shrink-0">
+                {i < 3 ? (
+                  <span
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-extrabold"
+                    style={{ background: RANK_COLORS[i].bg, color: RANK_COLORS[i].text }}
+                  >
+                    {i + 1}
+                  </span>
+                ) : (
+                  <span className="text-[rgba(251,243,222,0.35)]">{i + 1}</span>
+                )}
+              </span>
+              <span className="flex-1 font-semibold truncate">{r.name}</span>
+              <span className="w-14 text-center">{r.stages ?? "—"}</span>
+              <span className="w-12 text-center">
+                {r.status === "normale" ? (
+                  <span className="font-display text-[15px] text-[#BBFF5E]">{r.points}</span>
+                ) : (
+                  <span className="text-[11px] font-bold text-[#FF9B6B]">{r.status === "ritirata" ? "Rit." : "Sq."}</span>
+                )}
+              </span>
+            </div>
+          ))}
+          {frozenRows.length === 0 && (
+            <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna giocatrice ancora.</p>
+          )}
+        </div>
+        {isAdmin && (
+          <button onClick={() => setShowLive(true)} className="mt-2 flex items-center gap-1 text-xs text-[rgba(251,243,222,0.35)]">
+            <Lock size={11} /> Correggi dati e ricongela
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div>
+      {isFrozen && isAdmin && (
+        <button onClick={() => setShowLive(false)} className="mb-2 flex items-center gap-1 text-xs text-[#BBFF5E] font-semibold">
+          <Lock size={11} /> Torna alla classifica congelata
+        </button>
+      )}
       <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl overflow-hidden">
         <div className="flex items-center px-3.5 py-2.5 text-xs font-bold text-[rgba(251,243,222,0.58)] border-b border-[rgba(251,243,222,0.08)]">
           <span className="w-6">#</span>
