@@ -8,6 +8,7 @@ import { AlboPage } from "./pages/Albo";
 import { NotifichePage } from "./pages/Notifiche";
 import { LoginPage } from "./pages/Login";
 import { GestionePage } from "./pages/Gestione";
+import { GiornatePage } from "./pages/Giornate";
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
           <Route path="/notifiche" element={<NotifichePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/gestione" element={<GestionePage />} />
+          <Route path="/gestione/edizione/:editionId" element={<GiornatePage />} />
         </Routes>
       </main>
       <BottomNav />
