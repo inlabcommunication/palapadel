@@ -62,7 +62,7 @@ export function ChampionshipTypeManagement({ onDone }: { onDone: (msg: string) =
   return (
     <div className="mt-6">
       <p className="text-[13px] font-bold mb-2">Tipologie di campionato</p>
-      <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl overflow-hidden mb-3">
+      <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl overflow-hidden mb-3">
         {types.map((t) =>
           editingId === t.id ? (
             <EditTypeRow key={t.id} type={t} onCancel={() => setEditingId(null)} onDone={onDone} />
@@ -243,7 +243,7 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
   return (
     <div className="mt-6">
       <p className="text-[13px] font-bold mb-2">Squadre</p>
-      <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl overflow-hidden mb-3 max-h-72 overflow-y-auto">
+      <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl overflow-hidden mb-3 max-h-72 overflow-y-auto">
         {teams.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna squadra ancora.</p>}
         {teams.map((t) =>
           editingId === t.id ? (
