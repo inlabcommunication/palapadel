@@ -6,7 +6,13 @@ import { db } from "../firebase";
 import { confirmDelete } from "../lib/confirmDelete";
 import type { ChampionshipType, HistoricalWin, Team } from "../types";
 import { BADGE_COLORS } from "../types";
-import { Plus, X, Pencil, Trash2 } from "lucide-react";
+import { Plus, X, Pencil, Trash2, Award } from "lucide-react";
+
+const RANK_COLORS = [
+  { bg: "#F5C842", text: "#4A2E00" },
+  { bg: "#D8D8D8", text: "#3A3A3A" },
+  { bg: "#D8A066", text: "#4A2A0A" },
+];
 
 
 export function AlboPage() {
@@ -55,8 +61,11 @@ export function AlboPage() {
   };
 
   return (
-    <div className="p-4">
-      <h2 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE] mb-3">Albo d'oro</h2>
+    <div className="p-4 pb-6">
+      <div className="flex items-center gap-2 mb-3">
+        <Award size={15} className="text-[#BBFF5E]" />
+        <h2 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE]">Albo d'oro</h2>
+      </div>
 
       <div className="flex gap-2 overflow-x-auto pb-2 mb-4">
         {types.map((t) => (
@@ -72,55 +81,66 @@ export function AlboPage() {
         ))}
       </div>
 
-      <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl overflow-hidden mb-3">
+      <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl overflow-hidden mb-3">
         {rows.length === 0 && (
           <p className="px-3.5 py-3 text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessun titolo registrato per questa categoria.</p>
         )}
-        {rows.map((r) => (
-          <div key={r.label} className="px-3.5 py-3 border-b border-[rgba(251,243,222,0.08)] last:border-b-0">
-            <div className="flex items-center justify-between gap-2 mb-1">
-              <p className="font-bold text-sm">{r.label}</p>
-              <span
-                className="text-[10.5px] font-bold px-2 py-1 rounded-full shrink-0"
-                style={{
-                  background: BADGE_COLORS[currentType?.badgeColor ?? "serie-b"].bg,
-                  color: BADGE_COLORS[currentType?.badgeColor ?? "serie-b"].text,
-                }}
-              >
-                {r.seasons.length} {r.seasons.length === 1 ? "titolo" : "titoli"}
-              </span>
+        {rows.map((r, idx) => (
+          <div key={r.label} className="flex gap-3 px-3.5 py-3 border-b border-[rgba(251,243,222,0.08)] last:border-b-0">
+            <div
+              className="flex items-center justify-center w-7 h-7 rounded-full shrink-0 text-[11px] font-extrabold mt-0.5"
+              style={{
+                background: RANK_COLORS[idx]?.bg ?? "rgba(251,243,222,0.08)",
+                color: RANK_COLORS[idx]?.text ?? "rgba(251,243,222,0.58)",
+              }}
+            >
+              {idx + 1}
             </div>
-            <div className="flex flex-col gap-1">
-              {r.wins.map((w) =>
-                editingId === w.id ? (
-                  <EditWinForm
-                    key={w.id}
-                    win={w}
-                    onCancel={() => setEditingId(null)}
-                    onDone={(msg) => {
-                      showToast(msg);
-                      setEditingId(null);
-                    }}
-                  />
-                ) : (
-                  <div key={w.id} className="flex items-center justify-between text-[12.5px] text-[rgba(251,243,222,0.58)] gap-2">
-                    <span>
-                      {w.season}
-                      {w.note && <span className="text-[rgba(251,243,222,0.35)]"> · {w.note}</span>}
-                    </span>
-                    {isAdmin && (
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button onClick={() => setEditingId(w.id)} className="text-[#BBFF5E] font-semibold">
-                          <Pencil size={12} />
-                        </button>
-                        <button onClick={() => remove(w, r.label)} className="text-[#FF6B6B] font-semibold">
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )
-              )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <p className="font-bold text-sm truncate">{r.label}</p>
+                <span
+                  className="text-[10.5px] font-bold px-2 py-1 rounded-full shrink-0"
+                  style={{
+                    background: BADGE_COLORS[currentType?.badgeColor ?? "serie-b"].bg,
+                    color: BADGE_COLORS[currentType?.badgeColor ?? "serie-b"].text,
+                  }}
+                >
+                  {r.seasons.length} {r.seasons.length === 1 ? "titolo" : "titoli"}
+                </span>
+              </div>
+              <div className="flex flex-col gap-1">
+                {r.wins.map((w) =>
+                  editingId === w.id ? (
+                    <EditWinForm
+                      key={w.id}
+                      win={w}
+                      onCancel={() => setEditingId(null)}
+                      onDone={(msg) => {
+                        showToast(msg);
+                        setEditingId(null);
+                      }}
+                    />
+                  ) : (
+                    <div key={w.id} className="flex items-center justify-between text-[12.5px] text-[rgba(251,243,222,0.58)] gap-2">
+                      <span>
+                        {w.season}
+                        {w.note && <span className="text-[rgba(251,243,222,0.35)]"> · {w.note}</span>}
+                      </span>
+                      {isAdmin && (
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button onClick={() => setEditingId(w.id)} className="text-[#BBFF5E] font-semibold">
+                            <Pencil size={12} />
+                          </button>
+                          <button onClick={() => remove(w, r.label)} className="text-[#FF6B6B] font-semibold">
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                )}
+              </div>
             </div>
           </div>
         ))}
