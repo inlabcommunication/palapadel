@@ -25,7 +25,7 @@ export function BottomNav() {
             to={to}
             end={end}
             className={({ isActive }) =>
-              `flex-1 flex flex-col items-center gap-1 py-1 ${isActive ? "text-[#BBFF5E]" : "text-[rgba(251,243,222,0.35)]"}`
+              `flex-1 flex flex-col items-center gap-1 py-1.5 rounded-2xl transition-colors ${isActive ? "text-[#BBFF5E] bg-[#BBFF5E]/10" : "text-[rgba(251,243,222,0.35)]"}`
             }
           >
             {({ isActive }) => (
@@ -40,7 +40,7 @@ export function BottomNav() {
           <NavLink
             to="/gestione"
             className={({ isActive }) =>
-              `flex-1 flex flex-col items-center gap-1 py-1 ${isActive ? "text-[#BBFF5E]" : "text-[rgba(251,243,222,0.35)]"}`
+              `flex-1 flex flex-col items-center gap-1 py-1.5 rounded-2xl transition-colors ${isActive ? "text-[#BBFF5E] bg-[#BBFF5E]/10" : "text-[rgba(251,243,222,0.35)]"}`
             }
           >
             {({ isActive }) => (
