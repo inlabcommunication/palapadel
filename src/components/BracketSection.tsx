@@ -29,6 +29,9 @@ export function BracketSection({
   const { data: teams } = useCollection<Team>("teams");
   const [selectedRoundId, setSelectedRoundId] = useState<string | null>(null);
   const [showNewRound, setShowNewRound] = useState(false);
+  const [showLive, setShowLive] = useState(false);
+
+  const isFrozen = edition.status === "conclusa" && !!edition.frozenBracket;
 
   const sortedRounds = [...rounds].sort((a, b) => a.order - b.order);
   const selectedRound = sortedRounds.find((r) => r.id === selectedRoundId) ?? sortedRounds[0];
@@ -44,6 +47,55 @@ export function BracketSection({
       showToast("Errore nell'operazione.");
     }
   };
+
+  if (isFrozen && !showLive) {
+    return (
+      <div className="mt-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE] flex items-center gap-1.5">
+            <Trophy size={15} /> Tabellone finale
+          </h3>
+          {isAdmin && (
+            <button onClick={() => setShowLive(true)} className="text-xs text-[rgba(251,243,222,0.35)] flex items-center gap-1">
+              Correggi e ricongela
+            </button>
+          )}
+        </div>
+        <div className="flex flex-col gap-4">
+          {edition.frozenBracket!.map((round) => (
+            <div key={round.name}>
+              <p className="text-[12.5px] font-semibold text-[rgba(251,243,222,0.58)] mb-2">{round.name}</p>
+              <div className="flex flex-col gap-2">
+                {round.matches.length === 0 && (
+                  <p className="text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessun incontro in questo turno.</p>
+                )}
+                {round.matches.map((m, idx) => (
+                  <div key={idx} className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
+                    <div className={`flex items-center justify-between rounded-lg px-2 py-1.5 ${m.winnerSide === 1 ? "bg-[rgba(187,255,94,0.08)]" : ""}`}>
+                      <span className={`text-[13.5px] ${m.winnerSide === 1 ? "font-bold text-[#BBFF5E]" : ""}`}>
+                        {m.team1Name ?? "— vuoto —"}
+                      </span>
+                      {m.winnerSide === 1 && <Trophy size={13} className="text-[#BBFF5E]" />}
+                    </div>
+                    <div className="flex items-center justify-center">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-[rgba(251,243,222,0.3)]">vs</span>
+                    </div>
+                    <div className={`flex items-center justify-between rounded-lg px-2 py-1.5 ${m.winnerSide === 2 ? "bg-[rgba(187,255,94,0.08)]" : ""}`}>
+                      <span className={`text-[13.5px] ${m.winnerSide === 2 ? "font-bold text-[#BBFF5E]" : ""}`}>
+                        {m.team2Name ?? "— vuoto —"}
+                      </span>
+                      {m.winnerSide === 2 && <Trophy size={13} className="text-[#BBFF5E]" />}
+                    </div>
+                    {m.score && <p className="font-display text-[15px] tracking-wide text-[#FBF3DE] text-center mt-2">{m.score}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (!edition.bracketEnabled) {
     if (!isAdmin) return null;
@@ -173,11 +225,18 @@ export function BracketSection({
         <h3 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE] flex items-center gap-1.5">
           <Trophy size={15} /> Tabellone finale
         </h3>
-        {isAdmin && (
-          <button onClick={() => toggleBracket(false)} className="text-xs text-[rgba(251,243,222,0.35)]">
-            Disattiva
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {isFrozen && isAdmin && (
+            <button onClick={() => setShowLive(false)} className="text-xs text-[#BBFF5E] font-semibold">
+              Torna al tabellone congelato
+            </button>
+          )}
+          {isAdmin && (
+            <button onClick={() => toggleBracket(false)} className="text-xs text-[rgba(251,243,222,0.35)]">
+              Disattiva
+            </button>
+          )}
+        </div>
       </div>
 
       {sortedRounds.length === 0 ? (
