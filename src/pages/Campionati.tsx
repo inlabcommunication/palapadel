@@ -486,6 +486,8 @@ function TeamStandings({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [showLive, setShowLive] = useState(false);
+  const [recalcPreview, setRecalcPreview] = useState<{ id: string; name: string; from: number; to: number }[] | null>(null);
+  const [recalculating, setRecalculating] = useState(false);
 
   const isFrozen = edition.status === "conclusa" && !!edition.frozenStandings;
 
@@ -498,6 +500,39 @@ function TeamStandings({
       if (b.points !== a.points) return b.points - a.points;
       return a.order - b.order;
     });
+
+  const openRecalcPreview = () => {
+    const changes = rows
+      .map((r) => ({
+        id: r.id,
+        name: r.team?.name ?? "—",
+        from: r.points,
+        to: (r.calculatedPoints ?? r.points) + (r.manualPointsAdjustment ?? 0),
+      }))
+      .filter((c) => c.from !== c.to);
+    if (changes.length === 0) {
+      showToast("La classifica è già aggiornata: nessuna modifica da applicare.");
+      return;
+    }
+    setRecalcPreview(changes);
+  };
+
+  const confirmRecalc = async () => {
+    if (!recalcPreview || recalcPreview.length === 0) return;
+    setRecalculating(true);
+    try {
+      for (const c of recalcPreview) {
+        await updateDoc(doc(db, "editionTeams", c.id), { points: c.to });
+      }
+      showToast("Classifica ricalcolata.");
+      setRecalcPreview(null);
+    } catch (err) {
+      console.error(err);
+      showToast("Errore nel ricalcolo.");
+    } finally {
+      setRecalculating(false);
+    }
+  };
 
   const availableTeams = teams.filter((t) => !editionTeams.some((et) => et.teamId === t.id));
 
@@ -657,6 +692,38 @@ function TeamStandings({
               <Upload size={15} /> Incolla classifica da Excel o Word
             </button>
           )}
+
+          {recalcPreview ? (
+            <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5 w-full">
+              <p className="text-[13px] font-bold mb-2">Ricalcola classifica</p>
+              <div className="flex flex-col gap-1 mb-3 text-[12.5px]">
+                {recalcPreview.map((c) => (
+                  <p key={c.id}>
+                    <strong>{c.name}</strong>: da {c.from} a {c.to} punti
+                  </p>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={confirmRecalc}
+                  disabled={recalculating}
+                  className="flex-1 bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+                >
+                  {recalculating ? "Ricalcolo in corso..." : "Conferma ricalcolo"}
+                </button>
+                <button
+                  onClick={() => setRecalcPreview(null)}
+                  className="flex-1 border border-[rgba(251,243,222,0.18)] rounded-lg py-2.5 text-sm font-semibold"
+                >
+                  Annulla
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={openRecalcPreview} className="flex items-center gap-1.5 text-[13px] font-semibold text-[#BBFF5E]">
+              <RefreshCw size={15} /> Ricalcola classifica
+            </button>
+          )}
         </div>
       )}
 
@@ -782,7 +849,12 @@ function ImportTeamStandings({
     setSaving(true);
     try {
       for (const { row, num1, num2 } of preview.matched) {
-        await updateDoc(doc(db, "editionTeams", row.id), { points: num1, played: num2 });
+        const adjustment = row.manualPointsAdjustment ?? 0;
+        await updateDoc(doc(db, "editionTeams", row.id), {
+          calculatedPoints: num1,
+          points: num1 + adjustment,
+          played: num2,
+        });
       }
       for (const { team, num1, num2 } of preview.toEnroll) {
         const id = `${editionId}_${team.id}`;
@@ -790,6 +862,7 @@ function ImportTeamStandings({
           id,
           editionId,
           teamId: team.id,
+          calculatedPoints: num1,
           points: num1,
           played: num2,
           order: 0,
@@ -803,6 +876,7 @@ function ImportTeamStandings({
           id,
           editionId,
           teamId: teamRef.id,
+          calculatedPoints: num1,
           points: num1,
           played: num2,
           order: 0,
@@ -862,6 +936,15 @@ function ImportTeamStandings({
             <p className="mb-1">
               <strong>{preview.matched.length}</strong> squadre già iscritte verranno aggiornate.
             </p>
+            {preview.matched.some((m) => (m.row.manualPointsAdjustment ?? 0) !== 0) && (
+              <p className="mb-1 text-[#BBFF5E]">
+                Correzioni manuali che verranno mantenute:{" "}
+                {preview.matched
+                  .filter((m) => (m.row.manualPointsAdjustment ?? 0) !== 0)
+                  .map((m) => `${m.row.team?.name} (${m.row.manualPointsAdjustment! > 0 ? "+" : ""}${m.row.manualPointsAdjustment})`)
+                  .join(", ")}
+              </p>
+            )}
             {preview.toEnroll.length > 0 && (
               <p className="mb-1">
                 <strong>{preview.toEnroll.length}</strong> squadre esistenti verranno iscritte a questa
@@ -1033,17 +1116,22 @@ function EditionTeamEditRow({
   onCancel: () => void;
   onDone: (msg: string) => void;
 }) {
-  const [points, setPoints] = useState(String(editionTeam.points));
+  const [calculatedPoints, setCalculatedPoints] = useState(String(editionTeam.calculatedPoints ?? editionTeam.points));
+  const [manualAdjustment, setManualAdjustment] = useState(String(editionTeam.manualPointsAdjustment ?? 0));
   const [played, setPlayed] = useState(String(editionTeam.played));
   const [order, setOrder] = useState(String(editionTeam.order));
   const [status, setStatus] = useState<ParticipationStatus>(editionTeam.status);
   const [saving, setSaving] = useState(false);
 
+  const finalPoints = (Number(calculatedPoints) || 0) + (Number(manualAdjustment) || 0);
+
   const save = async () => {
     setSaving(true);
     try {
       await updateDoc(doc(db, "editionTeams", editionTeam.id), {
-        points: Number(points) || 0,
+        calculatedPoints: Number(calculatedPoints) || 0,
+        manualPointsAdjustment: Number(manualAdjustment) || 0,
+        points: finalPoints,
         played: Number(played) || 0,
         order: Number(order) || 0,
         status,
@@ -1075,12 +1163,34 @@ function EditionTeamEditRow({
       <p className="text-[12.5px] font-semibold mb-2">{label}</p>
       <div className="flex gap-2 mb-2">
         <div className="flex-1">
-          <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">PG</p>
-          <input type="number" value={played} onChange={(e) => setPlayed(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
+          <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Punti calcolati</p>
+          <input
+            type="number"
+            value={calculatedPoints}
+            onChange={(e) => setCalculatedPoints(e.target.value)}
+            className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm"
+          />
         </div>
         <div className="flex-1">
-          <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Punti</p>
-          <input type="number" value={points} onChange={(e) => setPoints(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
+          <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Correzione (+/-)</p>
+          <input
+            type="number"
+            value={manualAdjustment}
+            onChange={(e) => setManualAdjustment(e.target.value)}
+            className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm"
+          />
+        </div>
+      </div>
+      <p className="text-[12px] text-[rgba(251,243,222,0.58)] mb-2">
+        Punti finali: <span className="font-display text-[15px] text-[#BBFF5E]">{finalPoints}</span>
+        {Number(manualAdjustment) !== 0 && (
+          <span className="text-[rgba(251,243,222,0.35)]"> · sopravvive a un futuro import Excel</span>
+        )}
+      </p>
+      <div className="flex gap-2 mb-2">
+        <div className="flex-1">
+          <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">PG</p>
+          <input type="number" value={played} onChange={(e) => setPlayed(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
         </div>
         <div className="w-16">
           <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Ordine</p>
@@ -1132,6 +1242,8 @@ function FemaleStandings({
   const [showImport, setShowImport] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showLive, setShowLive] = useState(false);
+  const [recalcPreview, setRecalcPreview] = useState<{ id: string; name: string; from: number; to: number }[] | null>(null);
+  const [recalculating, setRecalculating] = useState(false);
 
   const isFrozen = edition.status === "conclusa" && !!edition.frozenStandings;
 
@@ -1141,6 +1253,39 @@ function FemaleStandings({
     if (aOut !== bOut) return aOut ? 1 : -1;
     return b.points - a.points;
   });
+
+  const openRecalcPreview = () => {
+    const changes = rows
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        from: r.points,
+        to: (r.calculatedPoints ?? r.points) + (r.manualPointsAdjustment ?? 0),
+      }))
+      .filter((c) => c.from !== c.to);
+    if (changes.length === 0) {
+      showToast("La classifica è già aggiornata: nessuna modifica da applicare.");
+      return;
+    }
+    setRecalcPreview(changes);
+  };
+
+  const confirmRecalc = async () => {
+    if (!recalcPreview || recalcPreview.length === 0) return;
+    setRecalculating(true);
+    try {
+      for (const c of recalcPreview) {
+        await updateDoc(doc(db, "femaleParticipants", c.id), { points: c.to });
+      }
+      showToast("Classifica ricalcolata.");
+      setRecalcPreview(null);
+    } catch (err) {
+      console.error(err);
+      showToast("Errore nel ricalcolo.");
+    } finally {
+      setRecalculating(false);
+    }
+  };
 
   if (isFrozen && !showLive) {
     const frozenRows = edition.frozenStandings!;
@@ -1275,6 +1420,38 @@ function FemaleStandings({
               <Upload size={15} /> Incolla classifica da Excel o Word
             </button>
           )}
+
+          {recalcPreview ? (
+            <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5 w-full">
+              <p className="text-[13px] font-bold mb-2">Ricalcola classifica</p>
+              <div className="flex flex-col gap-1 mb-3 text-[12.5px]">
+                {recalcPreview.map((c) => (
+                  <p key={c.id}>
+                    <strong>{c.name}</strong>: da {c.from} a {c.to} punti
+                  </p>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={confirmRecalc}
+                  disabled={recalculating}
+                  className="flex-1 bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+                >
+                  {recalculating ? "Ricalcolo in corso..." : "Conferma ricalcolo"}
+                </button>
+                <button
+                  onClick={() => setRecalcPreview(null)}
+                  className="flex-1 border border-[rgba(251,243,222,0.18)] rounded-lg py-2.5 text-sm font-semibold"
+                >
+                  Annulla
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={openRecalcPreview} className="flex items-center gap-1.5 text-[13px] font-semibold text-[#BBFF5E]">
+              <RefreshCw size={15} /> Ricalcola classifica
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -1376,12 +1553,18 @@ function ImportFemaleParticipants({
     setSaving(true);
     try {
       for (const { existing: e, num1, num2 } of preview.matched) {
-        await updateDoc(doc(db, "femaleParticipants", e.id), { points: num1, stages: num2 });
+        const adjustment = e.manualPointsAdjustment ?? 0;
+        await updateDoc(doc(db, "femaleParticipants", e.id), {
+          calculatedPoints: num1,
+          points: num1 + adjustment,
+          stages: num2,
+        });
       }
       for (const row of preview.fresh) {
         await addDoc(collection(db, "femaleParticipants"), {
           editionId,
           name: row.name,
+          calculatedPoints: row.num1,
           points: row.num1,
           stages: row.num2,
           status: "normale",
@@ -1437,6 +1620,15 @@ function ImportFemaleParticipants({
               <strong>{preview.matched.length}</strong> giocatrici verranno aggiornate,{" "}
               <strong>{preview.fresh.length}</strong> verranno create come nuove.
             </p>
+            {preview.matched.some((m) => (m.existing.manualPointsAdjustment ?? 0) !== 0) && (
+              <p className="mb-1 text-[#BBFF5E]">
+                Correzioni manuali che verranno mantenute:{" "}
+                {preview.matched
+                  .filter((m) => (m.existing.manualPointsAdjustment ?? 0) !== 0)
+                  .map((m) => `${m.existing.name} (${m.existing.manualPointsAdjustment! > 0 ? "+" : ""}${m.existing.manualPointsAdjustment})`)
+                  .join(", ")}
+              </p>
+            )}
             {preview.missing.length > 0 && (
               <p className="text-[rgba(251,243,222,0.35)]">
                 Non presenti nel testo (manterranno i dati attuali): {preview.missing.map((m) => m.name).join(", ")}
@@ -1477,17 +1669,22 @@ function FemaleEditRow({
   onDone: (msg: string) => void;
 }) {
   const [name, setName] = useState(participant.name);
-  const [points, setPoints] = useState(String(participant.points));
+  const [calculatedPoints, setCalculatedPoints] = useState(String(participant.calculatedPoints ?? participant.points));
+  const [manualAdjustment, setManualAdjustment] = useState(String(participant.manualPointsAdjustment ?? 0));
   const [stages, setStages] = useState(String(participant.stages));
   const [status, setStatus] = useState<ParticipationStatus>(participant.status);
   const [saving, setSaving] = useState(false);
+
+  const finalPoints = (Number(calculatedPoints) || 0) + (Number(manualAdjustment) || 0);
 
   const save = async () => {
     setSaving(true);
     try {
       await updateDoc(doc(db, "femaleParticipants", participant.id), {
         name: name.trim(),
-        points: Number(points) || 0,
+        calculatedPoints: Number(calculatedPoints) || 0,
+        manualPointsAdjustment: Number(manualAdjustment) || 0,
+        points: finalPoints,
         stages: Number(stages) || 0,
         status,
       });
@@ -1526,10 +1723,17 @@ function FemaleEditRow({
           <input type="number" value={stages} onChange={(e) => setStages(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
         </div>
         <div className="flex-1">
-          <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Punti</p>
-          <input type="number" value={points} onChange={(e) => setPoints(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
+          <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Punti calcolati</p>
+          <input type="number" value={calculatedPoints} onChange={(e) => setCalculatedPoints(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
+        </div>
+        <div className="flex-1">
+          <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Correzione (+/-)</p>
+          <input type="number" value={manualAdjustment} onChange={(e) => setManualAdjustment(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
         </div>
       </div>
+      <p className="text-[12px] text-[rgba(251,243,222,0.58)] mb-2">
+        Punti finali: <span className="font-display text-[15px] text-[#BBFF5E]">{finalPoints}</span>
+      </p>
       <select
         value={status}
         onChange={(e) => setStatus(e.target.value as ParticipationStatus)}
