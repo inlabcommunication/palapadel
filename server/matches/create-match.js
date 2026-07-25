@@ -6,6 +6,7 @@
 // Body atteso: { editionId, matchdayId, team1Id, team2Id }
 
 import admin from "firebase-admin";
+import { areSameTeamIds } from "../_lib/matchValidation.js";
 
 function getAdminApp() {
   if (admin.apps.length) return admin.app();
@@ -50,7 +51,7 @@ export default async function handler(req, res) {
     if (!editionId || !matchdayId || !team1Id || !team2Id) {
       throw new HttpError(400, "Dati mancanti");
     }
-    if (team1Id === team2Id) {
+    if (areSameTeamIds(team1Id, team2Id)) {
       throw new HttpError(400, "Le due squadre coincidono.");
     }
 

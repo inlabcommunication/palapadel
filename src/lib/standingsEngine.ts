@@ -1,4 +1,5 @@
 import type { Match } from "../types";
+import { getStandingPointsFromResult as getSharedStandingPointsFromResult } from "../../shared/standingPoints.js";
 
 /**
  * Punti classifica associati a ciascuno dei 4 risultati ammessi. Questa è l'UNICA
@@ -13,13 +14,6 @@ import type { Match } from "../types";
  * 1-2 -> 1 punto alla squadra1, 2 alla squadra2
  * 0-2 -> 0 punti alla squadra1, 3 alla squadra2
  */
-const STANDING_POINTS_TABLE: Record<string, { team1: number; team2: number }> = {
-  "2-0": { team1: 3, team2: 0 },
-  "2-1": { team1: 2, team2: 1 },
-  "1-2": { team1: 1, team2: 2 },
-  "0-2": { team1: 0, team2: 3 },
-};
-
 export interface StandingPoints {
   team1: number;
   team2: number;
@@ -51,8 +45,8 @@ export function compareStandingRows<T extends StandingRow>(a: T, b: T): number {
  * leggere direttamente le cifre della stringa result.
  */
 export function getStandingPointsFromResult(result: string | undefined | null): StandingPoints | null {
-  if (!result) return null;
-  return STANDING_POINTS_TABLE[result] ?? null;
+  const points = getSharedStandingPointsFromResult(result);
+  return points ? { team1: points.team1, team2: points.team2 } : null;
 }
 
 /**

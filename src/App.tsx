@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
 import { TopBar } from "./components/TopBar";
 import { BottomNav } from "./components/BottomNav";
@@ -13,15 +13,23 @@ import { GestionePage } from "./pages/Gestione";
 import { GiornatePage } from "./pages/Giornate";
 import { AnalyticsPage } from "./pages/Analytics";
 import { useAuth } from "./contexts/AuthContext";
-import { trackAnalyticsEvent } from "./lib/analyticsClient";
+import { canTrackAnalytics, configureAnalyticsContext, trackAnalyticsEvent } from "./lib/analyticsClient";
 import { bindForegroundNotificationTracking } from "./lib/notificationClient";
 import { isSuperAdminWorkspacePath } from "./lib/superAdminRoutes";
 
 export default function App() {
   const location = useLocation();
-  const { appUser } = useAuth();
+  const { appUser, loading: authLoading } = useAuth();
+  const sessionTrackedRef = useRef(false);
 
   useEffect(() => {
+    configureAnalyticsContext(appUser?.role ?? null, !authLoading);
+  }, [appUser?.role, authLoading]);
+
+  useEffect(() => {
+    if (!canTrackAnalytics() || sessionTrackedRef.current) return;
+    sessionTrackedRef.current = true;
+
     trackAnalyticsEvent("session_start");
     const onInstalled = () => trackAnalyticsEvent("pwa_installed");
     const onServiceWorkerMessage = (event: MessageEvent) => {
@@ -42,11 +50,12 @@ export default function App() {
       navigator.serviceWorker?.removeEventListener("message", onServiceWorkerMessage);
       unbind?.();
     };
-  }, []);
+  }, [appUser?.role, authLoading]);
 
   useEffect(() => {
+    if (!canTrackAnalytics()) return;
     trackAnalyticsEvent("page_view", { path: location.pathname });
-  }, [location.pathname]);
+  }, [location.pathname, appUser?.role, authLoading]);
 
   const routes = (
     <Routes>

@@ -3,13 +3,8 @@
 // match cannot create duplicate team usage in the target matchday under concurrent edits.
 
 import admin from "firebase-admin";
-
-const STANDING_POINTS = {
-  "2-0": { team1: 3, team2: 0 },
-  "2-1": { team1: 2, team2: 1 },
-  "1-2": { team1: 1, team2: 2 },
-  "0-2": { team1: 0, team2: 3 },
-};
+import { areSameTeamIds } from "../_lib/matchValidation.js";
+import { computeStandingsUpdates } from "../_lib/standingsRules.js";
 
 function getAdminApp() {
   if (admin.apps.length) return admin.app();
@@ -39,42 +34,6 @@ async function verifyCaller(app, req) {
   return { uid: decoded.uid, role: callerData.role };
 }
 
-function computeStandingsUpdates(editionTeamsSnapDocs, allMatches) {
-  const totals = new Map();
-  for (const m of allMatches) {
-    if (m.status !== "conclusa") continue;
-    const pts = STANDING_POINTS[m.result];
-    if (!pts) continue;
-    const t1 = totals.get(m.team1Id) ?? { points: 0, played: 0 };
-    t1.points += pts.team1;
-    t1.played += 1;
-    totals.set(m.team1Id, t1);
-    const t2 = totals.get(m.team2Id) ?? { points: 0, played: 0 };
-    t2.points += pts.team2;
-    t2.played += 1;
-    totals.set(m.team2Id, t2);
-  }
-  return editionTeamsSnapDocs.map((doc) => {
-    const et = doc.data();
-    const matchTotals = totals.get(et.teamId) ?? { points: 0, played: 0 };
-    const manualPoints = et.manualPointsAdjustment ?? 0;
-    const manualPlayed = et.manualPlayedAdjustment ?? 0;
-    const baselinePoints = et.baselinePoints ?? Math.max(0, (et.points ?? 0) - matchTotals.points - manualPoints);
-    const baselinePlayed = et.baselinePlayed ?? Math.max(0, (et.played ?? 0) - matchTotals.played - manualPlayed);
-    return {
-      ref: doc.ref,
-      data: {
-        baselinePoints,
-        baselinePlayed,
-        matchPoints: matchTotals.points,
-        matchPlayed: matchTotals.played,
-        points: baselinePoints + matchTotals.points + manualPoints,
-        played: baselinePlayed + matchTotals.played + manualPlayed,
-      },
-    };
-  });
-}
-
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Metodo non consentito" });
@@ -100,7 +59,7 @@ export default async function handler(req, res) {
       const nextTeam1Id = team1Id ?? before.team1Id;
       const nextTeam2Id = team2Id ?? before.team2Id;
 
-      if (nextTeam1Id === nextTeam2Id) throw new HttpError(400, "Le due squadre coincidono.");
+      if (areSameTeamIds(nextTeam1Id, nextTeam2Id)) throw new HttpError(400, "Le due squadre coincidono.");
 
       const editionRef = db.doc(`championshipEditions/${editionId}`);
       const editionSnap = await t.get(editionRef);

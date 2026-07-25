@@ -1,5 +1,10 @@
 import { getAdminApp, admin } from "../_lib/firebaseAdmin.js";
 import { requirePost, sendError, verifyCaller } from "../_lib/auth.js";
+import {
+  getAnalyticsActorRole,
+  isCountedAnalyticsInstallation,
+  shouldSkipAnalyticsRole,
+} from "../_lib/analyticsPolicy.js";
 
 export default async function handler(req, res) {
   try {
@@ -12,12 +17,15 @@ export default async function handler(req, res) {
     const [dailySnap, installsSnap, recentEventsSnap, notificationSnap] = await Promise.all([
       db.collection("analyticsDaily").orderBy("day", "desc").limit(days).get(),
       db.collection("analyticsInstallations").get(),
-      db.collection("analyticsEvents").orderBy("createdAt", "desc").limit(25).get(),
+      db.collection("analyticsEvents").orderBy("createdAt", "desc").limit(50).get(),
       db.collection("notificationHistory").orderBy("createdAt", "desc").limit(50).get(),
     ]);
 
     const daily = dailySnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    const recentEvents = recentEventsSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const recentEvents = recentEventsSnap.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .filter((event) => !shouldSkipAnalyticsRole(getAnalyticsActorRole(event, event.properties)))
+      .slice(0, 25);
     const notificationHistory = notificationSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     const notificationTotals = notificationHistory.reduce(
       (acc, item) => {
@@ -39,7 +47,7 @@ export default async function handler(req, res) {
         return acc;
       },
       {
-        devices: installsSnap.size,
+        devices: installsSnap.docs.filter((doc) => isCountedAnalyticsInstallation(doc.data())).length,
         eventsTotal: 0,
         sessions: 0,
         installs: 0,

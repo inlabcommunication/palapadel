@@ -9,6 +9,7 @@
 // Body atteso: { op: "add"|"update"|"remove", editionId, ...campi specifici per op }
 
 import admin from "firebase-admin";
+import { computeMatchTotalsForTeam } from "../_lib/standingsRules.js";
 
 function getAdminApp() {
   if (admin.apps.length) return admin.app();
@@ -37,31 +38,6 @@ async function verifyCaller(app, req) {
     throw new HttpError(403, "Solo admin o superAdmin possono modificare la classifica");
   }
   return { uid: decoded.uid, role: callerData.role };
-}
-
-const STANDING_POINTS = {
-  "2-0": { team1: 3, team2: 0 },
-  "2-1": { team1: 2, team2: 1 },
-  "1-2": { team1: 1, team2: 2 },
-  "0-2": { team1: 0, team2: 3 },
-};
-
-function computeMatchTotalsForTeam(matches, teamId) {
-  let points = 0;
-  let played = 0;
-  for (const m of matches) {
-    if (m.status !== "conclusa") continue;
-    const pts = STANDING_POINTS[m.result];
-    if (!pts) continue;
-    if (m.team1Id === teamId) {
-      points += pts.team1;
-      played += 1;
-    } else if (m.team2Id === teamId) {
-      points += pts.team2;
-      played += 1;
-    }
-  }
-  return { points, played };
 }
 
 async function assertEditionHasTeams(db, editionId) {

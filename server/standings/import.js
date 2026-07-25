@@ -23,6 +23,7 @@
 //   più eventuali correzioni manuali già presenti (preservate, mai perse).
 
 import admin from "firebase-admin";
+import { computeMatchTotals } from "../_lib/standingsRules.js";
 
 function getAdminApp() {
   if (admin.apps.length) return admin.app();
@@ -124,31 +125,6 @@ export function normalizeParticipationStatus(value) {
     disqualified: "squalificata",
   };
   return map[normalized] ?? null;
-}
-
-const STANDING_POINTS = {
-  "2-0": { team1: 3, team2: 0 },
-  "2-1": { team1: 2, team2: 1 },
-  "1-2": { team1: 1, team2: 2 },
-  "0-2": { team1: 0, team2: 3 },
-};
-
-function computeMatchTotals(matches) {
-  const totals = new Map();
-  for (const m of matches) {
-    if (m.status !== "conclusa") continue;
-    const pts = STANDING_POINTS[m.result];
-    if (!pts) continue;
-    const t1 = totals.get(m.team1Id) ?? { points: 0, played: 0 };
-    t1.points += pts.team1;
-    t1.played += 1;
-    totals.set(m.team1Id, t1);
-    const t2 = totals.get(m.team2Id) ?? { points: 0, played: 0 };
-    t2.points += pts.team2;
-    t2.played += 1;
-    totals.set(m.team2Id, t2);
-  }
-  return totals;
 }
 
 // =========================== Import SQUADRE (invariato dalle fasi precedenti) ==========

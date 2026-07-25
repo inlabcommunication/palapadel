@@ -1,5 +1,6 @@
 import { postToBackend } from "./backendClient";
 import { getInstallationId } from "./installationId";
+import { shouldTrackAnalyticsForRole, type AnalyticsRole } from "./analyticsPolicy";
 
 export type AnalyticsEventType =
   | "session_start"
@@ -30,12 +31,31 @@ export interface AnalyticsSummary {
   };
 }
 
+let analyticsReady = false;
+let analyticsRole: AnalyticsRole = null;
+
+export function configureAnalyticsContext(role: AnalyticsRole, ready: boolean) {
+  analyticsRole = role ?? null;
+  analyticsReady = ready;
+}
+
+export function canTrackAnalytics() {
+  return shouldTrackAnalyticsForRole(analyticsRole, analyticsReady);
+}
+
 export function trackAnalyticsEvent(eventType: AnalyticsEventType, properties: Record<string, unknown> = {}) {
+  if (!canTrackAnalytics()) return;
+
+  const enrichedProperties = {
+    ...properties,
+    ...(analyticsRole ? { actorRole: analyticsRole } : {}),
+  };
   const body = JSON.stringify({
     installationId: getInstallationId(),
     eventType,
     route: window.location.pathname,
-    properties,
+    properties: enrichedProperties,
+    actorRole: analyticsRole ?? null,
     userAgent: navigator.userAgent,
     standalone: window.matchMedia?.("(display-mode: standalone)").matches ?? false,
     notificationPermission: "Notification" in window ? Notification.permission : "unsupported",

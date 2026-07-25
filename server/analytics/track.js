@@ -1,5 +1,6 @@
 import { getAdminApp, admin } from "../_lib/firebaseAdmin.js";
 import { HttpError, requirePost, sendError } from "../_lib/auth.js";
+import { getAnalyticsActorRole, shouldSkipAnalyticsRole } from "../_lib/analyticsPolicy.js";
 import { isValidInstallationId } from "../_lib/notifications.js";
 
 const ALLOWED_EVENTS = new Set([
@@ -20,25 +21,42 @@ function todayKey(date = new Date()) {
 export default async function handler(req, res) {
   try {
     requirePost(req);
-    const { installationId, eventType, route, properties, userAgent, standalone, notificationPermission } = req.body || {};
+    const body = req.body || {};
+    const { installationId, eventType, route, properties, userAgent, standalone, notificationPermission } = body;
     if (!isValidInstallationId(installationId)) throw new HttpError(400, "installationId non valido");
     if (!ALLOWED_EVENTS.has(eventType)) throw new HttpError(400, "eventType non valido");
 
+    const cleanProperties = properties && typeof properties === "object" ? properties : {};
+    const actorRole = getAnalyticsActorRole(body, cleanProperties);
     const db = admin.firestore(getAdminApp());
     const now = new Date();
     const timestamp = now.toISOString();
+    if (shouldSkipAnalyticsRole(actorRole)) {
+      await db.doc(`analyticsInstallations/${installationId}`).set(
+        {
+          installationId,
+          actorRole,
+          excludedFromAnalytics: true,
+          lastExcludedAt: timestamp,
+        },
+        { merge: true }
+      );
+      res.status(200).json({ ok: true, skipped: true });
+      return;
+    }
+
     const day = todayKey(now);
     const eventRef = db.collection("analyticsEvents").doc();
     const installRef = db.doc(`analyticsInstallations/${installationId}`);
     const dailyRef = db.doc(`analyticsDaily/${day}`);
 
-    const cleanProperties = properties && typeof properties === "object" ? properties : {};
     const event = {
       id: eventRef.id,
       installationId,
       eventType,
       route: typeof route === "string" ? route.slice(0, 160) : null,
       properties: cleanProperties,
+      actorRole,
       userAgent: typeof userAgent === "string" ? userAgent.slice(0, 240) : null,
       standalone: standalone === true,
       notificationPermission: typeof notificationPermission === "string" ? notificationPermission : null,
@@ -68,6 +86,8 @@ export default async function handler(req, res) {
       userAgent: event.userAgent,
       standalone: event.standalone,
       notificationPermission: event.notificationPermission,
+      actorRole,
+      excludedFromAnalytics: false,
     };
     if (!installSnap.exists) installData.firstSeenAt = timestamp;
 
