@@ -6,5 +6,7 @@ export function isSuperAdminWorkspacePath(pathname: string) {
     pathname === "/albo" ||
     pathname === "/notifiche" ||
     pathname === "/analytics"
+    || pathname === "/giornate"
+    || pathname === "/utenti-impostazioni"
   );
 }

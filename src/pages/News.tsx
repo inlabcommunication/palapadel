@@ -7,9 +7,10 @@ import { getPublishedNewsForHome } from "../lib/homePresentation";
 import type { HomeNews } from "../types";
 
 export function NewsPage() {
-  const { data: news, loading } = useCollection<HomeNews>("homeNews", [
+  const newsQuery = useCollection<HomeNews>("homeNews", [
     where("status", "==", "pubblicato"),
   ]);
+  const { data: news, loading, error } = newsQuery;
   const [selectedNews, setSelectedNews] = useState<HomeNews | null>(null);
   const publishedNews = getPublishedNewsForHome(news);
 
@@ -26,9 +27,15 @@ export function NewsPage() {
       </div>
 
       {loading && <NewsEmpty text="Caricamento delle news..." />}
-      {!loading && publishedNews.length === 0 && <NewsEmpty text="Nessuna news pubblicata al momento." />}
+      {!loading && error && (
+        <div className="rounded-lg border border-[rgba(251,243,222,0.12)] p-4">
+          <p className="text-sm">{error.message}</p>
+          <button onClick={newsQuery.retry} className="mt-2 text-sm font-bold text-[#BBFF5E]">Riprova</button>
+        </div>
+      )}
+      {!loading && !error && publishedNews.length === 0 && <NewsEmpty text="Nessuna news pubblicata al momento." />}
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      {!error && <div className="grid gap-3 sm:grid-cols-2">
         {publishedNews.map((item, index) => (
           <article
             key={item.id}
@@ -58,7 +65,7 @@ export function NewsPage() {
             </div>
           </article>
         ))}
-      </div>
+      </div>}
 
       {selectedNews && (
         <div

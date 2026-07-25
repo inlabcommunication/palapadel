@@ -22,11 +22,14 @@ export interface UpdateEntryInput {
   manualPointsAdjustment: number;
   manualPlayedAdjustment: number;
   order: number;
+  operationalNotes?: string;
+  reason: string;
 }
 
 export interface RemoveEntryInput {
   editionId: string;
   editionTeamId: string;
+  reason: string;
 }
 
 export interface RecalculateInput {
@@ -47,6 +50,7 @@ export interface SetTeamStatusInput {
   editionTeamId: string;
   newStatus: "ritirata" | "squalificata" | "normale";
   policy?: 1 | 2 | 3 | 4;
+  reason: string;
 }
 
 export function addEntryToStandings(input: AddEntryInput) {

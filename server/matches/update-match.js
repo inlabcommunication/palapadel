@@ -5,6 +5,8 @@
 import admin from "firebase-admin";
 import { areSameTeamIds } from "../_lib/matchValidation.js";
 import { computeStandingsUpdates } from "../_lib/standingsRules.js";
+import { canEditMatchSchedule, normalizeRole } from "../_lib/roles.js";
+import { documentId, optionalDate, optionalTime, parseBody, z } from "../_lib/validation.js";
 
 function getAdminApp() {
   if (admin.apps.length) return admin.app();
@@ -28,10 +30,10 @@ async function verifyCaller(app, req) {
   if (!callerSnap.exists) throw new HttpError(403, "Utente non registrato");
   const callerData = callerSnap.data();
   if (callerData.disabled) throw new HttpError(403, "Account disattivato");
-  if (!["superadmin", "admin"].includes(callerData.role)) {
+  if (!canEditMatchSchedule(callerData.role)) {
     throw new HttpError(403, "Solo admin o superAdmin possono modificare partite");
   }
-  return { uid: decoded.uid, role: callerData.role };
+  return { uid: decoded.uid, role: normalizeRole(callerData.role) };
 }
 
 export default async function handler(req, res) {
@@ -44,14 +46,20 @@ export default async function handler(req, res) {
     const app = getAdminApp();
     const auth = await verifyCaller(app, req);
     const db = admin.firestore(app);
-    const { matchId, matchdayId, team1Id, team2Id, matchDate, matchTime } = req.body || {};
-    if (!matchId) throw new HttpError(400, "matchId mancante");
-    if (matchDate !== undefined && matchDate !== null && !/^\d{4}-\d{2}-\d{2}$/.test(matchDate)) {
-      throw new HttpError(400, "Data partita non valida.");
-    }
-    if (matchTime !== undefined && matchTime !== null && !/^([01]\d|2[0-3]):[0-5]\d$/.test(matchTime)) {
-      throw new HttpError(400, "Ora partita non valida.");
-    }
+    const { matchId, matchdayId, team1Id, team2Id, matchDate, matchTime, court, notes, status } = parseBody(
+      z.object({
+        matchId: documentId,
+        matchdayId: documentId.optional(),
+        team1Id: documentId.optional(),
+        team2Id: documentId.optional(),
+        matchDate: optionalDate,
+        matchTime: optionalTime,
+        court: z.union([z.string().trim().max(120), z.null()]).optional(),
+        notes: z.union([z.string().trim().max(1000), z.null()]).optional(),
+        status: z.enum(["da_giocare", "conclusa", "rinviata", "annullata"]).optional(),
+      }).strict(),
+      req.body
+    );
 
     const matchRef = db.doc(`matches/${matchId}`);
     const timestamp = new Date().toISOString();
@@ -66,6 +74,12 @@ export default async function handler(req, res) {
       const nextTeam2Id = team2Id ?? before.team2Id;
       const nextMatchDate = matchDate === undefined ? before.matchDate : matchDate || null;
       const nextMatchTime = matchTime === undefined ? before.matchTime : matchTime || null;
+      const nextCourt = court === undefined ? before.court : court || null;
+      const nextNotes = notes === undefined ? before.notes : notes || null;
+      const nextStatus = status ?? before.status;
+      if (nextStatus === "conclusa" && !before.result) {
+        throw new HttpError(400, "Una partita può essere completata soltanto salvando un risultato valido.");
+      }
 
       if (areSameTeamIds(nextTeam1Id, nextTeam2Id)) throw new HttpError(400, "Le due squadre coincidono.");
 
@@ -110,7 +124,16 @@ export default async function handler(req, res) {
       const matchesSnap = await t.get(db.collection("matches").where("editionId", "==", editionId));
       const editionTeamsSnap = await t.get(db.collection("editionTeams").where("editionId", "==", editionId));
       const allMatches = matchesSnap.docs.map((d) =>
-        d.id === matchId ? { ...d.data(), matchdayId: nextMatchdayId, team1Id: nextTeam1Id, team2Id: nextTeam2Id } : d.data()
+        d.id === matchId
+          ? {
+              ...d.data(),
+              matchdayId: nextMatchdayId,
+              team1Id: nextTeam1Id,
+              team2Id: nextTeam2Id,
+              status: nextStatus,
+              result: nextStatus === "conclusa" ? before.result : undefined,
+            }
+          : d.data()
       );
       const standingsUpdates = computeStandingsUpdates(editionTeamsSnap.docs, allMatches);
 
@@ -120,6 +143,10 @@ export default async function handler(req, res) {
         team2Id: nextTeam2Id,
         matchDate: nextMatchDate,
         matchTime: nextMatchTime,
+        court: nextCourt,
+        notes: nextNotes,
+        status: nextStatus,
+        ...(nextStatus !== "conclusa" ? { result: admin.firestore.FieldValue.delete() } : {}),
         updatedAt: timestamp,
         updatedBy: auth.uid,
       });
@@ -129,14 +156,21 @@ export default async function handler(req, res) {
         actor: auth.uid,
         action: "match_updated",
         detail: JSON.stringify({ role: auth.role, editionId, matchId, fromMatchdayId: before.matchdayId, toMatchdayId: nextMatchdayId }),
-        before: { matchdayId: before.matchdayId, team1Id: before.team1Id, team2Id: before.team2Id, status: before.status, result: before.result ?? null, matchDate: before.matchDate ?? null, matchTime: before.matchTime ?? null },
-        after: { matchdayId: nextMatchdayId, team1Id: nextTeam1Id, team2Id: nextTeam2Id, status: before.status, result: before.result ?? null, matchDate: nextMatchDate, matchTime: nextMatchTime },
+        before: { matchdayId: before.matchdayId, team1Id: before.team1Id, team2Id: before.team2Id, status: before.status, result: before.result ?? null, matchDate: before.matchDate ?? null, matchTime: before.matchTime ?? null, court: before.court ?? null, notes: before.notes ?? null },
+        after: { matchdayId: nextMatchdayId, team1Id: nextTeam1Id, team2Id: nextTeam2Id, status: nextStatus, result: nextStatus === "conclusa" ? before.result ?? null : null, matchDate: nextMatchDate, matchTime: nextMatchTime, court: nextCourt, notes: nextNotes },
         timestamp,
       });
     });
 
     res.status(200).json({ ok: true });
   } catch (err) {
+    if (err?.details?.code === "VALIDATION_ERROR") {
+      res.status(400).json({
+        success: false,
+        error: { code: "VALIDATION_ERROR", message: "Dati non validi", fields: err.details.fields ?? {} },
+      });
+      return;
+    }
     if (err instanceof HttpError) {
       res.status(err.status).json({ error: err.message });
       return;

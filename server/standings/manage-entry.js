@@ -1,100 +1,95 @@
-// Funzione serverless (Vercel). Fase 2 — tutte le modifiche strutturali alla classifica
-// (aggiunta squadra, modifica manuale punti/partite/ordine/correzioni, rimozione) passano
-// da qui. Il frontend NON usa più updateDoc/setDoc/deleteDoc direttamente su editionTeams
-// (firestore.rules lo nega comunque a qualunque ruolo, incluso admin/superAdmin).
-//
-// Non gestisce i cambi di stato ritirata/squalificata/riattivata: quelli hanno effetti a
-// cascata sulle partite e vivono in api/standings/set-status.js.
-//
-// Body atteso: { op: "add"|"update"|"remove", editionId, ...campi specifici per op }
-
-import admin from "firebase-admin";
+import { getAdminApp, admin } from "../_lib/firebaseAdmin.js";
+import { HttpError, requirePost, sendError, verifyCaller } from "../_lib/auth.js";
+import { canEditOperationalStandings, canEnrollExistingTeam } from "../_lib/roles.js";
 import { computeMatchTotalsForTeam } from "../_lib/standingsRules.js";
+import { documentId, parseBody, z } from "../_lib/validation.js";
 
-function getAdminApp() {
-  if (admin.apps.length) return admin.app();
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || "{}");
-  return admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-}
-
-class HttpError extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
-
-async function verifyCaller(app, req) {
-  const authHeader = req.headers.authorization || "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!idToken) throw new HttpError(401, "Token mancante");
-  const decoded = await admin.auth(app).verifyIdToken(idToken);
-  const callerSnap = await admin.firestore(app).doc(`users/${decoded.uid}`).get();
-  if (!callerSnap.exists) throw new HttpError(403, "Utente non registrato");
-  const callerData = callerSnap.data();
-  if (callerData.disabled) throw new HttpError(403, "Account disattivato");
-  // Fase 2/7 — solo admin/superAdmin gestiscono manualmente la classifica: mai il resultManager.
-  if (!["superadmin", "admin"].includes(callerData.role)) {
-    throw new HttpError(403, "Solo admin o superAdmin possono modificare la classifica");
-  }
-  return { uid: decoded.uid, role: callerData.role };
-}
+const reason = z.string().trim().min(5, "Inserisci una motivazione").max(500);
+const bodySchema = z.discriminatedUnion("op", [
+  z.object({ op: z.literal("add"), editionId: documentId, teamId: documentId }).strict(),
+  z.object({
+    op: z.literal("add"),
+    editionId: documentId,
+    newTeam: z.object({
+      name: z.string().trim().min(2).max(120),
+      roster: z.array(z.string().trim().min(1).max(120)).min(2).max(6),
+    }).strict(),
+  }).strict(),
+  z.object({
+    op: z.literal("update"),
+    editionId: documentId,
+    editionTeamId: documentId,
+    baselinePoints: z.number().finite(),
+    baselinePlayed: z.number().int().min(0),
+    manualPointsAdjustment: z.number().finite(),
+    manualPlayedAdjustment: z.number().int(),
+    order: z.number().int().min(0),
+    operationalNotes: z.string().trim().max(1000).optional(),
+    reason,
+  }).strict(),
+  z.object({ op: z.literal("remove"), editionId: documentId, editionTeamId: documentId, reason }).strict(),
+]);
 
 async function assertEditionHasTeams(db, editionId) {
   const editionSnap = await db.doc(`championshipEditions/${editionId}`).get();
   if (!editionSnap.exists) throw new HttpError(404, "Edizione non trovata");
   const typeSnap = await db.doc(`championshipTypes/${editionSnap.data().typeId}`).get();
   if (!typeSnap.exists || !typeSnap.data().hasTeams) {
-    throw new HttpError(400, "Il campionato non è a squadre.");
+    throw new HttpError(400, "Il campionato non e a squadre");
   }
   return editionSnap.data();
 }
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    res.status(405).json({ error: "Metodo non consentito" });
-    return;
-  }
-
   try {
+    requirePost(req);
     const app = getAdminApp();
-    const auth = await verifyCaller(app, req);
+    const caller = await verifyCaller(app, req);
+    if (!canEditOperationalStandings(caller.role)) {
+      throw new HttpError(403, "Non hai il permesso di modificare la classifica");
+    }
+    const input = parseBody(bodySchema, req.body);
     const db = admin.firestore(app);
-    const { op, editionId } = req.body || {};
-    if (!op || !editionId) throw new HttpError(400, "Dati mancanti");
-
-    await assertEditionHasTeams(db, editionId);
     const timestamp = new Date().toISOString();
+    const edition = await assertEditionHasTeams(db, input.editionId);
 
-    if (op === "add") {
-      const { teamId, newTeam } = req.body;
-      if (!teamId && !newTeam) throw new HttpError(400, "Specificare teamId oppure newTeam");
+    if (input.op === "add") {
+      if (!canEnrollExistingTeam(caller.role)) {
+        throw new HttpError(403, "Solo Admin e Super Admin possono iscrivere una squadra");
+      }
+      if ("newTeam" in input && caller.role !== "superAdmin") {
+        throw new HttpError(403, "Solo il Super Admin puo creare una nuova squadra");
+      }
 
-      await db.runTransaction(async (t) => {
-        let finalTeamId = teamId;
-        if (newTeam) {
-          if (!newTeam.name || !Array.isArray(newTeam.roster) || newTeam.roster.length < 2 || newTeam.roster.length > 6) {
-            throw new HttpError(400, "Nome squadra e rosa (2-6 giocatori) obbligatori.");
-          }
+      await db.runTransaction(async (transaction) => {
+        let teamId = "teamId" in input ? input.teamId : null;
+        if ("newTeam" in input) {
           const teamRef = db.collection("teams").doc();
-          finalTeamId = teamRef.id;
-          t.set(teamRef, { name: newTeam.name.trim(), roster: newTeam.roster });
+          teamId = teamRef.id;
+          transaction.set(teamRef, {
+            id: teamId,
+            name: input.newTeam.name,
+            roster: input.newTeam.roster,
+            createdAt: timestamp,
+          });
         } else {
-          const teamSnap = await t.get(db.doc(`teams/${teamId}`));
-          if (!teamSnap.exists) throw new HttpError(404, "Squadra non trovata.");
+          const teamSnap = await transaction.get(db.doc(`teams/${teamId}`));
+          if (!teamSnap.exists || teamSnap.data().deletedAt) throw new HttpError(404, "Squadra non disponibile");
+          const compatible = teamSnap.data().compatibleTypeIds;
+          if (Array.isArray(compatible) && !compatible.includes(edition.typeId)) {
+            throw new HttpError(400, "La squadra non e compatibile con questa categoria");
+          }
         }
 
-        const entryId = `${editionId}_${finalTeamId}`;
-        const existingSnap = await t.get(db.doc(`editionTeams/${entryId}`));
-        if (existingSnap.exists) throw new HttpError(400, "Questa squadra è già iscritta a questa edizione.");
-
-        const countSnap = await t.get(db.collection("editionTeams").where("editionId", "==", editionId));
-        const nextOrder = countSnap.size; // Fase 12 — mai order:0 per tutte, progressivo in base all'ordine di iscrizione.
-
-        t.set(db.doc(`editionTeams/${entryId}`), {
-          id: entryId,
-          editionId,
-          teamId: finalTeamId,
+        const entryRef = db.doc(`editionTeams/${input.editionId}_${teamId}`);
+        if ((await transaction.get(entryRef)).exists) throw new HttpError(409, "Squadra gia iscritta");
+        const entriesSnap = await transaction.get(
+          db.collection("editionTeams").where("editionId", "==", input.editionId)
+        );
+        transaction.set(entryRef, {
+          id: entryRef.id,
+          editionId: input.editionId,
+          teamId,
           baselinePoints: 0,
           baselinePlayed: 0,
           matchPoints: 0,
@@ -103,107 +98,81 @@ export default async function handler(req, res) {
           manualPlayedAdjustment: 0,
           points: 0,
           played: 0,
-          order: nextOrder,
+          order: entriesSnap.size,
           status: "normale",
         });
-
-        t.set(db.collection("auditLog").doc(), {
-          actor: auth.uid,
+        transaction.set(db.collection("auditLog").doc(), {
+          actor: caller.uid,
           action: "editionteam_added",
-          detail: JSON.stringify({ role: auth.role, editionId, teamId: finalTeamId }),
+          entity: `editionTeams/${entryRef.id}`,
           before: null,
-          after: { teamId: finalTeamId },
+          after: { editionId: input.editionId, teamId },
+          detail: JSON.stringify({ role: caller.role }),
           timestamp,
         });
       });
-
       res.status(200).json({ ok: true });
       return;
     }
 
-    if (op === "update") {
-      const { editionTeamId, baselinePoints, baselinePlayed, manualPointsAdjustment, manualPlayedAdjustment, order } =
-        req.body;
-      if (!editionTeamId) throw new HttpError(400, "editionTeamId mancante");
-      if ([baselinePoints, baselinePlayed, manualPointsAdjustment, manualPlayedAdjustment, order].some((v) => typeof v !== "number")) {
-        throw new HttpError(400, "baselinePoints/baselinePlayed/manualPointsAdjustment/manualPlayedAdjustment/order devono essere numeri.");
-      }
-
-      await db.runTransaction(async (t) => {
-        const entryRef = db.doc(`editionTeams/${editionTeamId}`);
-        const entrySnap = await t.get(entryRef);
-        if (!entrySnap.exists) throw new HttpError(404, "Voce di classifica non trovata.");
+    if (input.op === "update") {
+      await db.runTransaction(async (transaction) => {
+        const entryRef = db.doc(`editionTeams/${input.editionTeamId}`);
+        const entrySnap = await transaction.get(entryRef);
+        if (!entrySnap.exists) throw new HttpError(404, "Voce di classifica non trovata");
         const before = entrySnap.data();
-        if (before.editionId !== editionId) throw new HttpError(400, "La voce non appartiene a questa edizione.");
-
-        const matchesSnap = await t.get(db.collection("matches").where("editionId", "==", editionId));
-        const matchTotals = computeMatchTotalsForTeam(
-          matchesSnap.docs.map((d) => d.data()),
-          before.teamId
+        if (before.editionId !== input.editionId) throw new HttpError(400, "Edizione non coerente");
+        const matchesSnap = await transaction.get(
+          db.collection("matches").where("editionId", "==", input.editionId)
         );
-
-        const finalPoints = baselinePoints + matchTotals.points + manualPointsAdjustment;
-        const finalPlayed = baselinePlayed + matchTotals.played + manualPlayedAdjustment;
-
-        t.update(entryRef, {
-          baselinePoints,
-          baselinePlayed,
-          matchPoints: matchTotals.points,
-          matchPlayed: matchTotals.played,
-          manualPointsAdjustment,
-          manualPlayedAdjustment,
-          points: finalPoints,
-          played: finalPlayed,
-          order,
-        });
-
-        t.set(db.collection("auditLog").doc(), {
-          actor: auth.uid,
+        const totals = computeMatchTotalsForTeam(matchesSnap.docs.map((doc) => doc.data()), before.teamId);
+        const after = {
+          baselinePoints: input.baselinePoints,
+          baselinePlayed: input.baselinePlayed,
+          matchPoints: totals.points,
+          matchPlayed: totals.played,
+          manualPointsAdjustment: input.manualPointsAdjustment,
+          manualPlayedAdjustment: input.manualPlayedAdjustment,
+          points: input.baselinePoints + totals.points + input.manualPointsAdjustment,
+          played: input.baselinePlayed + totals.played + input.manualPlayedAdjustment,
+          order: input.order,
+          operationalNotes: input.operationalNotes || admin.firestore.FieldValue.delete(),
+        };
+        transaction.update(entryRef, after);
+        transaction.set(db.collection("auditLog").doc(), {
+          actor: caller.uid,
           action: "editionteam_updated",
-          detail: JSON.stringify({ role: auth.role, editionId, editionTeamId }),
-          before: { points: before.points, played: before.played, order: before.order },
-          after: { points: finalPoints, played: finalPlayed, order },
+          entity: `editionTeams/${entryRef.id}`,
+          before,
+          after: { ...before, ...after },
+          detail: JSON.stringify({ role: caller.role, reason: input.reason }),
           timestamp,
         });
       });
-
       res.status(200).json({ ok: true });
       return;
     }
 
-    if (op === "remove") {
-      const { editionTeamId } = req.body;
-      if (!editionTeamId) throw new HttpError(400, "editionTeamId mancante");
-
-      await db.runTransaction(async (t) => {
-        const entryRef = db.doc(`editionTeams/${editionTeamId}`);
-        const entrySnap = await t.get(entryRef);
-        if (!entrySnap.exists) throw new HttpError(404, "Voce di classifica non trovata.");
-        const before = entrySnap.data();
-        if (before.editionId !== editionId) throw new HttpError(400, "La voce non appartiene a questa edizione.");
-
-        t.delete(entryRef);
-        t.set(db.collection("auditLog").doc(), {
-          actor: auth.uid,
-          action: "editionteam_removed",
-          detail: JSON.stringify({ role: auth.role, editionId, editionTeamId }),
-          before: { teamId: before.teamId, points: before.points, played: before.played },
-          after: null,
-          timestamp,
-        });
+    if (caller.role !== "superAdmin") throw new HttpError(403, "Operazione riservata al Super Admin");
+    await db.runTransaction(async (transaction) => {
+      const entryRef = db.doc(`editionTeams/${input.editionTeamId}`);
+      const entrySnap = await transaction.get(entryRef);
+      if (!entrySnap.exists) throw new HttpError(404, "Voce di classifica non trovata");
+      const before = entrySnap.data();
+      if (before.editionId !== input.editionId) throw new HttpError(400, "Edizione non coerente");
+      transaction.delete(entryRef);
+      transaction.set(db.collection("auditLog").doc(), {
+        actor: caller.uid,
+        action: "editionteam_removed",
+        entity: `editionTeams/${entryRef.id}`,
+        before,
+        after: null,
+        detail: JSON.stringify({ role: caller.role, reason: input.reason }),
+        timestamp,
       });
-
-      res.status(200).json({ ok: true });
-      return;
-    }
-
-    throw new HttpError(400, `Operazione "${op}" non riconosciuta.`);
-  } catch (err) {
-    if (err instanceof HttpError) {
-      res.status(err.status).json({ error: err.message });
-      return;
-    }
-    console.error(err);
-    res.status(500).json({ error: "Errore interno nella gestione della classifica" });
+    });
+    res.status(200).json({ ok: true });
+  } catch (error) {
+    sendError(res, error, "Errore interno nella gestione della classifica");
   }
 }

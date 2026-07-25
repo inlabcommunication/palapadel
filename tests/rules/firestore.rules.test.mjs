@@ -53,8 +53,9 @@ async function seedBaseData() {
       createdAt: "2026-01-01",
     });
     await db.doc("championshipTypes/serie-b").set({ id: "serie-b", name: "Serie B", hasTeams: true, badgeColor: "serie-b" });
-    await db.doc("championshipEditions/ed-attiva").set({ id: "ed-attiva", typeId: "serie-b", season: "2025/2026", status: "attiva" });
-    await db.doc("championshipEditions/ed-bozza").set({ id: "ed-bozza", typeId: "serie-b", season: "2026/2027", status: "bozza" });
+    await db.doc("championshipEditions/ed-attiva").set({ id: "ed-attiva", typeId: "serie-b", season: "2025/2026", status: "attiva", isPubliclyVisible: true });
+    await db.doc("championshipEditions/ed-bozza").set({ id: "ed-bozza", typeId: "serie-b", season: "2026/2027", status: "bozza", isPubliclyVisible: false });
+    await db.doc("championshipEditions/ed-nascosta").set({ id: "ed-nascosta", typeId: "serie-b", season: "2024/2025", status: "attiva", isPubliclyVisible: false });
     await db.doc("editionTeams/ed-attiva_t1").set({
       id: "ed-attiva_t1",
       editionId: "ed-attiva",
@@ -87,6 +88,25 @@ test("un utente anonimo NON può leggere un'edizione in bozza", async () => {
   await assertFails(anon.firestore().doc("championshipEditions/ed-bozza").get());
 });
 
+test("un utente anonimo non puo leggere un'edizione attiva ma nascosta", async () => {
+  await seedBaseData();
+  const anon = testEnv.unauthenticatedContext();
+  await assertFails(anon.firestore().doc("championshipEditions/ed-nascosta").get());
+});
+
+test("una news pubblicata ma disattivata non e leggibile dal pubblico", async () => {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.firestore().doc("homeNews/news-disabled").set({
+      title: "News disattivata",
+      body: "Testo",
+      status: "pubblicato",
+      active: false,
+    });
+  });
+  const anon = testEnv.unauthenticatedContext();
+  await assertFails(anon.firestore().doc("homeNews/news-disabled").get());
+});
+
 test("un utente anonimo non può scrivere su editionTeams", async () => {
   await seedBaseData();
   const anon = testEnv.unauthenticatedContext();
@@ -97,6 +117,23 @@ test("un admin autenticato NON può scrivere direttamente su editionTeams (solo 
   await seedBaseData();
   const admin = testEnv.authenticatedContext("admin-uid");
   await assertFails(admin.firestore().doc("editionTeams/ed-attiva_t1").update({ points: 999 }));
+});
+
+test("un admin NON puo modificare campionati, squadre, News o Albo", async () => {
+  await seedBaseData();
+  const admin = testEnv.authenticatedContext("admin-uid");
+  await assertFails(admin.firestore().doc("championshipTypes/serie-b").update({ name: "Serie B modificata" }));
+  await assertFails(admin.firestore().doc("championshipEditions/ed-attiva").update({ season: "2026/2027" }));
+  await assertFails(admin.firestore().doc("teams/t1").set({ name: "Team", roster: [] }));
+  await assertFails(admin.firestore().doc("homeNews/n1").set({ title: "News", body: "Testo", date: "2026-07-25", status: "bozza" }));
+  await assertFails(admin.firestore().doc("historicalWins/w1").set({ typeId: "serie-b", teamId: "t1", season: "2025/2026" }));
+});
+
+test("il superAdmin modifica le tipologie ma usa il backend per le squadre", async () => {
+  await seedBaseData();
+  const superAdmin = testEnv.authenticatedContext("superadmin-uid");
+  await assertFails(superAdmin.firestore().doc("championshipTypes/serie-b").update({ name: "Serie B" }));
+  await assertFails(superAdmin.firestore().doc("teams/t1").set({ name: "Team", roster: [] }));
 });
 
 test("un resultManager NON può scrivere direttamente su editionTeams", async () => {

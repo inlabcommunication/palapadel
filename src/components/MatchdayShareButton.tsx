@@ -46,6 +46,28 @@ export function MatchdayShareButton({ input, showToast }: { input: MatchdayShare
     }
   };
 
+  const downloadAll = () => {
+    images.forEach((_, index) => download(index));
+    showToast("Tutte le immagini della giornata sono state scaricate.");
+  };
+
+  const shareAll = async () => {
+    const files = images.map((image) => new File([image.blob], image.filename, { type: "image/png" }));
+    try {
+      if (files.length > 0 && navigator.canShare?.({ files })) {
+        await navigator.share({ files, title: `Giornata ${input.matchdayNumber} PalaPadel` });
+        return;
+      }
+      downloadAll();
+      showToast("Il dispositivo non supporta la condivisione di più file: tutte le immagini sono state scaricate.");
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      console.error(error);
+      downloadAll();
+      showToast("Condivisione multipla non disponibile: tutte le immagini sono state scaricate.");
+    }
+  };
+
   return (
     <>
       <button type="button" onClick={generate} disabled={busy} className="flex items-center gap-1.5 text-[12.5px] font-bold text-[#BBFF5E] disabled:opacity-50">
@@ -64,8 +86,14 @@ export function MatchdayShareButton({ input, showToast }: { input: MatchdayShare
                 <img src={images[selected].dataUrl} alt={`Giornata ${input.matchdayNumber}`} className="mx-auto aspect-[9/16] max-h-[62dvh] w-auto max-w-full object-contain" />
                 {images.length > 1 && <div className="mt-3 flex justify-center gap-2">{images.map((image, index) => <button key={image.filename} onClick={() => setSelected(index)} className={`h-8 min-w-8 rounded-full ${selected === index ? "bg-lime text-[#081208]" : "bg-[rgba(251,243,222,0.08)]"}`}>{image.page}</button>)}</div>}
                 <div className="mt-4 grid grid-cols-2 gap-2">
-                  <button onClick={() => download()} className="flex items-center justify-center gap-2 rounded-lg bg-lime py-2.5 font-bold text-[#081208]"><Download size={16} /> Scarica</button>
-                  <button onClick={share} className="flex items-center justify-center gap-2 rounded-lg border border-[rgba(251,243,222,0.18)] py-2.5 font-bold"><Share2 size={16} /> Condividi</button>
+                  <button onClick={() => download()} className="flex items-center justify-center gap-2 rounded-lg bg-lime py-2.5 font-bold text-[#081208]"><Download size={16} /> Scarica immagine</button>
+                  <button onClick={share} className="flex items-center justify-center gap-2 rounded-lg border border-[rgba(251,243,222,0.18)] py-2.5 font-bold"><Share2 size={16} /> Condividi immagine</button>
+                  {images.length > 1 && (
+                    <>
+                      <button onClick={downloadAll} className="flex items-center justify-center gap-2 rounded-lg bg-lime py-2.5 font-bold text-[#081208]"><Download size={16} /> Scarica tutte</button>
+                      <button onClick={shareAll} className="flex items-center justify-center gap-2 rounded-lg border border-[rgba(251,243,222,0.18)] py-2.5 font-bold"><Share2 size={16} /> Condividi tutte</button>
+                    </>
+                  )}
                 </div>
               </>
             )}

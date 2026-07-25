@@ -19,8 +19,8 @@ service firebase.storage {
       return isSignedIn() && myUser().disabled != true;
     }
 
-    function isAdminOrAbove() {
-      return isEnabledUser() && (myRole() == 'superadmin' || myRole() == 'admin');
+    function isSuperAdmin() {
+      return isEnabledUser() && myRole() in ['superAdmin', 'superadmin'];
     }
 
     function isValidImage() {
@@ -33,19 +33,39 @@ service firebase.storage {
     }
 
     function publishedHomeNews(newsId) {
-      return firestore.get(/databases/(default)/documents/homeNews/$(newsId)).data.status == 'pubblicato';
+      let news = firestore.get(/databases/(default)/documents/homeNews/$(newsId)).data;
+      return news.status == 'pubblicato' &&
+        news.active != false &&
+        news.deleted != true;
     }
 
     match /teams/{teamId}/team-photo/{fileName} {
       allow read: if true;
-      allow create, update: if isAdminOrAbove() && isValidImage() && isUnderSizeLimit();
-      allow delete: if isAdminOrAbove();
+      allow create, update: if isSuperAdmin() && isValidImage() && isUnderSizeLimit();
+      allow delete: if isSuperAdmin();
+    }
+
+    // Loghi delle tipologie di campionato (Serie B/C, Principianti, Femminile, ecc.):
+    // lettura pubblica (servono per mostrarli nell'interfaccia), caricamento/sostituzione/
+    // eliminazione riservati al Super Admin. Admin e Gestore risultati non possono toccarli.
+    match /branding/championships/{championshipTypeId}/logo/{fileName} {
+      allow read: if true;
+      allow create, update: if isSuperAdmin() && isValidImage() && isUnderSizeLimit();
+      allow delete: if isSuperAdmin();
+    }
+
+    // Logo InLab mostrato in fondo a ogni pagina (footer "Web app creata da InLab"):
+    // stessa politica, lettura pubblica e scrittura solo Super Admin.
+    match /branding/inlab/logo/{fileName} {
+      allow read: if true;
+      allow create, update: if isSuperAdmin() && isValidImage() && isUnderSizeLimit();
+      allow delete: if isSuperAdmin();
     }
 
     match /home-news/{newsId}/cover/{fileName} {
-      allow read: if publishedHomeNews(newsId) || isAdminOrAbove();
-      allow create, update: if isAdminOrAbove() && isValidImage() && isUnderSizeLimit();
-      allow delete: if isAdminOrAbove();
+      allow read: if publishedHomeNews(newsId) || isSuperAdmin();
+      allow create, update: if isSuperAdmin() && isValidImage() && isUnderSizeLimit();
+      allow delete: if isSuperAdmin();
     }
 
     match /{allPaths=**} {

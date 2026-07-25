@@ -2,6 +2,7 @@ import { getAdminApp, admin } from "../_lib/firebaseAdmin.js";
 import { HttpError, requirePost, sendError } from "../_lib/auth.js";
 import { getAnalyticsActorRole, shouldSkipAnalyticsRole } from "../_lib/analyticsPolicy.js";
 import { isValidInstallationId } from "../_lib/notifications.js";
+import { parseBody, z } from "../_lib/validation.js";
 
 const ALLOWED_EVENTS = new Set([
   "session_start",
@@ -21,7 +22,16 @@ function todayKey(date = new Date()) {
 export default async function handler(req, res) {
   try {
     requirePost(req);
-    const body = req.body || {};
+    const body = parseBody(z.object({
+      installationId: z.string().regex(/^[a-zA-Z0-9_-]{16,96}$/),
+      eventType: z.enum(["session_start", "page_view", "pwa_installed", "notification_permission", "notification_subscribed", "notification_received", "notification_opened", "share_standings"]),
+      route: z.string().max(160).nullable().optional(),
+      properties: z.record(z.string(), z.unknown()).optional(),
+      userAgent: z.string().max(240).optional(),
+      standalone: z.boolean().optional(),
+      notificationPermission: z.enum(["default", "granted", "denied", "unsupported"]).optional(),
+      actorRole: z.enum(["superAdmin", "admin", "resultManager"]).nullable().optional(),
+    }).strict(), req.body);
     const { installationId, eventType, route, properties, userAgent, standalone, notificationPermission } = body;
     if (!isValidInstallationId(installationId)) throw new HttpError(400, "installationId non valido");
     if (!ALLOWED_EVENTS.has(eventType)) throw new HttpError(400, "eventType non valido");

@@ -1,12 +1,14 @@
 import { getAdminApp, admin } from "../_lib/firebaseAdmin.js";
 import { requirePost, sendError, verifyCaller } from "../_lib/auth.js";
 import { dispatchNotification } from "../_lib/notificationDispatch.js";
+import { parseBody, z } from "../_lib/validation.js";
 
 export default async function handler(req, res) {
   try {
     requirePost(req);
+    parseBody(z.object({}).strict(), req.body);
     const app = getAdminApp();
-    const caller = await verifyCaller(app, req, ["superadmin"]);
+    const caller = await verifyCaller(app, req, ["superAdmin"]);
     const now = new Date().toISOString();
     const db = admin.firestore(app);
     const [queuedSnap, scheduledSnap] = await Promise.all([

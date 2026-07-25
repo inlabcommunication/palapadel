@@ -1,4 +1,5 @@
 import { admin } from "./firebaseAdmin.js";
+import { normalizeRole } from "./roles.js";
 
 export class HttpError extends Error {
   constructor(status, message, details) {
@@ -23,22 +24,34 @@ export async function verifyCaller(app, req, allowedRoles = []) {
 
   const callerData = callerSnap.data();
   if (callerData.disabled) throw new HttpError(403, "Account disattivato");
-  if (allowedRoles.length > 0 && !allowedRoles.includes(callerData.role)) {
+  const role = normalizeRole(callerData.role);
+  if (!role || (allowedRoles.length > 0 && !allowedRoles.includes(role))) {
     throw new HttpError(403, "Permessi insufficienti");
   }
 
   return {
     uid: decoded.uid,
     username: callerData.username ?? decoded.uid,
-    role: callerData.role,
+    role,
   };
 }
 
 export function sendError(res, err, fallbackMessage) {
   if (err instanceof HttpError) {
-    res.status(err.status).json({ ok: false, error: err.message, details: err.details });
+    if (err.details?.code === "VALIDATION_ERROR") {
+      res.status(err.status).json({
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: err.message,
+          fields: err.details.fields ?? {},
+        },
+      });
+      return;
+    }
+    res.status(err.status).json({ success: false, error: { code: "REQUEST_ERROR", message: err.message } });
     return;
   }
   console.error(err);
-  res.status(500).json({ ok: false, error: fallbackMessage });
+  res.status(500).json({ success: false, error: { code: "INTERNAL_ERROR", message: fallbackMessage } });
 }

@@ -1,9 +1,13 @@
 import summary from "../../server/analytics/summary.js";
 import track from "../../server/analytics/track.js";
+import reset from "../../server/analytics/reset.js";
+import error from "../../server/analytics/error.js";
 
 const handlers = {
   summary,
   track,
+  reset,
+  error,
 };
 
 export default function handler(req, res) {

@@ -43,10 +43,17 @@ export interface CreateMatchInput {
   team2Id: string;
   matchDate?: string;
   matchTime?: string;
+  court?: string;
+  notes?: string;
 }
 
 export interface DeleteMatchInput {
   matchId: string;
+}
+
+export interface CreateMatchdayInput {
+  editionId: string;
+  number: number;
 }
 
 export interface UpdateMatchInput {
@@ -56,6 +63,9 @@ export interface UpdateMatchInput {
   team2Id?: string;
   matchDate?: string | null;
   matchTime?: string | null;
+  court?: string | null;
+  notes?: string | null;
+  status?: "da_giocare" | "conclusa" | "rinviata" | "annullata";
 }
 
 /**
@@ -93,6 +103,10 @@ export function saveMatchdayBulk(input: SaveMatchdayBulkInput) {
  */
 export function createMatch(input: CreateMatchInput) {
   return postToBackend<{ ok: true; matchId: string }>("/api/matches/create-match", input);
+}
+
+export function createMatchday(input: CreateMatchdayInput) {
+  return postToBackend<{ ok: true; matchdayId: string }>("/api/matches/create-matchday", input);
 }
 
 /** Fase 5 — modifica squadre/giornata di una partita con validazioni atomiche lato backend. */

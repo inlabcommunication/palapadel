@@ -18,16 +18,3 @@ export const app: FirebaseApp = getApps().length ? getApp() : initializeApp(fire
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
-
-/**
- * Il Super Amministratore deve poter creare nuovi account senza perdere
- * la propria sessione. createUserWithEmailAndPassword sull'app principale
- * autenticherebbe automaticamente il nuovo utente al posto suo.
- * Soluzione compatibile col piano Spark (nessuna Cloud Function):
- * si usa una seconda istanza "usa e getta" dell'app Firebase solo per
- * la creazione dell'account, poi la si scarta.
- */
-export function getSecondaryAuth() {
-  const secondaryApp = initializeApp(firebaseConfig, `secondary-${Date.now()}`);
-  return getAuth(secondaryApp);
-}

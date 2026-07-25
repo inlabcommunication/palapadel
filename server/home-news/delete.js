@@ -1,5 +1,6 @@
 import { admin, getAdminApp } from "../_lib/firebaseAdmin.js";
 import { HttpError, requirePost, sendError, verifyCaller } from "../_lib/auth.js";
+import { documentId, parseBody, z } from "../_lib/validation.js";
 
 function storagePathFromNews(news) {
   if (news.imageStoragePath) return news.imageStoragePath;
@@ -18,9 +19,8 @@ export default async function handler(req, res) {
   try {
     requirePost(req);
     const app = getAdminApp();
-    const auth = await verifyCaller(app, req, ["admin", "superadmin"]);
-    const newsId = String(req.body?.newsId ?? "").trim();
-    if (!newsId) throw new HttpError(400, "News mancante");
+    const auth = await verifyCaller(app, req, ["superAdmin"]);
+    const { newsId } = parseBody(z.object({ newsId: documentId }).strict(), req.body);
 
     const db = admin.firestore(app);
     const newsRef = db.doc(`homeNews/${newsId}`);

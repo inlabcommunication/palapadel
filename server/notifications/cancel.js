@@ -1,13 +1,13 @@
 import { getAdminApp, admin } from "../_lib/firebaseAdmin.js";
 import { HttpError, requirePost, sendError, verifyCaller } from "../_lib/auth.js";
+import { documentId, parseBody, z } from "../_lib/validation.js";
 
 export default async function handler(req, res) {
   try {
     requirePost(req);
     const app = getAdminApp();
-    const caller = await verifyCaller(app, req, ["superadmin"]);
-    const draftId = typeof req.body?.draftId === "string" ? req.body.draftId : "";
-    if (!draftId) throw new HttpError(400, "draftId mancante");
+    const caller = await verifyCaller(app, req, ["superAdmin"]);
+    const { draftId } = parseBody(z.object({ draftId: documentId }).strict(), req.body);
 
     const now = new Date().toISOString();
     const db = admin.firestore(app);

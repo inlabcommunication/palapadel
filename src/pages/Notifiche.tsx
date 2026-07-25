@@ -8,6 +8,7 @@ import {
   createNotificationDraft,
   defaultUserNotificationPrefs,
   getNotificationHistory,
+  getNotificationDiagnostics,
   getNotificationSettings,
   NOTIFICATION_LABELS,
   NOTIFICATION_MODE_LABELS,
@@ -20,6 +21,7 @@ import {
   sendNotification,
   type NotificationEventInput,
   type NotificationHistoryEntry,
+  type NotificationDiagnostics,
   type NotificationMode,
   type NotificationSettings,
   type NotificationType,
@@ -62,7 +64,7 @@ export function NotifichePage() {
   const [enabled, setEnabled] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [permission, setPermission] = useState(permissionLabel());
-  const isSuperAdmin = appUser?.role === "superadmin";
+  const isSuperAdmin = appUser?.role === "superAdmin";
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -169,6 +171,8 @@ function SuperAdminNotificationsPanel({ showToast }: { showToast: (msg: string) 
   });
   const [scheduledAt, setScheduledAt] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
+  const [diagnostics, setDiagnostics] = useState<NotificationDiagnostics | null>(null);
+  const [checkingDiagnostics, setCheckingDiagnostics] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -187,6 +191,33 @@ function SuperAdminNotificationsPanel({ showToast }: { showToast: (msg: string) 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const runDiagnostics = async () => {
+    setCheckingDiagnostics(true);
+    try {
+      const response = await getNotificationDiagnostics();
+      setDiagnostics(response.diagnostics);
+    } catch (err) {
+      console.error(err);
+      setDiagnostics({
+        status: "Errore Firebase",
+        firebaseAdmin: "Errore Firebase",
+        serverCredentials: "Configurazione incompleta",
+        vapidKey: "Configurazione incompleta",
+        serviceWorker: "Configurazione incompleta",
+        endpoint: "Errore Firebase",
+        settings: "Configurazione incompleta",
+        registeredDevices: 0,
+        enabledDevices: 0,
+        validTokens: 0,
+        recentFailures: 0,
+        recentSuccesses: 0,
+        message: "Impossibile completare la diagnostica.",
+      });
+    } finally {
+      setCheckingDiagnostics(false);
+    }
+  };
 
   const updateMode = (type: NotificationType, mode: NotificationMode) => {
     setSettings((current) => ({ ...current, typeModes: { ...current.typeModes, [type]: mode } }));
@@ -264,6 +295,29 @@ function SuperAdminNotificationsPanel({ showToast }: { showToast: (msg: string) 
 
   return (
     <div className="flex flex-col gap-4">
+      <section className="rounded-xl border border-[rgba(251,243,222,0.10)] bg-[#0A0B08] p-3.5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase text-[rgba(251,243,222,0.58)]">Diagnostica</p>
+            {diagnostics && <p className="mt-1 text-sm font-bold text-[#BBFF5E]">{diagnostics.status}</p>}
+          </div>
+          <button onClick={runDiagnostics} disabled={checkingDiagnostics}
+            className="rounded-lg border border-[rgba(251,243,222,0.18)] px-3 py-2 text-xs font-bold disabled:opacity-50">
+            {checkingDiagnostics ? "Verifica..." : "Verifica configurazione notifiche"}
+          </button>
+        </div>
+        {diagnostics && (
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+            <DiagnosticLine label="Firebase Admin" value={diagnostics.firebaseAdmin} />
+            <DiagnosticLine label="Credenziali server" value={diagnostics.serverCredentials} />
+            <DiagnosticLine label="VAPID key" value={diagnostics.vapidKey} />
+            <DiagnosticLine label="Service worker" value={diagnostics.serviceWorker} />
+            <DiagnosticLine label="Dispositivi abilitati" value={String(diagnostics.enabledDevices)} />
+            <DiagnosticLine label="Token validi" value={String(diagnostics.validTokens)} />
+            {diagnostics.message && <p className="col-span-2 rounded-lg bg-[rgba(255,155,107,0.10)] p-2 text-[#FFB38B]">{diagnostics.message}</p>}
+          </div>
+        )}
+      </section>
       <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5">
         <div className="flex items-center justify-between mb-3">
           <p className="text-[12px] uppercase tracking-wider font-bold text-[rgba(251,243,222,0.58)]">Centro notifiche</p>
@@ -305,7 +359,7 @@ function SuperAdminNotificationsPanel({ showToast }: { showToast: (msg: string) 
 
         {editions.length > 0 && (
           <div className="border-t border-[rgba(251,243,222,0.08)] pt-3 mb-3">
-            <p className="text-[11px] uppercase tracking-wider font-bold text-[rgba(251,243,222,0.35)] mb-2">Edizioni</p>
+            <p className="text-[11px] uppercase tracking-wider font-bold text-[rgba(251,243,222,0.50)] mb-2">Edizioni</p>
             <div className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
               {editions.map((edition) => (
                 <div key={edition.id} className="bg-[#123008] rounded-lg p-2.5">
@@ -410,15 +464,15 @@ function SuperAdminNotificationsPanel({ showToast }: { showToast: (msg: string) 
           Storico
         </p>
         {history.length === 0 ? (
-          <p className="px-3.5 py-3 text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna notifica ancora.</p>
+          <p className="px-3.5 py-3 text-[12.5px] text-[rgba(251,243,222,0.50)]">Nessuna notifica ancora.</p>
         ) : (
           history.map((item) => (
             <div key={item.id} className="px-3.5 py-2.5 text-[12.5px] border-b border-[rgba(251,243,222,0.08)] last:border-b-0">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-semibold truncate">{item.payload?.title ?? NOTIFICATION_LABELS[item.eventType]}</span>
-                <span className="text-[11px] text-[rgba(251,243,222,0.35)]">{item.status}</span>
+                <span className="text-[11px] text-[rgba(251,243,222,0.50)]">{item.status}</span>
               </div>
-              <p className="text-[11px] text-[rgba(251,243,222,0.35)] mt-1">
+              <p className="text-[11px] text-[rgba(251,243,222,0.50)] mt-1">
                 {item.sentAt ?? item.scheduledAt ?? item.createdAt ?? ""} · OK {item.successCount ?? 0} · KO {item.failureCount ?? 0}
               </p>
             </div>
@@ -427,4 +481,8 @@ function SuperAdminNotificationsPanel({ showToast }: { showToast: (msg: string) 
       </div>
     </div>
   );
+}
+
+function DiagnosticLine({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-lg bg-[rgba(251,243,222,0.05)] p-2"><span className="block text-[rgba(251,243,222,0.50)]">{label}</span><strong>{value}</strong></div>;
 }

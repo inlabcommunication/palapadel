@@ -23,7 +23,28 @@
 //   più eventuali correzioni manuali già presenti (preservate, mai perse).
 
 import admin from "firebase-admin";
+import { roleAllowed } from "../_lib/roles.js";
 import { computeMatchTotals } from "../_lib/standingsRules.js";
+import { documentId, parseBody, z } from "../_lib/validation.js";
+
+const importRow = z.union([
+  z.object({
+    name: z.string().trim().min(1).max(120), points: z.number().finite(), played: z.number().int().min(0),
+    linkedTeamId: documentId.optional(), createNewTeam: z.boolean().optional(),
+  }).strict(),
+  z.object({
+    name: z.string().trim().min(1).max(120), points: z.number().finite(), stages: z.number().int().min(0),
+    note: z.string().max(500).optional(), linkedParticipantId: documentId.optional(), createNew: z.boolean().optional(),
+  }).strict(),
+]);
+const importSchema = z.object({
+  editionId: documentId,
+  mode: z.number().int().min(1).max(3),
+  rows: z.array(importRow).min(1).max(500),
+  mode2Choice: z.enum(["A", "B"]).optional(),
+  mode2ThresholdMatchdayNumber: z.number().int().positive().optional(),
+  mode2AbsentPolicy: z.enum(["keep", "retire", "remove"]).optional(),
+}).strict();
 
 function getAdminApp() {
   if (admin.apps.length) return admin.app();
@@ -48,7 +69,7 @@ async function verifyCaller(app, req) {
   if (!callerSnap.exists) throw new HttpError(403, "Utente non registrato");
   const callerData = callerSnap.data();
   if (callerData.disabled) throw new HttpError(403, "Account disattivato");
-  if (!["superadmin", "admin"].includes(callerData.role)) {
+  if (!roleAllowed(callerData.role, ["superAdmin"])) {
     throw new HttpError(403, "Solo admin o superAdmin possono importare la classifica");
   }
   return { uid: decoded.uid, role: callerData.role };
@@ -489,7 +510,7 @@ export default async function handler(req, res) {
     const auth = await verifyCaller(app, req);
     const db = admin.firestore(app);
 
-    const body = req.body || {};
+    const body = parseBody(importSchema, req.body);
     const { editionId, mode, rows } = body;
     if (!editionId || !mode || !Array.isArray(rows) || rows.length === 0) {
       throw new HttpError(400, "Dati mancanti");
@@ -506,6 +527,10 @@ export default async function handler(req, res) {
 
     res.status(200).json({ ok: true, ...result });
   } catch (err) {
+    if (err?.details?.code === "VALIDATION_ERROR") {
+      res.status(err.status ?? 400).json({ success: false, error: { code: "VALIDATION_ERROR", message: err.message, fields: err.details.fields ?? {} } });
+      return;
+    }
     if (err instanceof HttpError) {
       res.status(err.status).json({ error: err.message, details: err.details });
       return;

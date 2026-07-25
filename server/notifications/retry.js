@@ -1,13 +1,13 @@
 import { getAdminApp, admin } from "../_lib/firebaseAdmin.js";
 import { HttpError, requirePost, sendError, verifyCaller } from "../_lib/auth.js";
+import { documentId, parseBody, z } from "../_lib/validation.js";
 
 export default async function handler(req, res) {
   try {
     requirePost(req);
     const app = getAdminApp();
-    const caller = await verifyCaller(app, req, ["superadmin"]);
-    const historyId = typeof req.body?.historyId === "string" ? req.body.historyId : "";
-    if (!historyId) throw new HttpError(400, "historyId mancante");
+    const caller = await verifyCaller(app, req, ["superAdmin"]);
+    const { historyId } = parseBody(z.object({ historyId: documentId }).strict(), req.body);
 
     const db = admin.firestore(app);
     const historySnap = await db.doc(`notificationHistory/${historyId}`).get();

@@ -1,35 +1,41 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, deleteField, doc, setDoc, updateDoc, where } from "firebase/firestore";
+import { collection, doc, where } from "firebase/firestore";
 import { ImageUploadField } from "../components/ImageUploadField";
 import { useCollection } from "../hooks/useCollection";
+import { useObjectUrl } from "../hooks/useObjectUrl";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase";
 import { confirmDelete } from "../lib/confirmDelete";
+import { getImageErrorMessage } from "../lib/imageFilePolicy";
 import { deleteHomeNewsImage, getNewsExcerpt, getNewsImageAlt, uploadHomeNewsImage } from "../lib/homeNewsImageUpload";
 import { getPublishedNewsForHome, HOME_NEWS_SUBTITLE, HOME_NEWS_TITLE } from "../lib/homePresentation";
 import { notifyNotificationEvent } from "../lib/notificationClient";
-import { deleteHomeNews as deleteHomeNewsRecord } from "../lib/homeNewsApi";
+import { deleteHomeNews as deleteHomeNewsRecord, removeHomeNewsImage, saveHomeNews } from "../lib/homeNewsApi";
+import type { PublicSettings } from "../lib/publicSettingsApi";
 import type { ChampionshipEdition, ChampionshipType, ContentStatus, HomeNews, Matchday } from "../types";
 import { BADGE_COLORS } from "../types";
+import { TypeBadge } from "../components/TypeBadge";
 import { ChevronRight, AlertCircle, Plus, X, Pencil, Trash2, Trophy, Megaphone, CalendarDays, Newspaper } from "lucide-react";
 
 export function HomePage() {
   const navigate = useNavigate();
   const { appUser } = useAuth();
-  const isAdmin = appUser?.role === "admin" || appUser?.role === "superadmin";
+  const isAdmin = appUser?.role === "superAdmin";
 
   const { data: types } = useCollection<ChampionshipType>("championshipTypes");
   const { data: editions, loading } = useCollection<ChampionshipEdition>(
     "championshipEditions",
-    isAdmin ? [] : [where("status", "in", ["attiva", "conclusa"])],
+    isAdmin ? [] : [where("status", "in", ["attiva", "conclusa"]), where("isPubliclyVisible", "==", true)],
     [isAdmin]
   );
-  const { data: news } = useCollection<HomeNews>(
+  const { data: news, loading: newsLoading } = useCollection<HomeNews>(
     "homeNews",
     isAdmin ? [] : [where("status", "==", "pubblicato")],
     [isAdmin]
   );
+  const { data: publicSettings } = useCollection<PublicSettings>("publicSettings");
+  const globalSettings = publicSettings.find((item) => item.id === "global");
 
   const [showNewsForm, setShowNewsForm] = useState(false);
   const [editingNewsId, setEditingNewsId] = useState<string | null>(null);
@@ -40,9 +46,12 @@ export function HomePage() {
     setTimeout(() => setToast(null), 2500);
   };
 
-  const active = editions.filter((e) => e.status === "attiva");
+  const visibleEditions = editions
+    .filter((edition) => isAdmin || edition.isPubliclyVisible !== false)
+    .sort((a, b) => (a.displayOrder ?? Number.MAX_SAFE_INTEGER) - (b.displayOrder ?? Number.MAX_SAFE_INTEGER));
+  const active = visibleEditions.filter((e) => e.status === "attiva");
   const concluded = editions
-    .filter((e) => e.status === "conclusa")
+    .filter((e) => e.status === "conclusa" && (isAdmin || e.isPubliclyVisible !== false))
     .sort((a, b) => (a.season < b.season ? 1 : -1))
     .slice(0, 3);
 
@@ -70,6 +79,11 @@ export function HomePage() {
 
   return (
     <div className="p-4 pb-6">
+      {globalSettings?.publicNoticeEnabled && globalSettings.publicNotice && (
+        <div role="status" className="mb-4 rounded-lg border border-[rgba(187,255,94,0.28)] bg-[#0A0B08] px-4 py-3 text-sm text-[#FBF3DE]">
+          {globalSettings.publicNotice}
+        </div>
+      )}
       <div className="relative overflow-hidden rounded-2xl mb-8 px-5 py-6 bg-gradient-to-br from-[#1F4A15] via-[#123008] to-[#0A0B08]">
         <img src="/logo.png" alt="" className="absolute -right-8 -top-8 w-40 h-40 object-contain opacity-20 pointer-events-none" />
         <div className="relative">
@@ -110,7 +124,9 @@ export function HomePage() {
         />
       )}
 
-      {publishedNews.length === 0 ? (
+      {newsLoading ? (
+        <EmptyHint text="Caricamento comunicazioni..." />
+      ) : publishedNews.length === 0 ? (
         <EmptyHint text="Nessuna comunicazione pubblicata." />
       ) : (
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)]">
@@ -203,6 +219,7 @@ export function HomePage() {
             edition={ed}
             type={typeById(ed.typeId)}
             onOpen={() => navigate(`/campionati/${ed.id}`)}
+            onOpenCalendar={() => navigate(`/campionati/${ed.id}?tab=calendar`)}
           />
         ))}
       </div>
@@ -374,12 +391,14 @@ function NewsForm({ onDone }: { onDone: (msg: string) => void }) {
       if (imageFile) {
         uploadedImage = await uploadHomeNewsImage(newsRef.id, imageFile);
       }
-      await setDoc(newsRef, {
+      await saveHomeNews({
+        operation: "create",
+        newsId: newsRef.id,
         title: title.trim(),
         body: body.trim(),
         date: new Date().toISOString(),
         status,
-        ...(category.trim() ? { category: category.trim() } : {}),
+        category: category.trim() || undefined,
         ...(uploadedImage
           ? {
               imageUrl: uploadedImage.url,
@@ -523,26 +542,25 @@ function EditNewsForm({
     setImageError(null);
     let uploadedImage: Awaited<ReturnType<typeof uploadHomeNewsImage>> | null = null;
     try {
-      const updates: Record<string, unknown> = {
+      const updates = {
+        operation: "update" as const,
+        newsId: news.id,
         title: title.trim(),
         body: body.trim(),
-        category: category.trim(),
+        category: category.trim() || undefined,
         status,
+        imageAlt: news.imageUrl ? getNewsImageAlt(title, imageAlt) : imageAlt.trim() || null,
+        imageUrl: undefined as string | undefined,
+        imageStoragePath: undefined as string | undefined,
       };
       if (imageFile) {
         uploadedImage = await uploadHomeNewsImage(news.id, imageFile);
         updates.imageUrl = uploadedImage.url;
         updates.imageStoragePath = uploadedImage.storagePath;
         updates.imageAlt = getNewsImageAlt(title, imageAlt);
-      } else if (news.imageUrl) {
-        updates.imageAlt = getNewsImageAlt(title, imageAlt);
-      } else if (imageAlt.trim()) {
-        updates.imageAlt = imageAlt.trim();
-      } else {
-        updates.imageAlt = deleteField();
       }
 
-      await updateDoc(doc(db, "homeNews", news.id), updates);
+      await saveHomeNews(updates);
       const previousImage = news.imageStoragePath ?? news.imageUrl;
       if (uploadedImage && previousImage) await deleteHomeNewsImage(previousImage);
       if (status === "pubblicato" && news.status !== "pubblicato") {
@@ -579,12 +597,7 @@ function EditNewsForm({
     setDeletingImage(true);
     setImageError(null);
     try {
-      await updateDoc(doc(db, "homeNews", news.id), {
-        imageUrl: deleteField(),
-        imageStoragePath: deleteField(),
-        imageAlt: deleteField(),
-      });
-      await deleteHomeNewsImage(news.imageStoragePath ?? news.imageUrl);
+      await removeHomeNewsImage(news.id);
       onDone("Immagine eliminata.");
     } catch (err) {
       console.error(err);
@@ -707,20 +720,6 @@ function PreviewMeta({ news }: { news: HomeNews }) {
   );
 }
 
-function useObjectUrl(file: File | null) {
-  const [url, setUrl] = useState("");
-  useEffect(() => {
-    if (!file) {
-      setUrl("");
-      return;
-    }
-    const nextUrl = URL.createObjectURL(file);
-    setUrl(nextUrl);
-    return () => URL.revokeObjectURL(nextUrl);
-  }, [file]);
-  return url;
-}
-
 function buildPreviewNews({
   id,
   title,
@@ -752,19 +751,16 @@ function buildPreviewNews({
   };
 }
 
-function getImageErrorMessage(err: unknown, fallback: string) {
-  if (err instanceof Error && err.message) return `${fallback} ${err.message}`;
-  return fallback;
-}
-
 function ChampionshipCard({
   edition,
   type,
   onOpen,
+  onOpenCalendar,
 }: {
   edition: ChampionshipEdition;
   type?: ChampionshipType;
   onOpen: () => void;
+  onOpenCalendar: () => void;
 }) {
   const badge = BADGE_COLORS[type?.badgeColor ?? "serie-b"];
   const { data: matchdays } = useCollection<Matchday>("matchdays", [where("editionId", "==", edition.id)], [edition.id]);
@@ -774,14 +770,17 @@ function ChampionshipCard({
     <div className="relative text-left bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl pl-4 pr-4 py-3.5 w-full overflow-hidden">
       <span className="absolute left-0 top-0 bottom-0 w-1" style={{ background: badge.text }} aria-hidden="true" />
       <div className="flex justify-between items-start gap-3">
-        <div className="min-w-0">
-          <p className="text-[11px] uppercase tracking-wider font-bold" style={{ color: badge.text }}>
-            {type?.name ?? "Campionato"}
-          </p>
-          <p className="font-bold text-[17px] truncate mt-1">{edition.season}</p>
-          <p className="text-[12.5px] text-[rgba(251,243,222,0.58)] mt-1">
-            Ultima giornata: {latestMatchday ? `${latestMatchday}a` : "non ancora creata"}
-          </p>
+        <div className="min-w-0 flex items-start gap-2.5">
+          <TypeBadge type={type} variant="card" className="mt-0.5" />
+          <div className="min-w-0">
+            <p className="text-[11px] uppercase tracking-wider font-bold" style={{ color: badge.text }}>
+              {type?.name ?? "Campionato"}
+            </p>
+            <p className="font-bold text-[17px] truncate mt-1">{edition.season}</p>
+            <p className="text-[12.5px] text-[rgba(251,243,222,0.58)] mt-1">
+              Ultima giornata: {latestMatchday ? `${latestMatchday}a` : "non ancora creata"}
+            </p>
+          </div>
         </div>
         <span className="text-[10.5px] font-bold px-2 py-1 rounded-full shrink-0" style={{ background: badge.bg, color: badge.text }}>
           {edition.status === "conclusa" ? "conclusa" : "attiva"}
@@ -791,7 +790,7 @@ function ChampionshipCard({
         <button onClick={onOpen} className="bg-lime text-[#081208] rounded-lg py-2 text-[12px] font-bold">
           Classifica
         </button>
-        <button onClick={onOpen} className="border border-[rgba(251,243,222,0.18)] rounded-lg py-2 text-[12px] font-semibold flex items-center justify-center gap-1">
+        <button onClick={onOpenCalendar} className="border border-[rgba(251,243,222,0.18)] rounded-lg py-2 text-[12px] font-semibold flex items-center justify-center gap-1">
           <CalendarDays size={13} /> Calendario
         </button>
       </div>
@@ -805,7 +804,7 @@ function SectionTitle({ children, className = "" }: { children: React.ReactNode;
 
 function EmptyHint({ text }: { text: string }) {
   return (
-    <div className="text-[12.5px] text-[rgba(251,243,222,0.35)] py-3 flex items-center">
+    <div className="text-[12.5px] text-[rgba(251,243,222,0.50)] py-3 flex items-center">
       <AlertCircle size={14} className="mr-1.5 shrink-0" />
       {text}
     </div>

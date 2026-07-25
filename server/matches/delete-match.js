@@ -6,6 +6,8 @@
 
 import admin from "firebase-admin";
 import { computeStandingsUpdates } from "../_lib/standingsRules.js";
+import { normalizeRole, roleAllowed } from "../_lib/roles.js";
+import { documentId, parseBody, z } from "../_lib/validation.js";
 
 function getAdminApp() {
   if (admin.apps.length) return admin.app();
@@ -29,10 +31,10 @@ async function verifyCaller(app, req) {
   if (!callerSnap.exists) throw new HttpError(403, "Utente non registrato");
   const callerData = callerSnap.data();
   if (callerData.disabled) throw new HttpError(403, "Account disattivato");
-  if (!["superadmin", "admin"].includes(callerData.role)) {
+  if (!roleAllowed(callerData.role, ["superAdmin", "admin"])) {
     throw new HttpError(403, "Solo admin o superAdmin possono eliminare partite");
   }
-  return { uid: decoded.uid, role: callerData.role };
+  return { uid: decoded.uid, role: normalizeRole(callerData.role) };
 }
 
 export default async function handler(req, res) {
@@ -45,8 +47,7 @@ export default async function handler(req, res) {
     const app = getAdminApp();
     const auth = await verifyCaller(app, req);
 
-    const { matchId } = req.body || {};
-    if (!matchId) throw new HttpError(400, "matchId mancante");
+    const { matchId } = parseBody(z.object({ matchId: documentId }).strict(), req.body);
 
     const db = admin.firestore(app);
     const matchRef = db.doc(`matches/${matchId}`);
@@ -79,6 +80,10 @@ export default async function handler(req, res) {
 
     res.status(200).json({ ok: true });
   } catch (err) {
+    if (err?.details?.code === "VALIDATION_ERROR") {
+      res.status(err.status ?? 400).json({ success: false, error: { code: "VALIDATION_ERROR", message: err.message, fields: err.details.fields ?? {} } });
+      return;
+    }
     if (err instanceof HttpError) {
       res.status(err.status).json({ error: err.message });
       return;

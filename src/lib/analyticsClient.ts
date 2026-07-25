@@ -80,3 +80,9 @@ export function trackAnalyticsEvent(eventType: AnalyticsEventType, properties: R
 export function getAnalyticsSummary(days = 30) {
   return postToBackend<AnalyticsSummary>("/api/analytics/summary", { days });
 }
+
+export function resetAnalytics() {
+  return postToBackend<{ ok: true; deleted: Record<string, number> }>("/api/analytics/reset", {
+    confirmation: "RESET_ANALYTICS",
+  });
+}

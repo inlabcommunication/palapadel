@@ -1,10 +1,20 @@
 import { useState } from "react";
-import { addDoc, collection, deleteDoc, deleteField, doc, updateDoc, where } from "firebase/firestore";
+import { where } from "firebase/firestore";
 import { useCollection } from "../hooks/useCollection";
-import { db } from "../firebase";
 import { confirmDelete } from "../lib/confirmDelete";
 import type { BracketMatch, BracketRound, ChampionshipEdition, Team } from "../types";
 import { Plus, X, Pencil, Trash2, ChevronUp, ChevronDown, Trophy, Wand2 } from "lucide-react";
+import {
+  createBracketMatch,
+  createBracketRound,
+  deleteBracketMatch,
+  deleteBracketRound,
+  generateBracketRound,
+  moveBracketRound,
+  renameBracketRound,
+  toggleBracket as toggleBracketViaApi,
+  updateBracketMatch,
+} from "../lib/bracketAdminApi";
 
 
 export function BracketSection({
@@ -40,7 +50,7 @@ export function BracketSection({
 
   const toggleBracket = async (enabled: boolean) => {
     try {
-      await updateDoc(doc(db, "championshipEditions", edition.id), { bracketEnabled: enabled });
+      await toggleBracketViaApi(edition.id, enabled);
       showToast(enabled ? "Tabellone attivato." : "Tabellone disattivato.");
     } catch (err) {
       console.error(err);
@@ -56,7 +66,7 @@ export function BracketSection({
             <Trophy size={15} /> Tabellone finale
           </h3>
           {isAdmin && (
-            <button onClick={() => setShowLive(true)} className="text-xs text-[rgba(251,243,222,0.35)] flex items-center gap-1">
+            <button onClick={() => setShowLive(true)} className="text-xs text-[rgba(251,243,222,0.50)] flex items-center gap-1">
               Correggi e ricongela
             </button>
           )}
@@ -67,7 +77,7 @@ export function BracketSection({
               <p className="text-[12.5px] font-semibold text-[rgba(251,243,222,0.58)] mb-2">{round.name}</p>
               <div className="flex flex-col gap-2">
                 {round.matches.length === 0 && (
-                  <p className="text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessun incontro in questo turno.</p>
+                  <p className="text-[12.5px] text-[rgba(251,243,222,0.50)]">Nessun incontro in questo turno.</p>
                 )}
                 {round.matches.map((m, idx) => (
                   <div key={idx} className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
@@ -120,12 +130,8 @@ export function BracketSection({
     if (!name.trim()) return;
     try {
       const nextOrder = sortedRounds.length > 0 ? Math.max(...sortedRounds.map((r) => r.order)) + 1 : 0;
-      const ref = await addDoc(collection(db, "bracketRounds"), {
-        editionId: edition.id,
-        name: name.trim(),
-        order: nextOrder,
-      });
-      setSelectedRoundId(ref.id);
+      const response = await createBracketRound(edition.id, name.trim(), nextOrder);
+      setSelectedRoundId(response.id);
       setShowNewRound(false);
       showToast("Turno creato.");
     } catch (err) {
@@ -139,8 +145,7 @@ export function BracketSection({
     const swapWith = sortedRounds[idx + direction];
     if (!swapWith) return;
     try {
-      await updateDoc(doc(db, "bracketRounds", round.id), { order: swapWith.order });
-      await updateDoc(doc(db, "bracketRounds", swapWith.id), { order: round.order });
+      await moveBracketRound(edition.id, round.id, swapWith.order, swapWith.id, round.order);
     } catch (err) {
       console.error(err);
       showToast("Errore nello spostamento.");
@@ -150,7 +155,7 @@ export function BracketSection({
   const renameRound = async (round: BracketRound, name: string) => {
     if (!name.trim()) return;
     try {
-      await updateDoc(doc(db, "bracketRounds", round.id), { name: name.trim() });
+      await renameBracketRound(edition.id, round.id, name.trim());
       showToast("Turno rinominato.");
     } catch (err) {
       console.error(err);
@@ -161,7 +166,7 @@ export function BracketSection({
   const removeRound = async (round: BracketRound) => {
     if (!confirmDelete(round.name)) return;
     try {
-      await deleteDoc(doc(db, "bracketRounds", round.id));
+      await deleteBracketRound(edition.id, round.id);
       if (selectedRoundId === round.id) setSelectedRoundId(null);
       showToast("Turno eliminato (gli incontri al suo interno restano ma non sono più visibili: eliminali se non servono più).");
     } catch (err) {
@@ -196,21 +201,14 @@ export function BracketSection({
     }
 
     try {
-      for (const m of nextRoundMatches) {
-        await deleteDoc(doc(db, "bracketMatches", m.id));
-      }
+      const generated = [];
       let order = 0;
       for (let i = 0; i < currentMatches.length; i += 2) {
         const winnerA = currentMatches[i]?.winnerTeamId;
         const winnerB = currentMatches[i + 1]?.winnerTeamId;
-        await addDoc(collection(db, "bracketMatches"), {
-          editionId: edition.id,
-          roundId: nextRound.id,
-          order: order++,
-          ...(winnerA ? { team1Id: winnerA } : {}),
-          ...(winnerB ? { team2Id: winnerB } : {}),
-        });
+        generated.push({ order: order++, ...(winnerA ? { team1Id: winnerA } : {}), ...(winnerB ? { team2Id: winnerB } : {}) });
       }
+      await generateBracketRound(edition.id, nextRound.id, generated);
       setSelectedRoundId(nextRound.id);
       showToast(`"${nextRound.name}" generato automaticamente dai vincitori di "${selectedRound.name}".`);
     } catch (err) {
@@ -232,7 +230,7 @@ export function BracketSection({
             </button>
           )}
           {isAdmin && (
-            <button onClick={() => toggleBracket(false)} className="text-xs text-[rgba(251,243,222,0.35)]">
+            <button onClick={() => toggleBracket(false)} className="text-xs text-[rgba(251,243,222,0.50)]">
               Disattiva
             </button>
           )}
@@ -240,7 +238,7 @@ export function BracketSection({
       </div>
 
       {sortedRounds.length === 0 ? (
-        <p className="text-[12.5px] text-[rgba(251,243,222,0.35)] mb-2">Nessun turno creato ancora.</p>
+        <p className="text-[12.5px] text-[rgba(251,243,222,0.50)] mb-2">Nessun turno creato ancora.</p>
       ) : (
         <div className="flex gap-2 overflow-x-auto pb-2 mb-3">
           {sortedRounds.map((r) => (
@@ -301,7 +299,7 @@ function NewRoundForm({ onCreate, onCancel }: { onCreate: (name: string) => void
     <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Nuovo turno</p>
-        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
+        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.50)]" /></button>
       </div>
       <input
         placeholder="Nome turno (es. Ottavi, Quarti, Semifinale, Finale, Spareggio...)"
@@ -355,13 +353,7 @@ function RoundDetail({
   const createMatch = async (team1Id: string, team2Id: string) => {
     try {
       const nextOrder = sortedMatches.length > 0 ? Math.max(...sortedMatches.map((m) => m.order)) + 1 : 0;
-      await addDoc(collection(db, "bracketMatches"), {
-        editionId: round.editionId,
-        roundId: round.id,
-        order: nextOrder,
-        ...(team1Id ? { team1Id } : {}),
-        ...(team2Id ? { team2Id } : {}),
-      });
+      await createBracketMatch(round.editionId, round.id, nextOrder, { team1Id: team1Id || null, team2Id: team2Id || null });
       setShowNewMatch(false);
       showToast("Incontro aggiunto.");
     } catch (err) {
@@ -373,7 +365,7 @@ function RoundDetail({
   const removeMatch = async (match: BracketMatch) => {
     if (!confirmDelete(`${teamName(match.team1Id)} vs ${teamName(match.team2Id)}`)) return;
     try {
-      await deleteDoc(doc(db, "bracketMatches", match.id));
+      await deleteBracketMatch(round.editionId, match.id);
       showToast("Incontro eliminato.");
     } catch (err) {
       console.error(err);
@@ -426,7 +418,7 @@ function RoundDetail({
 
       <div className="flex flex-col gap-2">
         {sortedMatches.length === 0 && (
-          <p className="text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessun incontro in questo turno ancora.</p>
+          <p className="text-[12.5px] text-[rgba(251,243,222,0.50)]">Nessun incontro in questo turno ancora.</p>
         )}
         {sortedMatches.map((m) =>
           editingMatchId === m.id ? (
@@ -504,7 +496,7 @@ function NewMatchForm({
     <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Nuovo incontro</p>
-        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
+        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.50)]" /></button>
       </div>
       <select value={team1Id} onChange={(e) => setTeam1Id(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2">
         <option value="">— vuoto (slot in attesa) —</option>
@@ -545,11 +537,11 @@ function EditMatchForm({
   const save = async () => {
     setSaving(true);
     try {
-      await updateDoc(doc(db, "bracketMatches", match.id), {
-        team1Id: team1Id || deleteField(),
-        team2Id: team2Id || deleteField(),
-        score: score.trim() || deleteField(),
-        winnerTeamId: winner || deleteField(),
+      await updateBracketMatch(match.editionId, match.id, {
+        team1Id: team1Id || null,
+        team2Id: team2Id || null,
+        score: score.trim(),
+        winnerTeamId: winner || null,
       });
       onDone("Incontro aggiornato.");
     } catch (err) {
@@ -580,7 +572,7 @@ function EditMatchForm({
         onChange={(e) => setScore(e.target.value)}
         className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm mb-2"
       />
-      <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Squadra vincente</p>
+      <p className="text-[11px] text-[rgba(251,243,222,0.50)] mb-1">Squadra vincente</p>
       <select value={winner} onChange={(e) => setWinner(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2">
         <option value="">Non ancora deciso</option>
         {team1Id && <option value={team1Id}>{teams.find((t) => t.id === team1Id)?.name}</option>}

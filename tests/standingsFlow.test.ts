@@ -74,13 +74,14 @@ test("una voce con risultato non valido viene ignorata dal calcolo dei totali (n
 // --- Fase 7/17.8-17.12: permessi distinti per ruolo -----------------------------------
 
 test("superadmin ha tutti i permessi", () => {
-  const p = derivePermissions("superadmin");
+  const p = derivePermissions("superAdmin");
   assert.equal(p.isSuperAdmin, true);
   assert.equal(p.isAdmin, true);
   assert.equal(p.canCreateMatches, true);
   assert.equal(p.canDeleteMatches, true);
   assert.equal(p.canEditResults, true);
   assert.equal(p.canManageMatchdays, true);
+  assert.equal(p.canCreateHomeNewsDraft, true);
 });
 
 test("admin può creare/eliminare partite e giornate, correggere risultati", () => {
@@ -90,10 +91,11 @@ test("admin può creare/eliminare partite e giornate, correggere risultati", () 
   assert.equal(p.canDeleteMatches, true);
   assert.equal(p.canEditResults, true);
   assert.equal(p.canManageMatchdays, true);
+  assert.equal(p.canCreateHomeNewsDraft, false);
 });
 
 test("il resultManager può modificare i risultati ma non creare o eliminare partite/giornate", () => {
-  const p = derivePermissions("gestore");
+  const p = derivePermissions("resultManager");
   assert.equal(p.isResultManager, true);
   assert.equal(p.canEditResults, true);
   assert.equal(p.canCreateMatches, false);

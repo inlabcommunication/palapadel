@@ -3,6 +3,7 @@ import deleteMatch from "../../server/matches/delete-match.js";
 import saveBulk from "../../server/matches/save-bulk.js";
 import saveResult from "../../server/matches/save-result.js";
 import updateMatch from "../../server/matches/update-match.js";
+import createMatchday from "../../server/matches/create-matchday.js";
 
 const handlers = {
   "create-match": createMatch,
@@ -10,6 +11,7 @@ const handlers = {
   "save-bulk": saveBulk,
   "save-result": saveResult,
   "update-match": updateMatch,
+  "create-matchday": createMatchday,
 };
 
 export default function handler(req, res) {

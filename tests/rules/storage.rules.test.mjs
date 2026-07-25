@@ -46,6 +46,7 @@ beforeEach(async () => {
     await ctx.firestore().doc("users/disabled-admin-uid").set({ uid: "disabled-admin-uid", role: "admin", disabled: true });
     await ctx.firestore().doc("homeNews/news-pub").set({ title: "Pubblica", body: "Testo", status: "pubblicato", date: "2026-07-25" });
     await ctx.firestore().doc("homeNews/news-draft").set({ title: "Bozza", body: "Testo", status: "bozza", date: "2026-07-25" });
+    await ctx.firestore().doc("homeNews/news-disabled").set({ title: "Disattivata", body: "Testo", status: "pubblicato", active: false });
   });
 });
 
@@ -57,9 +58,9 @@ test("il pubblico può leggere una foto squadra", async () => {
   await assertSucceeds(anon.storage().ref("teams/t1/team-photo/photo.jpg").getDownloadURL());
 });
 
-test("un admin può caricare una foto squadra JPEG valida sotto il limite di dimensione", async () => {
+test("un admin NON puo caricare una foto squadra JPEG", async () => {
   const admin = testEnv.authenticatedContext("admin-uid");
-  await assertSucceeds(
+  await assertFails(
     admin.storage().ref("teams/t1/team-photo/photo.jpg").put(TINY_JPEG, { contentType: "image/jpeg" })
   );
 });
@@ -77,7 +78,7 @@ test("un admin puo eliminare una foto squadra esistente", async () => {
     await ctx.storage().ref("teams/t1/team-photo/photo.jpg").put(TINY_JPEG, { contentType: "image/jpeg" });
   });
   const admin = testEnv.authenticatedContext("admin-uid");
-  await assertSucceeds(admin.storage().ref("teams/t1/team-photo/photo.jpg").delete());
+  await assertFails(admin.storage().ref("teams/t1/team-photo/photo.jpg").delete());
 });
 test("un resultManager NON può caricare una foto squadra", async () => {
   const gestore = testEnv.authenticatedContext("gestore-uid");
@@ -109,10 +110,18 @@ test("il pubblico NON puo leggere l'immagine di una news in bozza", async () => 
   await assertFails(anon.storage().ref("home-news/news-draft/cover/cover.jpg").getDownloadURL());
 });
 
-test("admin e superAdmin possono caricare immagini news valide", async () => {
+test("il pubblico NON puo leggere l'immagine di una news disattivata", async () => {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.storage().ref("home-news/news-disabled/cover/cover.jpg").put(TINY_JPEG, { contentType: "image/jpeg" });
+  });
+  const anon = testEnv.unauthenticatedContext();
+  await assertFails(anon.storage().ref("home-news/news-disabled/cover/cover.jpg").getDownloadURL());
+});
+
+test("solo il superAdmin puo caricare immagini news valide", async () => {
   const admin = testEnv.authenticatedContext("admin-uid");
   const superAdmin = testEnv.authenticatedContext("superadmin-uid");
-  await assertSucceeds(
+  await assertFails(
     admin.storage().ref("home-news/news-pub/cover/admin.jpg").put(TINY_JPEG, { contentType: "image/jpeg" })
   );
   await assertSucceeds(
@@ -147,5 +156,66 @@ test("un file oltre 5 MB viene rifiutato anche per l'admin", async () => {
   const oversized = Buffer.alloc(5 * 1024 * 1024 + 1024, 1);
   await assertFails(
     admin.storage().ref("teams/t1/team-photo/big.jpg").put(oversized, { contentType: "image/jpeg" })
+  );
+});
+
+test("il pubblico puo leggere il logo di una tipologia di campionato", async () => {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.storage().ref("branding/championships/serie-b/logo/logo.png").put(TINY_JPEG, { contentType: "image/png" });
+  });
+  const anon = testEnv.unauthenticatedContext();
+  await assertSucceeds(anon.storage().ref("branding/championships/serie-b/logo/logo.png").getDownloadURL());
+});
+
+test("solo il superAdmin puo caricare il logo di una tipologia di campionato", async () => {
+  const admin = testEnv.authenticatedContext("admin-uid");
+  const gestore = testEnv.authenticatedContext("gestore-uid");
+  const superAdmin = testEnv.authenticatedContext("superadmin-uid");
+  await assertFails(
+    admin.storage().ref("branding/championships/serie-b/logo/admin.png").put(TINY_JPEG, { contentType: "image/png" })
+  );
+  await assertFails(
+    gestore.storage().ref("branding/championships/serie-b/logo/gestore.png").put(TINY_JPEG, { contentType: "image/png" })
+  );
+  await assertSucceeds(
+    superAdmin.storage().ref("branding/championships/serie-b/logo/super.webp").put(TINY_JPEG, { contentType: "image/webp" })
+  );
+});
+
+test("un admin disabled NON puo caricare o eliminare il logo di una tipologia", async () => {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.storage().ref("branding/championships/serie-b/logo/logo.png").put(TINY_JPEG, { contentType: "image/png" });
+  });
+  const disabledAdmin = testEnv.authenticatedContext("disabled-admin-uid");
+  await assertFails(
+    disabledAdmin.storage().ref("branding/championships/serie-b/logo/logo2.png").put(TINY_JPEG, { contentType: "image/png" })
+  );
+  await assertFails(disabledAdmin.storage().ref("branding/championships/serie-b/logo/logo.png").delete());
+});
+
+test("il logo di una tipologia rifiuta MIME non validi e file oltre 5 MB", async () => {
+  const superAdmin = testEnv.authenticatedContext("superadmin-uid");
+  const oversized = Buffer.alloc(5 * 1024 * 1024 + 1024, 1);
+  await assertFails(
+    superAdmin.storage().ref("branding/championships/serie-b/logo/doc.pdf").put(TINY_JPEG, { contentType: "application/pdf" })
+  );
+  await assertFails(
+    superAdmin.storage().ref("branding/championships/serie-b/logo/big.png").put(oversized, { contentType: "image/png" })
+  );
+});
+
+test("il pubblico puo leggere il logo InLab, ma solo il superAdmin puo caricarlo", async () => {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.storage().ref("branding/inlab/logo/logo.png").put(TINY_JPEG, { contentType: "image/png" });
+  });
+  const anon = testEnv.unauthenticatedContext();
+  const admin = testEnv.authenticatedContext("admin-uid");
+  const superAdmin = testEnv.authenticatedContext("superadmin-uid");
+  await assertSucceeds(anon.storage().ref("branding/inlab/logo/logo.png").getDownloadURL());
+  await assertFails(
+    admin.storage().ref("branding/inlab/logo/admin.png").put(TINY_JPEG, { contentType: "image/png" })
+  );
+  await assertSucceeds(
+    superAdmin.storage().ref("branding/inlab/logo/super.png").put(TINY_JPEG, { contentType: "image/png" })
   );
 });

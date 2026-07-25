@@ -1,16 +1,22 @@
 import { getAdminApp } from "../_lib/firebaseAdmin.js";
 import { requirePost, sendError, verifyCaller } from "../_lib/auth.js";
 import { enqueueNotificationEvent } from "../_lib/notificationEvents.js";
+import { notificationEventSchema, parseBody, z } from "../_lib/validation.js";
 
 export default async function handler(req, res) {
   try {
     requirePost(req);
     const app = getAdminApp();
-    const caller = await verifyCaller(app, req, ["superadmin"]);
-    const notification = await enqueueNotificationEvent(app, req.body?.event, {
+    const caller = await verifyCaller(app, req, ["superAdmin"]);
+    const input = parseBody(z.object({
+      event: notificationEventSchema,
+      idempotencyKey: z.string().trim().min(1).max(120).optional(),
+      sourceRef: z.string().trim().min(1).max(300).optional(),
+    }).strict(), req.body);
+    const notification = await enqueueNotificationEvent(app, input.event, {
       createdBy: caller.uid,
-      idempotencyKey: typeof req.body?.idempotencyKey === "string" ? req.body.idempotencyKey : undefined,
-      sourceRef: typeof req.body?.sourceRef === "string" ? req.body.sourceRef : undefined,
+      idempotencyKey: input.idempotencyKey,
+      sourceRef: input.sourceRef,
     });
     res.status(200).json({ ok: true, notification });
   } catch (err) {

@@ -19,6 +19,8 @@ import admin from "firebase-admin";
 import { normalizeMatchChange, RESULT_VALUES } from "../_lib/matchStatus.js";
 import { enqueueNotificationEvent } from "../_lib/notificationEvents.js";
 import { computeStandingsUpdates } from "../_lib/standingsRules.js";
+import { normalizeRole, roleAllowed } from "../_lib/roles.js";
+import { documentId, parseBody, z } from "../_lib/validation.js";
 
 function getAdminApp() {
   if (admin.apps.length) return admin.app();
@@ -45,10 +47,10 @@ async function verifyCaller(app, req) {
   const callerData = callerSnap.data();
   if (callerData.disabled) throw new HttpError(403, "Account disattivato");
   const role = callerData.role;
-  if (!["superadmin", "admin", "gestore"].includes(role)) {
+  if (!roleAllowed(role, ["superAdmin", "admin", "resultManager"])) {
     throw new HttpError(403, "Permessi insufficienti");
   }
-  return { uid: decoded.uid, role };
+  return { uid: decoded.uid, role: normalizeRole(role) };
 }
 
 export default async function handler(req, res) {
@@ -63,8 +65,10 @@ export default async function handler(req, res) {
       throw err instanceof HttpError ? err : new HttpError(401, "Token non valido");
     });
 
-    const { matchId, result, status } = req.body || {};
-    if (!matchId) throw new HttpError(400, "matchId mancante");
+    const { matchId, result, status } = parseBody(z.union([
+      z.object({ matchId: documentId, result: z.enum(["2-0", "2-1", "1-2", "0-2"]) }).strict(),
+      z.object({ matchId: documentId, status: z.enum(["rinviata", "annullata", "da_giocare"]) }).strict(),
+    ]), req.body);
 
     const normalized = normalizeMatchChange({ result, status });
     if (!normalized.ok) {
@@ -98,7 +102,7 @@ export default async function handler(req, res) {
       // Fase 2 — il resultManager non può operare su edizioni concluse, nascoste o in
       // bozza. Admin e superAdmin possono correggere anche lì, ma restano comunque
       // soggetti a tutte le altre validazioni (nessun bypass sui dati).
-      if (auth.role === "gestore" && edition.status !== "attiva") {
+      if (auth.role === "resultManager" && edition.status !== "attiva") {
         throw new HttpError(403, "Il resultManager può operare solo su edizioni attive.");
       }
 
@@ -142,7 +146,10 @@ export default async function handler(req, res) {
 
       t.update(matchRef, { status: newStatus, result: newResult, updatedAt, updatedBy: auth.uid });
       for (const u of standingsUpdates) t.update(u.ref, u.data);
-      t.update(editionRef, { lastRecalculatedAt: updatedAt });
+      t.update(editionRef, {
+        lastRecalculatedAt: updatedAt,
+        ...(normalized.result ? { activeMatchdayId: before.matchdayId } : {}),
+      });
 
       t.set(auditRef, {
         actor: auth.uid,
@@ -194,6 +201,10 @@ export default async function handler(req, res) {
 
     res.status(200).json({ ok: true, notification });
   } catch (err) {
+    if (err?.details?.code === "VALIDATION_ERROR") {
+      res.status(err.status ?? 400).json({ success: false, error: { code: "VALIDATION_ERROR", message: err.message, fields: err.details.fields ?? {} } });
+      return;
+    }
     if (err instanceof HttpError) {
       res.status(err.status).json({ error: err.message });
       return;

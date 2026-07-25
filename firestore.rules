@@ -20,26 +20,37 @@ service cloud.firestore {
     }
 
     function isSuperAdmin() {
-      return isEnabledUser() && myRole() == 'superadmin';
+      return isEnabledUser() && myRole() in ['superAdmin', 'superadmin'];
     }
 
     function isAdminOrAbove() {
-      return isEnabledUser() && (myRole() == 'superadmin' || myRole() == 'admin');
+      return isEnabledUser() && (myRole() in ['superAdmin', 'superadmin'] || myRole() == 'admin');
     }
 
     function isGestoreOrAbove() {
-      return isEnabledUser() && (myRole() == 'superadmin' || myRole() == 'admin' || myRole() == 'gestore');
+      return isEnabledUser() && (
+        myRole() in ['superAdmin', 'superadmin'] ||
+        myRole() == 'admin' ||
+        myRole() in ['resultManager', 'gestore']
+      );
     }
 
     // Un'edizione è visibile pubblicamente solo se attiva o conclusa (mai bozza/nascosta).
     function editionIsPublic(editionId) {
-      return get(/databases/$(database)/documents/championshipEditions/$(editionId)).data.status in ['attiva', 'conclusa'];
+      let edition = get(/databases/$(database)/documents/championshipEditions/$(editionId)).data;
+      return edition.status in ['attiva', 'conclusa'] && edition.isPubliclyVisible == true;
+    }
+
+    function newsIsPublic(news) {
+      return news.status == 'pubblicato' &&
+        news.active != false &&
+        news.deleted != true;
     }
 
     // Ognuno legge solo il proprio documento utente. Solo il Super Amministratore scrive.
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isSuperAdmin());
-      allow write: if isSuperAdmin();
+      allow write: if false;
     }
 
     // Fase 16 — mappatura pubblica "nome utente" -> email interna per il login. Serve
@@ -49,28 +60,31 @@ service cloud.firestore {
     match /usernameEmails/{slug} {
       allow get: if true;
       allow list: if false;
-      allow write: if isSuperAdmin();
+      allow write: if false;
     }
 
     // Dati pubblici in lettura per chiunque (anche senza login), scrittura riservata.
     match /championshipTypes/{id} {
       allow read: if true;
-      allow write: if isAdminOrAbove();
+      allow write: if false;
     }
 
     // Le edizioni in bozza o nascoste non sono leggibili pubblicamente, solo da
     // amministratori/gestori. Le query pubbliche del frontend filtrano già per
     // status in ["attiva","conclusa"], quindi restano compatibili con questa regola.
     match /championshipEditions/{id} {
-      allow read: if isGestoreOrAbove() || resource.data.status in ['attiva', 'conclusa'];
+      allow read: if isGestoreOrAbove() || (
+        resource.data.status in ['attiva', 'conclusa'] &&
+        resource.data.isPubliclyVisible == true
+      );
       // lastRecalculatedAt viene scritto dal backend con Admin SDK (bypassa le regole):
       // qui restano solo le scritture amministrative dirette dal client.
-      allow write: if isAdminOrAbove();
+      allow write: if false;
     }
 
     match /teams/{id} {
       allow read: if true;
-      allow write: if isAdminOrAbove();
+      allow write: if false;
     }
 
     // Fase 2/8 — la classifica squadre è gestita ESCLUSIVAMENTE dal backend con
@@ -84,13 +98,13 @@ service cloud.firestore {
 
     match /femaleParticipants/{id} {
       allow read: if isGestoreOrAbove() || editionIsPublic(resource.data.editionId);
-      allow write: if isAdminOrAbove();
+      allow write: if false;
     }
 
-    // Il resultManager non crea/elimina giornate.
+    // Le giornate vengono create dal backend, che valida ruolo, duplicati e audit.
     match /matchdays/{id} {
       allow read: if isGestoreOrAbove() || editionIsPublic(resource.data.editionId);
-      allow write: if isAdminOrAbove();
+      allow write: if false;
     }
 
     // Fase 1/6/8/9 — il frontend usa esclusivamente gli endpoint in api/matches/*.js e
@@ -105,15 +119,16 @@ service cloud.firestore {
 
     // Le notizie in bozza non sono pubbliche.
     match /homeNews/{id} {
-      allow read: if isAdminOrAbove() || resource.data.status == 'pubblicato';
-      allow write: if isAdminOrAbove();
+      allow read: if isSuperAdmin() || newsIsPublic(resource.data);
+      allow write: if false;
     }
 
     // Notifiche push: installazioni/token/preferenze vengono scritti solo dagli
     // endpoint Vercel con Admin SDK. Il client pubblico non deve poter leggere token
     // o storico invii; il Super Amministratore legge solo configurazione e audit.
     match /notificationSettings/{id} {
-      allow read, write: if isSuperAdmin();
+      allow read: if isSuperAdmin();
+      allow write: if false;
     }
 
     match /notificationDrafts/{id} {
@@ -155,12 +170,12 @@ service cloud.firestore {
 
     match /bracketRounds/{id} {
       allow read: if isGestoreOrAbove() || editionIsPublic(resource.data.editionId);
-      allow write: if isAdminOrAbove();
+      allow write: if false;
     }
 
     match /bracketMatches/{id} {
       allow read: if isGestoreOrAbove() || editionIsPublic(resource.data.editionId);
-      allow write: if isAdminOrAbove();
+      allow write: if false;
     }
 
     // Vittorie storiche (Albo d'oro): quelle precedenti all'app sono inserite a mano dal
@@ -168,15 +183,29 @@ service cloud.firestore {
     // di un'edizione (vedi src/lib/freezeEdition.ts), sempre con permessi da amministratore.
     match /historicalWins/{id} {
       allow read: if true;
-      allow write: if isAdminOrAbove();
+      allow write: if false;
     }
 
     // Log di controllo: creato dal backend con Admin SDK (bypassa le regole) o, in
     // amministrazione, da un client admin. Mai leggibile pubblicamente. Immutabile.
     match /auditLog/{id} {
-      allow read: if isAdminOrAbove();
-      allow create: if isAdminOrAbove();
-      allow update, delete: if false;
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    match /storageCleanupQueue/{id} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    match /productionErrors/{id} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    match /publicSettings/{id} {
+      allow read: if true;
+      allow write: if false;
     }
   }
 }

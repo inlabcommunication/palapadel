@@ -157,6 +157,26 @@ export function getNotificationHistory() {
   return postToBackend<{ ok: true; history: NotificationHistoryEntry[] }>("/api/notifications/history", { limit: 50 });
 }
 
+export interface NotificationDiagnostics {
+  status: string;
+  firebaseAdmin: string;
+  serverCredentials: string;
+  vapidKey: string;
+  serviceWorker: string;
+  endpoint: string;
+  settings: string;
+  registeredDevices: number;
+  enabledDevices: number;
+  validTokens: number;
+  recentFailures: number;
+  recentSuccesses: number;
+  message: string | null;
+}
+
+export function getNotificationDiagnostics() {
+  return postToBackend<{ ok: true; diagnostics: NotificationDiagnostics }>("/api/notifications/diagnostics", {});
+}
+
 export function notifyNotificationEvent(event: NotificationEventInput, idempotencyKey: string, sourceRef?: string) {
   return postToBackend<{ ok: true; notification: unknown }>("/api/notifications/event", {
     event,

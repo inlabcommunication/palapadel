@@ -11,9 +11,11 @@ import {
 test("client analytics policy excludes admin and superadmin", () => {
   assert.equal(isAnalyticsExcludedRole("admin"), true);
   assert.equal(isAnalyticsExcludedRole("superadmin"), true);
+  assert.equal(isAnalyticsExcludedRole("superAdmin"), true);
   assert.equal(shouldTrackAnalyticsForRole("admin", true), false);
   assert.equal(shouldTrackAnalyticsForRole("superadmin", true), false);
-  assert.equal(shouldTrackAnalyticsForRole("gestore", true), true);
+  assert.equal(shouldTrackAnalyticsForRole("superAdmin", true), false);
+  assert.equal(shouldTrackAnalyticsForRole("resultManager", true), true);
   assert.equal(shouldTrackAnalyticsForRole(null, true), true);
   assert.equal(shouldTrackAnalyticsForRole(null, false), false);
 });

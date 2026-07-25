@@ -11,6 +11,8 @@
 // notificationSentAt=null. Non dichiara mai un invio reale.
 
 import admin from "firebase-admin";
+import { roleAllowed } from "../_lib/roles.js";
+import { documentId, parseBody, z } from "../_lib/validation.js";
 
 function getAdminApp() {
   if (admin.apps.length) return admin.app();
@@ -36,8 +38,8 @@ async function verifyCaller(app, req) {
   if (callerData.disabled) throw new HttpError(403, "Account disattivato");
   // Fase 6/14 — solo admin/superAdmin creano aggiornamenti Home: il resultManager non
   // è autorizzato (non ha permessi di scrittura su homeNews).
-  if (!["superadmin", "admin"].includes(callerData.role)) {
-    throw new HttpError(403, "Solo admin o superAdmin possono creare un aggiornamento Home");
+  if (!roleAllowed(callerData.role, ["superAdmin"])) {
+    throw new HttpError(403, "Solo il superAdmin può creare un aggiornamento Home");
   }
   return { uid: decoded.uid, role: callerData.role };
 }
@@ -53,7 +55,13 @@ export default async function handler(req, res) {
     const auth = await verifyCaller(app, req);
     const db = admin.firestore(app);
 
-    const { matchIds, editionId, matchdayId, typeName, season } = req.body || {};
+    const { matchIds, editionId, matchdayId, typeName, season } = parseBody(z.object({
+      matchIds: z.array(documentId).min(1).max(100),
+      editionId: documentId,
+      matchdayId: documentId,
+      typeName: z.string().trim().min(1).max(100),
+      season: z.string().trim().min(1).max(50),
+    }).strict(), req.body);
     if (!Array.isArray(matchIds) || matchIds.length === 0 || !editionId || !matchdayId) {
       throw new HttpError(400, "Dati mancanti");
     }
@@ -130,6 +138,10 @@ export default async function handler(req, res) {
 
     res.status(200).json({ ok: true, newsId: newsRef.id });
   } catch (err) {
+    if (err?.details?.code === "VALIDATION_ERROR") {
+      res.status(err.status ?? 400).json({ success: false, error: { code: "VALIDATION_ERROR", message: err.message, fields: err.details.fields ?? {} } });
+      return;
+    }
     if (err instanceof HttpError) {
       res.status(err.status).json({ error: err.message });
       return;

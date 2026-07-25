@@ -24,7 +24,7 @@ export function PasswordInput({ value, onChange, placeholder, className = "" }: 
         type="button"
         onClick={() => setVisible((v) => !v)}
         aria-label={visible ? "Nascondi password" : "Mostra password"}
-        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[rgba(251,243,222,0.35)]"
+        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[rgba(251,243,222,0.50)]"
       >
         {visible ? <EyeOff size={17} /> : <Eye size={17} />}
       </button>

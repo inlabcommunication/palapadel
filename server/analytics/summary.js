@@ -5,14 +5,15 @@ import {
   isCountedAnalyticsInstallation,
   shouldSkipAnalyticsRole,
 } from "../_lib/analyticsPolicy.js";
+import { parseBody, z } from "../_lib/validation.js";
 
 export default async function handler(req, res) {
   try {
     requirePost(req);
     const app = getAdminApp();
-    await verifyCaller(app, req, ["superadmin"]);
+    await verifyCaller(app, req, ["superAdmin"]);
     const db = admin.firestore(app);
-    const days = Math.min(Math.max(Number(req.body?.days ?? 30), 1), 90);
+    const { days } = parseBody(z.object({ days: z.number().int().min(1).max(90).default(30) }).strict(), req.body);
 
     const [dailySnap, installsSnap, recentEventsSnap, notificationSnap] = await Promise.all([
       db.collection("analyticsDaily").orderBy("day", "desc").limit(days).get(),

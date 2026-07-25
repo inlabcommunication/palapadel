@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
-import { addDoc, collection, where } from "firebase/firestore";
+import { useParams, useNavigate } from "react-router-dom";
+import { where } from "firebase/firestore";
 import { useCollection } from "../hooks/useCollection";
 import { useAuth } from "../contexts/AuthContext";
-import { db } from "../firebase";
 import { confirmDelete } from "../lib/confirmDelete";
 import { findDuplicateTeamInMatchday, isSelfMatch } from "../lib/matchdayValidation";
 import {
@@ -11,6 +10,7 @@ import {
   setMatchStatus as apiSetMatchStatus,
   saveMatchdayBulk,
   createMatch,
+  createMatchday as createMatchdayViaApi,
   updateMatch,
   deleteMatch,
   createHomeNewsUpdate,
@@ -19,6 +19,11 @@ import {
 } from "../lib/matchApi";
 import { derivePermissions } from "../lib/permissions";
 import { MatchdayShareButton } from "../components/MatchdayShareButton";
+import { TypeBadge } from "../components/TypeBadge";
+import { ScheduleImportPanel } from "../components/ScheduleImportPanel";
+import { setActiveMatchday } from "../lib/championshipAdminApi";
+import { OperationalStandings } from "../components/OperationalStandings";
+import { resolveActiveMatchdayId } from "../lib/activeMatchday";
 import type { ChampionshipEdition, ChampionshipType, EditionTeam, Team, Matchday, Match, MatchStatus } from "../types";
 import { ArrowLeft, Plus, Clock, Ban, Trash2, X, Pencil } from "lucide-react";
 
@@ -49,34 +54,59 @@ export function GiornatePage() {
   const perms = usePermissions();
   const { canEditResults, canManageMatchdays } = perms;
 
-  const { data: editions } = useCollection<ChampionshipEdition>("championshipEditions");
-  const { data: types } = useCollection<ChampionshipType>("championshipTypes");
-  const { data: teams } = useCollection<Team>("teams");
-  const { data: editionTeams } = useCollection<EditionTeam>(
+  const editionsQuery = useCollection<ChampionshipEdition>("championshipEditions");
+  const typesQuery = useCollection<ChampionshipType>("championshipTypes");
+  const teamsQuery = useCollection<Team>("teams");
+  const editionTeamsQuery = useCollection<EditionTeam>(
     "editionTeams",
     editionId ? [where("editionId", "==", editionId)] : [],
     [editionId]
   );
-  const { data: matchdays } = useCollection<Matchday>(
+  const matchdaysQuery = useCollection<Matchday>(
     "matchdays",
     editionId ? [where("editionId", "==", editionId)] : [],
     [editionId]
   );
-  const { data: matches } = useCollection<Match>(
+  const matchesQuery = useCollection<Match>(
     "matches",
     editionId ? [where("editionId", "==", editionId)] : [],
     [editionId]
   );
 
   const [selectedMatchdayId, setSelectedMatchdayId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"standings" | "calendar">("standings");
   const [toast, setToast] = useState<string | null>(null);
+  const [showScheduleImport, setShowScheduleImport] = useState(false);
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3200);
   };
 
+  const editions = editionsQuery.data;
+  const types = typesQuery.data;
+  const teams = teamsQuery.data;
+  const editionTeams = editionTeamsQuery.data;
+  const matchdays = matchdaysQuery.data;
+  const matches = matchesQuery.data;
+  const loading = [editionsQuery, typesQuery, teamsQuery, editionTeamsQuery, matchdaysQuery, matchesQuery].some((query) => query.loading);
+  const queryError = [editionsQuery, typesQuery, teamsQuery, editionTeamsQuery, matchdaysQuery, matchesQuery].find((query) => query.error)?.error;
+
   if (!canEditResults) {
     return <div className="p-4 text-sm text-[rgba(251,243,222,0.58)]">Non hai i permessi per vedere questa pagina.</div>;
+  }
+  if (loading) {
+    return <div className="p-4 text-sm text-[rgba(251,243,222,0.58)]">Caricamento area campionato...</div>;
+  }
+  if (queryError) {
+    return (
+      <div className="p-4">
+        <h2 className="font-bold">Area campionato non disponibile</h2>
+        <p className="my-2 text-sm text-[rgba(251,243,222,0.58)]">{queryError.message}</p>
+        <button onClick={() => {
+          editionsQuery.retry(); typesQuery.retry(); teamsQuery.retry(); editionTeamsQuery.retry(); matchdaysQuery.retry(); matchesQuery.retry();
+        }} className="text-sm font-bold text-[#BBFF5E]">Riprova</button>
+      </div>
+    );
   }
 
   const edition = editions.find((e) => e.id === editionId);
@@ -94,14 +124,16 @@ export function GiornatePage() {
   }
 
   const sortedMatchdays = [...matchdays].sort((a, b) => a.number - b.number);
+  const enrolledTeamIds = new Set(editionTeams.map((entry) => entry.teamId));
+  const enrolledTeams = teams.filter((team) => enrolledTeamIds.has(team.id));
   const matchesFor = (matchdayId: string) => matches.filter((m) => m.matchdayId === matchdayId);
   const selectedMatchday = sortedMatchdays.find((m) => m.id === selectedMatchdayId);
 
   const createMatchday = async () => {
     const nextNumber = sortedMatchdays.length > 0 ? Math.max(...sortedMatchdays.map((m) => m.number)) + 1 : 1;
     try {
-      const ref = await addDoc(collection(db, "matchdays"), { editionId, number: nextNumber });
-      setSelectedMatchdayId(ref.id);
+      const response = await createMatchdayViaApi({ editionId: edition.id, number: nextNumber });
+      setSelectedMatchdayId(response.matchdayId);
       showToast(`${nextNumber}ª giornata creata.`);
     } catch (err) {
       console.error(err);
@@ -114,21 +146,75 @@ export function GiornatePage() {
       <button onClick={() => navigate("/gestione")} className="flex items-center gap-1 text-xs text-[rgba(251,243,222,0.58)] mb-3">
         <ArrowLeft size={13} /> Gestione
       </button>
-      <h2 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE] mb-1">
+      <h2 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE] mb-1 flex items-center gap-2">
+        <TypeBadge type={type} variant="header" />
         {type.name} {edition.season}
       </h2>
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-[12.5px] text-[rgba(251,243,222,0.35)]">Giornate e risultati</p>
-        <Link to={`/campionati/${edition.id}`} className="text-[12.5px] text-[#BBFF5E] font-semibold">
-          Vedi classifica
-        </Link>
+      <div className="mb-4 mt-3 grid grid-cols-2 rounded-lg bg-[#0A0B08] p-1" role="tablist" aria-label="Area campionato">
+        <button role="tab" aria-selected={activeTab === "standings"} onClick={() => setActiveTab("standings")}
+          className={`rounded-md px-3 py-2.5 text-sm font-bold ${activeTab === "standings" ? "bg-[#BBFF5E] text-[#081208]" : "text-[rgba(251,243,222,0.72)]"}`}>
+          Classifica
+        </button>
+        <button role="tab" aria-selected={activeTab === "calendar"} onClick={() => {
+          setActiveTab("calendar");
+          setSelectedMatchdayId((current) => current ?? resolveActiveMatchdayId(edition.activeMatchdayId, sortedMatchdays, matches));
+        }}
+          className={`rounded-md px-3 py-2.5 text-sm font-bold ${activeTab === "calendar" ? "bg-[#BBFF5E] text-[#081208]" : "text-[rgba(251,243,222,0.72)]"}`}>
+          Calendario
+        </button>
       </div>
+
+      {activeTab === "standings" ? (
+        <OperationalStandings
+          editionId={edition.id}
+          typeId={edition.typeId}
+          categoryName={type.name}
+          season={edition.season}
+          entries={editionTeams}
+          teams={teams}
+          matches={matches}
+          canEdit={perms.canEditOperationalStandings}
+          canEnroll={perms.canEnrollExistingTeam}
+          canShare={perms.canShareStandings}
+          showToast={showToast}
+        />
+      ) : (
+        <>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <p className="text-[12.5px] text-[rgba(251,243,222,0.58)]">Giornate e risultati</p>
+        {perms.isSuperAdmin && (
+          <button onClick={() => setShowScheduleImport((value) => !value)}
+            className="rounded-lg border border-[rgba(251,243,222,0.16)] px-2.5 py-1.5 text-xs font-bold text-[#BBFF5E]">
+            Importa calendario
+          </button>
+        )}
+      </div>
+
+      {showScheduleImport && perms.isSuperAdmin && (
+        <ScheduleImportPanel editionId={edition.id} teams={enrolledTeams} onClose={() => setShowScheduleImport(false)} onDone={showToast} />
+      )}
+
+      {sortedMatchdays.length > 0 && (
+        <div className="mb-4 flex gap-2 overflow-x-auto pb-2" role="tablist" aria-label="Seleziona giornata">
+          {sortedMatchdays.map((day) => (
+            <button key={day.id} role="tab" aria-selected={selectedMatchdayId === day.id}
+              onClick={() => setSelectedMatchdayId(day.id)}
+              className={`shrink-0 rounded-lg px-3 py-2 text-xs font-bold ${
+                selectedMatchdayId === day.id
+                  ? "bg-[#BBFF5E] text-[#081208]"
+                  : "border border-[rgba(251,243,222,0.16)] text-[rgba(251,243,222,0.72)]"
+              }`}>
+              Giornata {day.number}
+            </button>
+          ))}
+        </div>
+      )}
 
       {!selectedMatchday ? (
         <div>
           <div className="flex flex-col gap-2 mb-3">
             {sortedMatchdays.length === 0 && (
-              <p className="text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna giornata creata ancora.</p>
+              <p className="text-[12.5px] text-[rgba(251,243,222,0.50)]">Nessuna giornata creata ancora.</p>
             )}
             {sortedMatchdays.map((md) => {
               const ms = matchesFor(md.id);
@@ -140,7 +226,7 @@ export function GiornatePage() {
                   className="w-full text-left bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl px-4 py-3"
                 >
                   <p className="font-bold">{md.number}ª giornata</p>
-                  <p className="text-xs text-[rgba(251,243,222,0.35)] mt-1">
+                  <p className="text-xs text-[rgba(251,243,222,0.50)] mt-1">
                     {ms.length} partit{ms.length === 1 ? "a" : "e"}
                     {ms.length > 0 && (missing > 0 ? `, ${missing} risultat${missing === 1 ? "o mancante" : "i mancanti"}` : " — completa")}
                   </p>
@@ -159,14 +245,19 @@ export function GiornatePage() {
           matchday={selectedMatchday}
           matches={matchesFor(selectedMatchday.id)}
           teams={teams}
+          enrolledTeams={enrolledTeams}
+          matchdays={sortedMatchdays}
           editionTeams={editionTeams}
           editionId={editionId!}
           typeName={type.name}
           season={edition.season}
           perms={perms}
+          isActiveMatchday={edition.activeMatchdayId === selectedMatchday.id}
           onBack={() => setSelectedMatchdayId(null)}
           showToast={showToast}
         />
+      )}
+        </>
       )}
 
       {toast && (
@@ -184,22 +275,28 @@ function MatchdayDetail({
   matchday,
   matches,
   teams,
+  enrolledTeams,
+  matchdays,
   editionTeams,
   editionId,
   typeName,
   season,
   perms,
+  isActiveMatchday,
   onBack,
   showToast,
 }: {
   matchday: Matchday;
   matches: Match[];
   teams: Team[];
+  enrolledTeams: Team[];
+  matchdays: Matchday[];
   editionTeams: EditionTeam[];
   editionId: string;
   typeName: string;
   season: string;
   perms: Perms;
+  isActiveMatchday: boolean;
   onBack: () => void;
   showToast: (msg: string) => void;
 }) {
@@ -215,6 +312,20 @@ function MatchdayDetail({
   // l'endpoint backend. savingMatchId previene il doppio clic sulla stessa partita.
   const [savingMatchId, setSavingMatchId] = useState<string | null>(null);
   const [pendingNotify, setPendingNotify] = useState<Match | null>(null);
+  const [settingActive, setSettingActive] = useState(false);
+
+  const handleSetActive = async () => {
+    setSettingActive(true);
+    try {
+      await setActiveMatchday(editionId, matchday.id);
+      showToast(`${matchday.number}ª giornata impostata come attiva.`);
+    } catch (err) {
+      console.error(err);
+      showToast(err instanceof Error ? err.message : "Impossibile impostare la giornata attiva.");
+    } finally {
+      setSettingActive(false);
+    }
+  };
 
   const teamName = (id: string) => teams.find((t) => t.id === id)?.name ?? "Squadra eliminata";
 
@@ -434,11 +545,26 @@ function MatchdayDetail({
       </button>
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE]">{matchday.number}ª giornata</h3>
-        {canEditResults && matches.length > 0 && !bulkMode && (
-          <button onClick={() => setBulkMode(true)} className="text-xs text-[#BBFF5E] font-semibold">
-            Aggiorna intera giornata
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {perms.isSuperAdmin && (
+            isActiveMatchday ? (
+              <span className="text-xs font-semibold text-[#BBFF5E]">Giornata attiva</span>
+            ) : (
+              <button
+                onClick={handleSetActive}
+                disabled={settingActive || matches.length === 0}
+                className="text-xs font-semibold text-[#BBFF5E] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {settingActive ? "Impostazione..." : "Imposta attiva"}
+              </button>
+            )
+          )}
+          {canEditResults && matches.length > 0 && !bulkMode && (
+            <button onClick={() => setBulkMode(true)} className="text-xs text-[#BBFF5E] font-semibold">
+              Aggiorna intera giornata
+            </button>
+          )}
+        </div>
       </div>
       <div className="mb-3">
         <MatchdayShareButton
@@ -516,7 +642,7 @@ function MatchdayDetail({
                 {bulkSaving ? "Salvataggio in corso..." : "Salva e crea aggiornamento Home"}
               </button>
             )}
-            <button onClick={() => setBulkReview(null)} className="w-full text-xs text-[rgba(251,243,222,0.35)]">
+            <button onClick={() => setBulkReview(null)} className="w-full text-xs text-[rgba(251,243,222,0.50)]">
               Torna indietro
             </button>
           </div>
@@ -525,29 +651,28 @@ function MatchdayDetail({
         <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5 mb-3">
           <p className="text-[13px] font-bold mb-3">Aggiorna intera giornata</p>
           {matches.length === 0 ? (
-            <p className="text-[12.5px] text-[rgba(251,243,222,0.35)] mb-3">Nessuna partita in questa giornata.</p>
+            <p className="text-[12.5px] text-[rgba(251,243,222,0.50)] mb-3">Nessuna partita in questa giornata.</p>
           ) : (
             <div className="flex flex-col gap-3 mb-3">
               {matches.map((m) => (
                 <div key={m.id}>
                   <p className="text-[12.5px] font-semibold mb-1.5">
                     {teamName(m.team1Id)} vs {teamName(m.team2Id)}
-                    <span className="text-[rgba(251,243,222,0.35)] font-normal"> · attuale: {currentChoiceLabel(m)}</span>
+                    <span className="text-[rgba(251,243,222,0.50)] font-normal"> · attuale: {currentChoiceLabel(m)}</span>
                   </p>
-                  <div className="flex gap-1.5 mb-1 flex-wrap">
-                    {RESULT_OPTIONS.map((opt) => (
-                      <button
-                        key={opt}
-                        onClick={() => setBulkChoices((p) => ({ ...p, [m.id]: { kind: "result", value: opt } }))}
-                        className={`rounded-lg px-2.5 py-1.5 text-xs font-bold ${
-                          bulkChoices[m.id]?.kind === "result" && bulkChoices[m.id]?.value === opt
-                            ? "bg-lime text-[#081208]"
-                            : "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.85)]"
-                        }`}
-                      >
-                        {opt}
-                      </button>
-                    ))}
+                  <div className="flex gap-1.5 mb-1 flex-wrap items-center">
+                    <BulkScoreSelectors
+                      match={m}
+                      homeName={teamName(m.team1Id)}
+                      awayName={teamName(m.team2Id)}
+                      onValid={(value) => setBulkChoices((previous) => ({ ...previous, [m.id]: { kind: "result", value } }))}
+                      onInvalid={() => setBulkChoices((previous) => {
+                        if (previous[m.id]?.kind !== "result") return previous;
+                        const next = { ...previous };
+                        delete next[m.id];
+                        return next;
+                      })}
+                    />
                     {(["da_giocare", "rinviata", "annullata"] as const).map((st) => (
                       <button
                         key={st}
@@ -575,7 +700,7 @@ function MatchdayDetail({
                 setBulkMode(false);
                 setBulkChoices({});
               }}
-              className="w-full text-xs text-[rgba(251,243,222,0.35)]"
+              className="w-full text-xs text-[rgba(251,243,222,0.50)]"
             >
               Annulla
             </button>
@@ -583,7 +708,7 @@ function MatchdayDetail({
         </div>
       ) : (
         <div className="flex flex-col gap-2 mb-3">
-          {matches.length === 0 && <p className="text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna partita in questa giornata.</p>}
+          {matches.length === 0 && <p className="text-[12.5px] text-[rgba(251,243,222,0.50)]">Nessuna partita in questa giornata.</p>}
           {matches.map((m) => (
             <MatchRow
               key={m.id}
@@ -596,10 +721,12 @@ function MatchdayDetail({
               onRemove={() => removeMatch(m)}
               onSetStatus={(status) => changeStatus(m, status)}
               canEditSchedule={canCreateMatches}
-              onUpdateSchedule={async (date, time) => {
+              teamOptions={enrolledTeams}
+              matchdayOptions={matchdays}
+              onUpdateSchedule={async (changes) => {
                 try {
-                  await updateMatch({ matchId: m.id, matchDate: date || null, matchTime: time || null });
-                  showToast("Data e ora aggiornate.");
+                  await updateMatch({ matchId: m.id, ...changes });
+                  showToast("Partita aggiornata.");
                 } catch (error) {
                   console.error(error);
                   showToast(error instanceof MatchApiError ? error.message : "Errore nell'aggiornamento.");
@@ -617,7 +744,7 @@ function MatchdayDetail({
               <div className="flex items-center justify-between mb-2">
                 <p className="text-[13px] font-bold">Nuova partita</p>
                 <button onClick={() => setShowAddMatch(false)}>
-                  <X size={16} className="text-[rgba(251,243,222,0.35)]" />
+                  <X size={16} className="text-[rgba(251,243,222,0.50)]" />
                 </button>
               </div>
               <select
@@ -684,6 +811,8 @@ function MatchRow({
   onSetStatus,
   canEditSchedule,
   onUpdateSchedule,
+  teamOptions,
+  matchdayOptions,
 }: {
   match: Match;
   teamName: (id: string) => string;
@@ -694,7 +823,18 @@ function MatchRow({
   onRemove: () => void;
   onSetStatus: (status: MatchStatus) => void;
   canEditSchedule: boolean;
-  onUpdateSchedule: (date: string, time: string) => Promise<void>;
+  teamOptions: Team[];
+  matchdayOptions: Matchday[];
+  onUpdateSchedule: (changes: {
+    team1Id: string;
+    team2Id: string;
+    matchdayId: string;
+    matchDate: string | null;
+    matchTime: string | null;
+    court: string | null;
+    notes: string | null;
+    status: MatchStatus;
+  }) => Promise<void>;
 }) {
   // Fase 6: azione esplicita "Correggi risultato" su una partita già conclusa, invece
   // di dover prima riaprire e poi reinserire il risultato.
@@ -702,12 +842,31 @@ function MatchRow({
   const [editingSchedule, setEditingSchedule] = useState(false);
   const [date, setDate] = useState(match.matchDate ?? "");
   const [time, setTime] = useState(match.matchTime ?? "");
+  const [team1Id, setTeam1Id] = useState(match.team1Id);
+  const [team2Id, setTeam2Id] = useState(match.team2Id);
+  const [matchdayId, setMatchdayId] = useState(match.matchdayId);
+  const [court, setCourt] = useState(match.court ?? "");
+  const [notes, setNotes] = useState(match.notes ?? "");
+  const [editStatus, setEditStatus] = useState<MatchStatus>(match.status);
+  const initialScore = match.result?.split("-").map(Number) ?? [];
+  const [homeScore, setHomeScore] = useState<number | "">(initialScore[0] ?? "");
+  const [awayScore, setAwayScore] = useState<number | "">(initialScore[1] ?? "");
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const selectedResult = `${homeScore}-${awayScore}`;
+  const resultIsValid = RESULT_OPTIONS.includes(selectedResult as (typeof RESULT_OPTIONS)[number]);
+
+  const submitResult = () => {
+    if (!resultIsValid) return;
+    if (!window.confirm(`Confermi il risultato ${teamName(match.team1Id)} ${selectedResult} ${teamName(match.team2Id)}?`)) return;
+    onSaveResult(selectedResult);
+    setCorrecting(false);
+  };
 
   return (
     <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
       <div className="flex items-center justify-between mb-2 gap-2">
         <p className="text-[13.5px] font-semibold truncate">
-          {teamName(match.team1Id)} <span className="text-[rgba(251,243,222,0.35)]">vs</span> {teamName(match.team2Id)}
+          {teamName(match.team1Id)} <span className="text-[rgba(251,243,222,0.50)]">vs</span> {teamName(match.team2Id)}
         </p>
         {match.status === "conclusa" && match.result && (
           <span className="font-display text-[15px] text-[#BBFF5E] shrink-0">{match.result}</span>
@@ -718,7 +877,7 @@ function MatchRow({
           </span>
         )}
         {match.status === "annullata" && (
-          <span className="flex items-center gap-1 text-[11px] text-[rgba(251,243,222,0.35)] shrink-0">
+          <span className="flex items-center gap-1 text-[11px] text-[rgba(251,243,222,0.50)] shrink-0">
             <Ban size={12} /> Annullata
           </span>
         )}
@@ -729,81 +888,105 @@ function MatchRow({
         </p>
       )}
       {editingSchedule && canEditSchedule && (
-        <div className="mb-2 grid grid-cols-2 gap-2 rounded-lg bg-[#123008] p-2.5">
-          <input aria-label="Data della partita" type="date" value={date} onChange={(event) => setDate(event.target.value)} className="rounded-lg border border-[rgba(251,243,222,0.18)] px-2 py-2 text-xs" />
-          <input aria-label="Ora della partita" type="time" value={time} onChange={(event) => setTime(event.target.value)} className="rounded-lg border border-[rgba(251,243,222,0.18)] px-2 py-2 text-xs" />
-          <button onClick={async () => { await onUpdateSchedule(date, time); setEditingSchedule(false); }} className="rounded-lg bg-lime py-2 text-xs font-bold text-[#081208]">Salva</button>
-          <button onClick={() => setEditingSchedule(false)} className="rounded-lg border border-[rgba(251,243,222,0.18)] py-2 text-xs">Annulla</button>
+        <div className="mb-3 rounded-lg bg-[#123008] p-2.5">
+          <div className="mb-2 grid grid-cols-2 gap-2 text-[11px] text-[rgba(251,243,222,0.58)]">
+            <div><strong className="block text-[#FBF3DE]">Dati attuali</strong>{teamName(match.team1Id)} - {teamName(match.team2Id)}<br />{formatMatchSchedule(match.matchDate, match.matchTime) || "Senza data"}</div>
+            <div><strong className="block text-[#BBFF5E]">Nuovi dati</strong>{teamName(team1Id)} - {teamName(team2Id)}<br />{formatMatchSchedule(date, time) || "Senza data"}</div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <select aria-label="Nuova squadra di casa" value={team1Id} onChange={(event) => setTeam1Id(event.target.value)} className="rounded-lg border border-[rgba(251,243,222,0.18)] px-2 py-2 text-xs">
+              {teamOptions.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+            </select>
+            <select aria-label="Nuova squadra ospite" value={team2Id} onChange={(event) => setTeam2Id(event.target.value)} className="rounded-lg border border-[rgba(251,243,222,0.18)] px-2 py-2 text-xs">
+              {teamOptions.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+            </select>
+            <select aria-label="Nuova giornata" value={matchdayId} onChange={(event) => setMatchdayId(event.target.value)} className="rounded-lg border border-[rgba(251,243,222,0.18)] px-2 py-2 text-xs">
+              {matchdayOptions.map((day) => <option key={day.id} value={day.id}>Giornata {day.number}</option>)}
+            </select>
+            <select aria-label="Nuovo stato partita" value={editStatus} onChange={(event) => setEditStatus(event.target.value as MatchStatus)} className="rounded-lg border border-[rgba(251,243,222,0.18)] px-2 py-2 text-xs">
+              <option value="da_giocare">Programmata</option>{match.result && <option value="conclusa">Completata</option>}<option value="rinviata">Rinviata</option><option value="annullata">Annullata</option>
+            </select>
+            <input aria-label="Data della partita" type="date" value={date} onChange={(event) => setDate(event.target.value)} className="rounded-lg border border-[rgba(251,243,222,0.18)] px-2 py-2 text-xs" />
+            <input aria-label="Ora della partita" type="time" value={time} onChange={(event) => setTime(event.target.value)} className="rounded-lg border border-[rgba(251,243,222,0.18)] px-2 py-2 text-xs" />
+            <input aria-label="Campo della partita" placeholder="Campo (opzionale)" value={court} onChange={(event) => setCourt(event.target.value)} className="rounded-lg border border-[rgba(251,243,222,0.18)] px-2 py-2 text-xs" />
+            <input aria-label="Note della partita" placeholder="Note (opzionali)" value={notes} onChange={(event) => setNotes(event.target.value)} className="rounded-lg border border-[rgba(251,243,222,0.18)] px-2 py-2 text-xs" />
+          </div>
+          {team1Id === team2Id && <p className="mt-2 text-xs text-[#FF9B6B]">Le squadre devono essere diverse.</p>}
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button disabled={team1Id === team2Id} onClick={async () => {
+              await onUpdateSchedule({ team1Id, team2Id, matchdayId, matchDate: date || null, matchTime: time || null, court: court || null, notes: notes || null, status: editStatus });
+              setEditingSchedule(false);
+            }} className="rounded-lg bg-lime py-2 text-xs font-bold text-[#081208] disabled:opacity-40">Salva modifiche</button>
+            <button onClick={() => setEditingSchedule(false)} className="rounded-lg border border-[rgba(251,243,222,0.18)] py-2 text-xs">Annulla</button>
+          </div>
         </div>
       )}
 
       {match.status === "da_giocare" && canEditResults && (
-        <div className="flex gap-1.5 mb-2">
-          {RESULT_OPTIONS.map((opt) => (
-            <button
-              key={opt}
-              onClick={() => onSaveResult(opt)}
-              disabled={saving}
-              className="flex-1 rounded-lg py-1.5 text-xs font-bold bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.85)] disabled:opacity-50"
-            >
-              {saving ? "..." : opt}
-            </button>
-          ))}
+        <div className="mb-3 rounded-lg bg-[#123008] p-3">
+          <div className="grid grid-cols-[minmax(0,1fr)_64px_16px_64px_minmax(0,1fr)] items-center gap-2">
+            <span className="truncate text-right text-xs font-semibold">{teamName(match.team1Id)}</span>
+            <ScoreSelect label={`Set vinti da ${teamName(match.team1Id)}`} value={homeScore} onChange={setHomeScore} />
+            <span className="text-center font-bold">-</span>
+            <ScoreSelect label={`Set vinti da ${teamName(match.team2Id)}`} value={awayScore} onChange={setAwayScore} />
+            <span className="truncate text-xs font-semibold">{teamName(match.team2Id)}</span>
+          </div>
+          <button onClick={submitResult} disabled={saving || !resultIsValid}
+            className="mt-3 w-full rounded-lg bg-lime py-2 text-xs font-bold text-[#081208] disabled:cursor-not-allowed disabled:opacity-40">
+            {saving ? "Salvataggio..." : "Salva risultato"}
+          </button>
+          {homeScore !== "" && awayScore !== "" && !resultIsValid && (
+            <p className="mt-2 text-center text-[11px] text-[#FF9B6B]">Risultato non valido. Sono ammessi 2-0, 2-1, 1-2 e 0-2.</p>
+          )}
         </div>
       )}
 
       {match.status === "conclusa" && canEditResults && correcting && (
         <div className="mb-2">
-          <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1.5">
+          <p className="text-[11px] text-[rgba(251,243,222,0.50)] mb-1.5">
             Risultato attuale: <strong className="text-[rgba(251,243,222,0.85)]">{match.result}</strong> — scegli il nuovo risultato
           </p>
-          <div className="flex gap-1.5">
-            {RESULT_OPTIONS.map((opt) => (
-              <button
-                key={opt}
-                onClick={() => {
-                  onSaveResult(opt);
-                  setCorrecting(false);
-                }}
-                disabled={saving}
-                className={`flex-1 rounded-lg py-1.5 text-xs font-bold disabled:opacity-50 ${
-                  opt === match.result ? "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.35)]" : "bg-lime text-[#081208]"
-                }`}
-              >
-                {opt}
-              </button>
-            ))}
+          <div className="grid grid-cols-[1fr_64px_16px_64px_1fr] items-center gap-2">
+            <span className="truncate text-right text-xs">{teamName(match.team1Id)}</span>
+            <ScoreSelect label="Nuovo punteggio squadra di casa" value={homeScore} onChange={setHomeScore} />
+            <span className="text-center">-</span>
+            <ScoreSelect label="Nuovo punteggio squadra ospite" value={awayScore} onChange={setAwayScore} />
+            <span className="truncate text-xs">{teamName(match.team2Id)}</span>
           </div>
+          <button onClick={submitResult} disabled={saving || !resultIsValid} className="mt-2 w-full rounded-lg bg-lime py-2 text-xs font-bold text-[#081208] disabled:opacity-40">
+            Conferma correzione
+          </button>
         </div>
       )}
 
       {canEditResults && (
         <div className="flex items-center gap-3 flex-wrap">
-          {match.status === "da_giocare" && (
-            <button onClick={() => onSetStatus("rinviata")} className="text-[11px] text-[rgba(251,243,222,0.35)]">
-              Rinvia
-            </button>
-          )}
           {match.status === "conclusa" && !correcting && (
             <button onClick={() => setCorrecting(true)} className="flex items-center gap-1 text-[11px] text-[#BBFF5E] font-semibold">
               <Pencil size={11} /> Correggi risultato
             </button>
           )}
           {match.status === "conclusa" && correcting && (
-            <button onClick={() => setCorrecting(false)} className="text-[11px] text-[rgba(251,243,222,0.35)]">
+            <button onClick={() => setCorrecting(false)} className="text-[11px] text-[rgba(251,243,222,0.50)]">
               Annulla correzione
             </button>
           )}
-          {match.status !== "da_giocare" && (
-            <button onClick={() => onSetStatus("da_giocare")} className="text-[11px] text-[rgba(251,243,222,0.35)]">
-              Riapri
+          <div className="relative">
+            <button onClick={() => setStatusMenuOpen((open) => !open)} aria-expanded={statusMenuOpen}
+              className="rounded-lg border border-[rgba(251,243,222,0.16)] px-2.5 py-1.5 text-[11px] text-[rgba(251,243,222,0.72)]">
+              Stato partita
             </button>
-          )}
-          {match.status !== "annullata" && (
-            <button onClick={() => onSetStatus("annullata")} className="text-[11px] text-[rgba(251,243,222,0.35)]">
-              Annulla partita
-            </button>
-          )}
+            {statusMenuOpen && (
+              <div className="absolute bottom-full left-0 z-20 mb-2 min-w-36 rounded-lg border border-[rgba(251,243,222,0.16)] bg-[#081208] p-1 shadow-xl">
+                {match.status !== "da_giocare" && <StatusAction label="Programmata / Riapri" onClick={() => { onSetStatus("da_giocare"); setStatusMenuOpen(false); }} />}
+                {match.status !== "rinviata" && <StatusAction label="Rinviata" onClick={() => { onSetStatus("rinviata"); setStatusMenuOpen(false); }} />}
+                {match.status !== "annullata" && <StatusAction label="Annullata" onClick={() => {
+                  if (window.confirm("Annullare questa partita? Il risultato non sarà conteggiato.")) onSetStatus("annullata");
+                  setStatusMenuOpen(false);
+                }} />}
+              </div>
+            )}
+          </div>
           {canDeleteMatches && (
             <button onClick={onRemove} className="text-[11px] text-[#FF6B6B] ml-auto flex items-center gap-1">
               <Trash2 size={11} /> Elimina
@@ -811,13 +994,59 @@ function MatchRow({
           )}
           {canEditSchedule && !editingSchedule && (
             <button onClick={() => setEditingSchedule(true)} className="text-[11px] text-[#BBFF5E]">
-              Data e ora
+              Modifica partita
             </button>
           )}
         </div>
       )}
     </div>
   );
+}
+
+function BulkScoreSelectors({
+  match,
+  homeName,
+  awayName,
+  onValid,
+  onInvalid,
+}: {
+  match: Match;
+  homeName: string;
+  awayName: string;
+  onValid: (result: NonNullable<Match["result"]>) => void;
+  onInvalid: () => void;
+}) {
+  const initial = match.result?.split("-").map(Number) ?? [];
+  const [home, setHome] = useState<number | "">(initial[0] ?? "");
+  const [away, setAway] = useState<number | "">(initial[1] ?? "");
+  const update = (nextHome: number | "", nextAway: number | "") => {
+    const result = `${nextHome}-${nextAway}`;
+    if (RESULT_OPTIONS.includes(result as NonNullable<Match["result"]>)) onValid(result as NonNullable<Match["result"]>);
+    else onInvalid();
+  };
+  return (
+    <div className="mr-2 grid grid-cols-[64px_12px_64px] items-center gap-1">
+      <ScoreSelect label={`Set vinti da ${homeName}`} value={home} onChange={(value) => { setHome(value); update(value, away); }} />
+      <span className="text-center">-</span>
+      <ScoreSelect label={`Set vinti da ${awayName}`} value={away} onChange={(value) => { setAway(value); update(home, value); }} />
+    </div>
+  );
+}
+
+function ScoreSelect({ label, value, onChange }: { label: string; value: number | ""; onChange: (value: number | "") => void }) {
+  return (
+    <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value === "" ? "" : Number(event.target.value))}
+      className="h-11 w-16 rounded-lg border border-[rgba(251,243,222,0.18)] bg-[#0A0B08] text-center text-lg font-bold text-[#FBF3DE] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#BBFF5E]">
+      <option value="">-</option>
+      <option value="0">0</option>
+      <option value="1">1</option>
+      <option value="2">2</option>
+    </select>
+  );
+}
+
+function StatusAction({ label, onClick }: { label: string; onClick: () => void }) {
+  return <button onClick={onClick} className="block w-full rounded-md px-3 py-2 text-left text-xs hover:bg-[rgba(251,243,222,0.08)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#BBFF5E]">{label}</button>;
 }
 
 function formatMatchSchedule(date?: string, time?: string) {

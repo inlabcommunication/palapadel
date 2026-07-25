@@ -80,6 +80,23 @@ export function StandingsShareButton({ input, showToast }: StandingsShareButtonP
     }
   };
 
+  const shareAll = async () => {
+    const files = images.map((image) => new File([image.blob], image.filename, { type: "image/png" }));
+    try {
+      if (files.length > 0 && navigator.canShare?.({ files })) {
+        await navigator.share({ files, title: "Classifica PalaPadel", text: `${input.categoryName} ${input.season}` });
+        return;
+      }
+      downloadAll();
+      showToast("Il dispositivo non supporta la condivisione di più file: tutte le immagini sono state scaricate.");
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      console.error(error);
+      downloadAll();
+      showToast("Condivisione multipla non disponibile: tutte le immagini sono state scaricate.");
+    }
+  };
+
   return (
     <>
       <button
@@ -139,17 +156,27 @@ export function StandingsShareButton({ input, showToast }: StandingsShareButtonP
 
                   <div className="grid grid-cols-2 gap-2 mt-4">
                     <button
-                      onClick={downloadAll}
+                      onClick={() => downloadImage(selected)}
                       className="flex items-center justify-center gap-1.5 bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold"
                     >
-                      <Download size={16} /> Scarica
+                      <Download size={16} /> Scarica immagine
                     </button>
                     <button
                       onClick={shareSelected}
                       className="flex items-center justify-center gap-1.5 border border-[rgba(251,243,222,0.18)] rounded-lg py-2.5 text-sm font-semibold"
                     >
-                      {images.length > 1 ? <Images size={16} /> : <Share2 size={16} />} Condividi
+                      <Share2 size={16} /> Condividi immagine
                     </button>
+                    {images.length > 1 && (
+                      <>
+                        <button onClick={downloadAll} className="flex items-center justify-center gap-1.5 rounded-lg bg-[#BBFF5E] py-2.5 text-sm font-bold text-[#081208]">
+                          <Images size={16} /> Scarica tutte
+                        </button>
+                        <button onClick={shareAll} className="flex items-center justify-center gap-1.5 rounded-lg border border-[rgba(251,243,222,0.18)] py-2.5 text-sm font-semibold">
+                          <Share2 size={16} /> Condividi tutte
+                        </button>
+                      </>
+                    )}
                   </div>
                 </>
               )}

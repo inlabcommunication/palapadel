@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { getAdminApp, admin } from "../_lib/firebaseAdmin.js";
 import { HttpError, requirePost, sendError } from "../_lib/auth.js";
 import { isValidInstallationId, normalizeTopicPrefs } from "../_lib/notifications.js";
+import { notificationTopicsSchema, parseBody, z } from "../_lib/validation.js";
 
 function tokenId(token) {
   return crypto.createHash("sha256").update(token).digest("hex");
@@ -10,7 +11,14 @@ function tokenId(token) {
 export default async function handler(req, res) {
   try {
     requirePost(req);
-    const { installationId, token, permission, topics, userAgent, standalone } = req.body || {};
+    const { installationId, token, permission, topics, userAgent, standalone } = parseBody(z.object({
+      installationId: z.string().regex(/^[a-zA-Z0-9_-]{16,96}$/),
+      token: z.string().min(40).max(4096),
+      permission: z.enum(["default", "granted", "denied"]),
+      topics: notificationTopicsSchema,
+      userAgent: z.string().max(240).optional(),
+      standalone: z.boolean().optional(),
+    }).strict(), req.body);
     if (!isValidInstallationId(installationId)) throw new HttpError(400, "installationId non valido");
     if (!token || typeof token !== "string" || token.length < 40) throw new HttpError(400, "Token push non valido");
 

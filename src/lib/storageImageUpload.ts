@@ -2,6 +2,7 @@ import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage
 import { storage } from "../firebase";
 import { resizeImageFile } from "./imageResize";
 import { assertValidImageFile, makeStorageSafeFilename } from "./imageFilePolicy";
+import { postToBackend } from "./backendClient";
 export {
   ALLOWED_IMAGE_TYPES,
   MAX_IMAGE_UPLOAD_BYTES,
@@ -57,5 +58,28 @@ export async function deleteStorageImageQuietly(storagePathOrUrl?: string | null
     await deleteStorageImage(storagePathOrUrl);
   } catch (err) {
     console.error(`Errore nell'eliminazione della vecchia ${context}:`, err);
+    try {
+      const queuePath = storagePathFromValue(storagePathOrUrl);
+      if (!queuePath) throw new Error("Percorso Storage non ricavabile");
+      await postToBackend<{ ok: true }>("/api/admin/storage-cleanup", {
+        operation: "enqueue",
+        storagePath: queuePath,
+        reason: `Eliminazione non riuscita: ${context}`,
+      });
+    } catch (queueError) {
+      console.error("Accodamento pulizia Storage non riuscito", queueError);
+    }
+  }
+}
+
+function storagePathFromValue(value: string) {
+  if (!/^https?:\/\//.test(value)) return value;
+  try {
+    const url = new URL(value);
+    const marker = "/o/";
+    const index = url.pathname.indexOf(marker);
+    return index >= 0 ? decodeURIComponent(url.pathname.slice(index + marker.length)) : null;
+  } catch {
+    return null;
   }
 }

@@ -1,4 +1,4 @@
-const EXCLUDED_ANALYTICS_ROLES = new Set(["admin", "superadmin"]);
+const EXCLUDED_ANALYTICS_ROLES = new Set(["admin", "superadmin", "superAdmin"]);
 
 export function normalizeAnalyticsRole(role) {
   return typeof role === "string" ? role.trim().toLowerCase() : null;

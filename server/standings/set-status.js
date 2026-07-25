@@ -13,7 +13,9 @@
 // già "rinviata"/"annullata" non vengono ritoccate da nessuna politica.
 
 import admin from "firebase-admin";
+import { canEditOperationalStandings, normalizeRole } from "../_lib/roles.js";
 import { computeStandingsUpdates } from "../_lib/standingsRules.js";
+import { parseBody, documentId, z } from "../_lib/validation.js";
 
 function getAdminApp() {
   if (admin.apps.length) return admin.app();
@@ -37,13 +39,20 @@ async function verifyCaller(app, req) {
   if (!callerSnap.exists) throw new HttpError(403, "Utente non registrato");
   const callerData = callerSnap.data();
   if (callerData.disabled) throw new HttpError(403, "Account disattivato");
-  if (!["superadmin", "admin"].includes(callerData.role)) {
-    throw new HttpError(403, "Solo admin o superAdmin possono cambiare lo stato di una squadra");
+  if (!canEditOperationalStandings(callerData.role)) {
+    throw new HttpError(403, "Non hai il permesso di cambiare lo stato sportivo di una squadra");
   }
-  return { uid: decoded.uid, role: callerData.role };
+  return { uid: decoded.uid, role: normalizeRole(callerData.role) };
 }
 
 const ALLOWED_STATUSES = ["ritirata", "squalificata", "normale"];
+const bodySchema = z.object({
+  editionId: documentId,
+  editionTeamId: documentId,
+  newStatus: z.enum(["ritirata", "squalificata", "normale"]),
+  policy: z.number().int().min(1).max(4).optional(),
+  reason: z.string().trim().min(5, "Inserisci una motivazione").max(500),
+}).strict();
 
 /** Calcola come una singola partita coinvolta va trattata secondo la politica scelta. */
 function applyPolicyToMatch(match, teamId, policy) {
@@ -79,8 +88,7 @@ export default async function handler(req, res) {
     const auth = await verifyCaller(app, req);
     const db = admin.firestore(app);
 
-    const { editionId, editionTeamId, newStatus, policy } = req.body || {};
-    if (!editionId || !editionTeamId || !newStatus) throw new HttpError(400, "Dati mancanti");
+    const { editionId, editionTeamId, newStatus, policy, reason } = parseBody(bodySchema, req.body);
     if (!ALLOWED_STATUSES.includes(newStatus)) throw new HttpError(400, "Stato non valido");
     if (newStatus !== "normale" && ![1, 2, 3, 4].includes(policy)) {
       throw new HttpError(400, "Specificare una politica (1-4) per ritirata/squalificata");
@@ -144,7 +152,7 @@ export default async function handler(req, res) {
       t.set(db.collection("auditLog").doc(), {
         actor: auth.uid,
         action: "team_status_changed",
-        detail: JSON.stringify({ role: auth.role, editionId, editionTeamId, teamId, newStatus, policy: policy ?? null }),
+        detail: JSON.stringify({ role: auth.role, editionId, editionTeamId, teamId, newStatus, policy: policy ?? null, reason }),
         before: { status: entry.status },
         after: { status: newStatus, matchesChanged: matchChanges.length },
         timestamp,
@@ -153,6 +161,13 @@ export default async function handler(req, res) {
 
     res.status(200).json({ ok: true });
   } catch (err) {
+    if (err?.details?.code === "VALIDATION_ERROR") {
+      res.status(err.status ?? 400).json({
+        success: false,
+        error: { code: "VALIDATION_ERROR", message: err.message, fields: err.details.fields ?? {} },
+      });
+      return;
+    }
     if (err instanceof HttpError) {
       res.status(err.status).json({ error: err.message });
       return;

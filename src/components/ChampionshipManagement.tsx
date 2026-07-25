@@ -1,12 +1,17 @@
 import { useState } from "react";
-import { collection, deleteDoc, deleteField, doc, setDoc, updateDoc } from "firebase/firestore";
 import { useCollection } from "../hooks/useCollection";
-import { db } from "../firebase";
 import { confirmDelete } from "../lib/confirmDelete";
 import { ImageUploadField } from "./ImageUploadField";
+import { TypeBadge } from "./TypeBadge";
 import { uploadTeamPhotoAsset, deleteTeamPhotoByPath, TeamPhotoError } from "../lib/teamPhotoUpload";
+import { uploadChampionshipLogo, deleteChampionshipLogo, getChampionshipLogoAlt } from "../lib/championshipLogoUpload";
+import { getImageErrorMessage } from "../lib/imageFilePolicy";
 import type { ChampionshipType, Team } from "../types";
 import { BADGE_COLORS } from "../types";
+import { deleteTeam, saveTeam } from "../lib/teamAdminApi";
+import { createChampionshipType, deleteChampionshipType, updateChampionshipType } from "../lib/championshipApi";
+import { reorderChampionshipTypes } from "../lib/championshipAdminApi";
+import { ChevronUp, ChevronDown } from "lucide-react";
 
 function slugify(text: string) {
   return text
@@ -26,15 +31,37 @@ export function ChampionshipTypeManagement({ onDone }: { onDone: (msg: string) =
   const [badgeColor, setBadgeColor] = useState<string>("serie-b");
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [reorderingId, setReorderingId] = useState<string | null>(null);
 
   const badgeOptions = Object.keys(BADGE_COLORS);
+  // Ordine di visualizzazione: per "order" (assente = 0), poi alfabetico. Le frecce
+  // riscrivono "order" con valori sequenziali puliti (0,1,2...) su tutta la lista,
+  // così restano sempre coerenti anche se una tipologia non lo aveva mai avuto.
+  const sortedTypes = [...types].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name));
+
+  const moveType = async (type: ChampionshipType, direction: -1 | 1) => {
+    const index = sortedTypes.findIndex((t) => t.id === type.id);
+    const swapWith = sortedTypes[index + direction];
+    if (!swapWith) return;
+    const reordered = [...sortedTypes];
+    [reordered[index], reordered[index + direction]] = [reordered[index + direction], reordered[index]];
+    setReorderingId(type.id);
+    try {
+      await reorderChampionshipTypes(reordered.map((t) => t.id));
+    } catch (err) {
+      console.error(err);
+      onDone(getImageErrorMessage(err, "Errore nel riordino delle tipologie."));
+    } finally {
+      setReorderingId(null);
+    }
+  };
 
   const create = async () => {
     if (!name.trim()) return;
     setCreating(true);
     try {
       const id = slugify(name);
-      await setDoc(doc(db, "championshipTypes", id), {
+      await createChampionshipType({
         id,
         name: name.trim(),
         hasTeams,
@@ -53,7 +80,7 @@ export function ChampionshipTypeManagement({ onDone }: { onDone: (msg: string) =
   const remove = async (t: ChampionshipType) => {
     if (!confirmDelete(t.name)) return;
     try {
-      await deleteDoc(doc(db, "championshipTypes", t.id));
+      await deleteChampionshipType(t.id);
       onDone(`Tipologia "${t.name}" eliminata.`);
     } catch (err) {
       console.error(err);
@@ -65,7 +92,7 @@ export function ChampionshipTypeManagement({ onDone }: { onDone: (msg: string) =
     <div className="mt-6">
       <p className="text-[13px] font-bold mb-2">Tipologie di campionato</p>
       <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl overflow-hidden mb-3">
-        {types.map((t) =>
+        {sortedTypes.map((t, index) =>
           editingId === t.id ? (
             <EditTypeRow key={t.id} type={t} onCancel={() => setEditingId(null)} onDone={onDone} />
           ) : (
@@ -73,9 +100,28 @@ export function ChampionshipTypeManagement({ onDone }: { onDone: (msg: string) =
               key={t.id}
               className="flex items-center justify-between px-3.5 py-2.5 text-[13px] border-b border-[rgba(251,243,222,0.08)] last:border-b-0 gap-2"
             >
+              <div className="flex flex-col shrink-0">
+                <button
+                  onClick={() => moveType(t, -1)}
+                  disabled={index === 0 || reorderingId !== null}
+                  className="text-[rgba(251,243,222,0.55)] disabled:opacity-25"
+                  aria-label={`Sposta ${t.name} su`}
+                >
+                  <ChevronUp size={14} />
+                </button>
+                <button
+                  onClick={() => moveType(t, 1)}
+                  disabled={index === sortedTypes.length - 1 || reorderingId !== null}
+                  className="text-[rgba(251,243,222,0.55)] disabled:opacity-25"
+                  aria-label={`Sposta ${t.name} giù`}
+                >
+                  <ChevronDown size={14} />
+                </button>
+              </div>
+              <TypeBadge type={t} size={34} />
               <span className="font-semibold flex-1">
                 {t.name}{" "}
-                <span className="text-[rgba(251,243,222,0.35)] font-normal">{t.hasTeams ? "· a squadre" : "· individuale"}</span>
+                <span className="text-[rgba(251,243,222,0.50)] font-normal">{t.hasTeams ? "· a squadre" : "· individuale"}</span>
               </span>
               <span
                 className="text-[10.5px] font-bold px-2 py-1 rounded-full shrink-0"
@@ -92,10 +138,10 @@ export function ChampionshipTypeManagement({ onDone }: { onDone: (msg: string) =
             </div>
           )
         )}
-        {types.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna tipologia ancora.</p>}
+        {sortedTypes.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.50)]">Nessuna tipologia ancora.</p>}
       </div>
 
-      <p className="text-xs text-[rgba(251,243,222,0.35)] mb-2">
+      <p className="text-xs text-[rgba(251,243,222,0.50)] mb-2">
         Crea una nuova tipologia se in futuro serve un campionato diverso da Serie B/C, Principianti, Femminile.
       </p>
       <input
@@ -142,19 +188,68 @@ function EditTypeRow({
   const [name, setName] = useState(type.name);
   const [hasTeams, setHasTeams] = useState(type.hasTeams);
   const [badgeColor, setBadgeColor] = useState(type.badgeColor);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoError, setLogoError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deletingLogo, setDeletingLogo] = useState(false);
 
   const save = async () => {
     setSaving(true);
+    setLogoError(null);
+    let uploadedLogo: Awaited<ReturnType<typeof uploadChampionshipLogo>> | null = null;
     try {
-      await updateDoc(doc(db, "championshipTypes", type.id), { name: name.trim(), hasTeams, badgeColor });
+      const updates: Parameters<typeof updateChampionshipType>[0] = { id: type.id, name: name.trim(), hasTeams, badgeColor };
+      if (logoFile) {
+        uploadedLogo = await uploadChampionshipLogo(type.id, logoFile);
+        updates.logoUrl = uploadedLogo.url;
+        updates.logoStoragePath = uploadedLogo.storagePath;
+        updates.logoAlt = getChampionshipLogoAlt(type, type.logoAlt);
+      }
+
+      await updateChampionshipType(updates);
+      // Il vecchio file va eliminato solo DOPO che Firestore ha confermato: mai prima,
+      // altrimenti un fallimento a metà lascerebbe la tipologia senza nessun logo.
+      if (uploadedLogo && type.logoStoragePath) await deleteChampionshipLogo(type.logoStoragePath);
       onDone("Tipologia aggiornata.");
       onCancel();
     } catch (err) {
+      // Se l'upload era riuscito ma il salvataggio su Firestore fallisce, il file nuovo
+      // appena caricato va eliminato: non deve restare orfano, e il logo precedente resta
+      // quello valido. Nessun falso messaggio di successo.
+      if (uploadedLogo) await deleteChampionshipLogo(uploadedLogo.storagePath);
       console.error(err);
-      onDone("Errore nel salvataggio.");
+      const msg = getImageErrorMessage(err, "Errore nel salvataggio della tipologia.");
+      setLogoError(msg);
+      onDone(msg);
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Eliminazione immediata e indipendente dal Salva (stesso pattern dell'immagine
+  // delle news): chiede conferma, aggiorna subito Firestore, poi elimina il file.
+  const removeLogoNow = async () => {
+    if (!type.logoUrl) return;
+    if (!confirmDelete(`il logo di ${type.name}`)) return;
+    setDeletingLogo(true);
+    setLogoError(null);
+    try {
+      await updateChampionshipType({
+        id: type.id,
+        name: type.name,
+        hasTeams: type.hasTeams,
+        badgeColor: type.badgeColor,
+        logoUrl: null,
+        logoStoragePath: null,
+        logoAlt: null,
+      });
+      await deleteChampionshipLogo(type.logoStoragePath ?? type.logoUrl);
+      onDone("Logo eliminato.");
+    } catch (err) {
+      console.error(err);
+      setLogoError(getImageErrorMessage(err, "Errore nell'eliminazione del logo."));
+    } finally {
+      setDeletingLogo(false);
     }
   };
 
@@ -180,13 +275,33 @@ function EditTypeRow({
           </option>
         ))}
       </select>
-      <div className="flex gap-2">
+
+      <ImageUploadField
+        label="Logo della categoria"
+        currentUrl={type.logoUrl}
+        currentAlt={getChampionshipLogoAlt(type, type.logoAlt)}
+        selectedFile={logoFile}
+        loading={saving || deletingLogo}
+        error={logoError}
+        uploadLabel="Carica logo"
+        replaceLabel="Sostituisci logo"
+        removeLabel="Elimina logo"
+        previewAspectClassName="aspect-square"
+        previewObjectFit="contain"
+        onFileChange={(file) => {
+          setLogoError(null);
+          setLogoFile(file);
+        }}
+        onRemoveImage={removeLogoNow}
+      />
+
+      <div className="flex gap-2 mt-2">
         <button
           onClick={save}
           disabled={saving}
           className="flex-1 bg-lime text-[#081208] rounded-lg py-2 text-sm font-bold disabled:opacity-50"
         >
-          Salva
+          {saving ? "Salvataggio in corso..." : "Salva"}
         </button>
         <button onClick={onCancel} className="flex-1 border border-[rgba(251,243,222,0.18)] rounded-lg py-2 text-sm font-semibold">
           Annulla
@@ -223,11 +338,13 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
     setPhotoError(null);
     let uploadedPhoto: Awaited<ReturnType<typeof uploadTeamPhotoAsset>> | null = null;
     try {
-      const ref = doc(collection(db, "teams"));
+      const ref = { id: crypto.randomUUID() };
       if (photoFile) {
         uploadedPhoto = await uploadTeamPhotoAsset(ref.id, photoFile);
       }
-      await setDoc(ref, {
+      await saveTeam({
+        operation: "create",
+        teamId: ref.id,
         name: name.trim(),
         roster,
         ...(uploadedPhoto
@@ -252,8 +369,7 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
   const remove = async (t: Team) => {
     if (!confirmDelete(t.name)) return;
     try {
-      await deleteDoc(doc(db, "teams", t.id));
-      await deleteTeamPhotoByPath(t.teamPhotoStoragePath ?? t.teamPhotoUrl);
+      await deleteTeam(t.id);
       onDone(`Squadra "${t.name}" eliminata.`);
     } catch (err) {
       console.error(err);
@@ -265,7 +381,7 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
     <div id="squadre" className="mt-6 scroll-mt-24">
       <p className="text-[13px] font-bold mb-2">Squadre</p>
       <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl overflow-hidden mb-3 max-h-72 overflow-y-auto">
-        {teams.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna squadra ancora.</p>}
+        {teams.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.50)]">Nessuna squadra ancora.</p>}
         {teams.map((t) =>
           editingId === t.id ? (
             <EditTeamRow key={t.id} team={t} onCancel={() => setEditingId(null)} onDone={onDone} />
@@ -281,7 +397,7 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold truncate">{t.name}</p>
-                  <p className="text-[12px] text-[rgba(251,243,222,0.35)] truncate">{t.roster.join(", ")}</p>
+                  <p className="text-[12px] text-[rgba(251,243,222,0.50)] truncate">{t.roster.join(", ")}</p>
                 </div>
                 <button onClick={() => setEditingId(t.id)} className="text-[#BBFF5E] text-xs font-semibold shrink-0">
                   Modifica
@@ -364,13 +480,15 @@ function EditTeamRow({
         // precedente SOLO dopo che il salvataggio su Firestore è andato a buon fine.
         uploadedPhoto = await uploadTeamPhotoAsset(team.id, photoFile);
       }
-      await updateDoc(doc(db, "teams", team.id), {
+      await saveTeam({
+        operation: "update",
+        teamId: team.id,
         name: name.trim(),
         roster,
         ...(uploadedPhoto
           ? { teamPhotoUrl: uploadedPhoto.url, teamPhotoStoragePath: uploadedPhoto.storagePath }
           : removePhoto
-            ? { teamPhotoUrl: deleteField(), teamPhotoStoragePath: deleteField() }
+            ? { teamPhotoStoragePath: null }
             : {}),
       });
       const previousPhoto = team.teamPhotoStoragePath ?? team.teamPhotoUrl;

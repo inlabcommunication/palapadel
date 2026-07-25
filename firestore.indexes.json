@@ -1,4 +1,13 @@
 {
-  "indexes": [],
+  "indexes": [
+    {
+      "collectionGroup": "championshipEditions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isPubliclyVisible", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    }
+  ],
   "fieldOverrides": []
 }

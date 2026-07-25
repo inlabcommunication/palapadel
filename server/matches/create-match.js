@@ -7,6 +7,8 @@
 
 import admin from "firebase-admin";
 import { areSameTeamIds } from "../_lib/matchValidation.js";
+import { canCreateMatch, normalizeRole } from "../_lib/roles.js";
+import { documentId, optionalDate, optionalTime, parseBody, z } from "../_lib/validation.js";
 
 function getAdminApp() {
   if (admin.apps.length) return admin.app();
@@ -31,10 +33,10 @@ async function verifyCaller(app, req) {
   const callerData = callerSnap.data();
   if (callerData.disabled) throw new HttpError(403, "Account disattivato");
   // Fase 9: solo admin/superAdmin creano partite, mai il resultManager.
-  if (!["superadmin", "admin"].includes(callerData.role)) {
+  if (!canCreateMatch(callerData.role)) {
     throw new HttpError(403, "Solo admin o superAdmin possono creare partite");
   }
-  return { uid: decoded.uid, role: callerData.role };
+  return { uid: decoded.uid, role: normalizeRole(callerData.role) };
 }
 
 export default async function handler(req, res) {
@@ -47,15 +49,22 @@ export default async function handler(req, res) {
     const app = getAdminApp();
     const auth = await verifyCaller(app, req);
 
-    const { editionId, matchdayId, team1Id, team2Id, matchDate, matchTime } = req.body || {};
-    if (!editionId || !matchdayId || !team1Id || !team2Id) {
-      throw new HttpError(400, "Dati mancanti");
-    }
+    const { editionId, matchdayId, team1Id, team2Id, matchDate, matchTime, court, notes } = parseBody(
+      z.object({
+        editionId: documentId,
+        matchdayId: documentId,
+        team1Id: documentId,
+        team2Id: documentId,
+        matchDate: optionalDate,
+        matchTime: optionalTime,
+        court: z.string().trim().max(120).optional(),
+        notes: z.string().trim().max(1000).optional(),
+      }).strict(),
+      req.body
+    );
     if (areSameTeamIds(team1Id, team2Id)) {
       throw new HttpError(400, "Le due squadre coincidono.");
     }
-    if (matchDate && !/^\d{4}-\d{2}-\d{2}$/.test(matchDate)) throw new HttpError(400, "Data partita non valida.");
-    if (matchTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(matchTime)) throw new HttpError(400, "Ora partita non valida.");
 
     const db = admin.firestore(app);
     const matchRef = db.collection("matches").doc();
@@ -109,6 +118,8 @@ export default async function handler(req, res) {
         status: "da_giocare",
         ...(matchDate ? { matchDate } : {}),
         ...(matchTime ? { matchTime } : {}),
+        ...(court ? { court } : {}),
+        ...(notes ? { notes } : {}),
         updatedAt: timestamp,
         updatedBy: auth.uid,
       });
@@ -117,13 +128,20 @@ export default async function handler(req, res) {
         action: "match_created",
         detail: JSON.stringify({ role: auth.role, editionId, matchdayId, matchId: matchRef.id }),
         before: null,
-        after: { team1Id, team2Id, status: "da_giocare", matchDate: matchDate ?? null, matchTime: matchTime ?? null },
+        after: { team1Id, team2Id, status: "da_giocare", matchDate: matchDate ?? null, matchTime: matchTime ?? null, court: court ?? null, notes: notes ?? null },
         timestamp,
       });
     });
 
     res.status(200).json({ ok: true, matchId: matchRef.id });
   } catch (err) {
+    if (err?.details?.code === "VALIDATION_ERROR") {
+      res.status(400).json({
+        success: false,
+        error: { code: "VALIDATION_ERROR", message: "Dati non validi", fields: err.details.fields ?? {} },
+      });
+      return;
+    }
     if (err instanceof HttpError) {
       res.status(err.status).json({ error: err.message });
       return;

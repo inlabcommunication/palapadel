@@ -10,6 +10,7 @@ import schedule from "../../server/notifications/schedule.js";
 import send from "../../server/notifications/send.js";
 import settings from "../../server/notifications/settings.js";
 import subscribe from "../../server/notifications/subscribe.js";
+import diagnostics from "../../server/notifications/diagnostics.js";
 
 const handlers = {
   cancel,
@@ -24,6 +25,7 @@ const handlers = {
   send,
   settings,
   subscribe,
+  diagnostics,
 };
 
 export default function handler(req, res) {

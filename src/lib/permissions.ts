@@ -1,10 +1,48 @@
 import type { Role } from "../types";
+import {
+  PERMISSIONS,
+  hasPermission,
+  canManageResults,
+  canChangeMatchStatus,
+  canEditOperationalStandings,
+  canEnrollExistingTeam,
+  canCreateMatchday,
+  canCreateMatch,
+  canDeleteMatch,
+  canEditMatchSchedule,
+  canImportSchedule,
+  canManageTeamRegistry,
+  canManageChampionships,
+  canManageNews,
+  canViewAnalytics,
+  canManageUsers,
+  canReorderChampionships,
+  canShareStandings,
+  canShareMatchday,
+} from "../../shared/permissions.js";
 
-/**
- * Fase 7 — permessi distinti derivati dal ruolo, invece di un unico "canManage"
- * generico. Funzione pura (nessun hook React), così è riusabile sia dalla UI
- * (src/pages/Giornate.tsx) sia dai test automatici (Fase 17).
- */
+export {
+  PERMISSIONS,
+  hasPermission,
+  canManageResults,
+  canChangeMatchStatus,
+  canEditOperationalStandings,
+  canEnrollExistingTeam,
+  canCreateMatchday,
+  canCreateMatch,
+  canDeleteMatch,
+  canEditMatchSchedule,
+  canImportSchedule,
+  canManageTeamRegistry,
+  canManageChampionships,
+  canManageNews,
+  canViewAnalytics,
+  canManageUsers,
+  canReorderChampionships,
+  canShareStandings,
+  canShareMatchday,
+};
+
 export interface Permissions {
   isSuperAdmin: boolean;
   isAdmin: boolean;
@@ -14,20 +52,33 @@ export interface Permissions {
   canEditResults: boolean;
   canManageMatchdays: boolean;
   canCreateHomeNewsDraft: boolean;
+  canChangeMatchStatus: boolean;
+  canEditOperationalStandings: boolean;
+  canEnrollExistingTeam: boolean;
+  canEditMatchSchedule: boolean;
+  canShareStandings: boolean;
+  canShareMatchday: boolean;
 }
 
 export function derivePermissions(role: Role | undefined | null): Permissions {
-  const isSuperAdmin = role === "superadmin";
-  const isAdmin = isSuperAdmin || role === "admin";
-  const isResultManager = role === "gestore";
   return {
-    isSuperAdmin,
-    isAdmin,
-    isResultManager,
-    canCreateMatches: isAdmin,
-    canDeleteMatches: isAdmin,
-    canEditResults: isAdmin || isResultManager,
-    canManageMatchdays: isAdmin,
-    canCreateHomeNewsDraft: isAdmin,
+    isSuperAdmin: role === "superAdmin",
+    isAdmin: role === "superAdmin" || role === "admin",
+    isResultManager: role === "resultManager",
+    canCreateMatches: canCreateMatch(role),
+    canDeleteMatches: canDeleteMatch(role),
+    canEditResults: canManageResults(role),
+    canManageMatchdays: canCreateMatchday(role),
+    canCreateHomeNewsDraft: canManageNews(role),
+    canChangeMatchStatus: canChangeMatchStatus(role),
+    canEditOperationalStandings: canEditOperationalStandings(role),
+    canEnrollExistingTeam: canEnrollExistingTeam(role),
+    canEditMatchSchedule: canEditMatchSchedule(role),
+    canShareStandings: canShareStandings(role),
+    canShareMatchday: canShareMatchday(role),
   };
+}
+
+export function canResetAnalytics(role: Role | null | undefined) {
+  return hasPermission(role, PERMISSIONS.RESET_ANALYTICS);
 }

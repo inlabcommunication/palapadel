@@ -14,6 +14,8 @@ import admin from "firebase-admin";
 import { normalizeMatchChange } from "../_lib/matchStatus.js";
 import { enqueueNotificationEvent } from "../_lib/notificationEvents.js";
 import { computeStandingsUpdates } from "../_lib/standingsRules.js";
+import { normalizeRole, roleAllowed } from "../_lib/roles.js";
+import { documentId, parseBody, z } from "../_lib/validation.js";
 
 function getAdminApp() {
   if (admin.apps.length) return admin.app();
@@ -39,10 +41,10 @@ async function verifyCaller(app, req) {
   const callerData = callerSnap.data();
   if (callerData.disabled) throw new HttpError(403, "Account disattivato");
   const role = callerData.role;
-  if (!["superadmin", "admin", "gestore"].includes(role)) {
+  if (!roleAllowed(role, ["superAdmin", "admin", "resultManager"])) {
     throw new HttpError(403, "Permessi insufficienti");
   }
-  return { uid: decoded.uid, role };
+  return { uid: decoded.uid, role: normalizeRole(role) };
 }
 
 export default async function handler(req, res) {
@@ -55,7 +57,17 @@ export default async function handler(req, res) {
     const app = getAdminApp();
     const auth = await verifyCaller(app, req);
 
-    const { matchdayId, editionId, entries } = req.body || {};
+    const input = parseBody(z.object({
+      matchdayId: documentId,
+      editionId: documentId,
+      entries: z.array(z.object({
+        matchId: documentId,
+        result: z.enum(["2-0", "2-1", "1-2", "0-2"]).nullable(),
+        status: z.enum(["scheduled", "completed", "postponed", "cancelled", "da_giocare", "conclusa", "rinviata", "annullata"]),
+      }).strict()).min(1).max(200),
+      idempotencyKey: z.string().trim().max(120).optional(),
+    }).strict(), req.body);
+    const { matchdayId, editionId, entries } = input;
     if (!matchdayId || !editionId || !Array.isArray(entries) || entries.length === 0) {
       throw new HttpError(400, "Dati mancanti");
     }
@@ -85,7 +97,7 @@ export default async function handler(req, res) {
       if (!type || !type.hasTeams) {
         throw new HttpError(400, "Il campionato non è a squadre.");
       }
-      if (auth.role === "gestore" && edition.status !== "attiva") {
+      if (auth.role === "resultManager" && edition.status !== "attiva") {
         throw new HttpError(403, "Il resultManager può operare solo su edizioni attive.");
       }
 
@@ -172,7 +184,7 @@ export default async function handler(req, res) {
       try {
         notification = await enqueueNotificationEvent(app, notificationEvent, {
           createdBy: auth.uid,
-          idempotencyKey: req.body?.idempotencyKey || `bulk-${matchdayId}-${updatedAt}`,
+          idempotencyKey: input.idempotencyKey || `bulk-${matchdayId}-${updatedAt}`,
           sourceRef: `matchdays/${matchdayId}`,
         });
       } catch (notificationErr) {
@@ -182,6 +194,10 @@ export default async function handler(req, res) {
 
     res.status(200).json({ ok: true, saved: entries.length, notification });
   } catch (err) {
+    if (err?.details?.code === "VALIDATION_ERROR") {
+      res.status(err.status ?? 400).json({ success: false, error: { code: "VALIDATION_ERROR", message: err.message, fields: err.details.fields ?? {} } });
+      return;
+    }
     if (err instanceof HttpError) {
       res.status(err.status).json({ error: err.message, details: err.details });
       return;

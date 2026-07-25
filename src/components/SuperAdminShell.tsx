@@ -3,7 +3,6 @@ import { Link, useLocation } from "react-router-dom";
 import {
   Award,
   BarChart3,
-  Bell,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -11,27 +10,23 @@ import {
   LayoutDashboard,
   LogOut,
   Newspaper,
-  Settings,
   ShieldCheck,
   Trophy,
-  Users,
 } from "lucide-react";
 import { BottomNav } from "./BottomNav";
 import { TopBar } from "./TopBar";
+import { InLabCredit } from "./InLabCredit";
 import { useAuth } from "../contexts/AuthContext";
 import { ROLE_LABELS } from "../types";
 
 const sidebarItems = [
   { to: "/gestione", label: "Dashboard", icon: LayoutDashboard, match: (path: string, hash: string) => path === "/gestione" && !hash },
-  { to: "/campionati", label: "Campionati", icon: Trophy, match: (path: string, hash: string) => path.startsWith("/campionati") && hash !== "#squadre" },
-  { to: "/gestione", label: "Giornate e partite", icon: CalendarDays, match: (path: string) => path.startsWith("/gestione/edizione") },
-  { to: "/campionati#squadre", label: "Squadre", icon: Users, match: (path: string, hash: string) => path.startsWith("/campionati") && hash === "#squadre" },
+  { to: "/campionati", label: "Campionati e squadre", icon: Trophy, match: (path: string) => path.startsWith("/campionati") },
+  { to: "/giornate", label: "Giornate e partite", icon: CalendarDays, match: (path: string) => path === "/giornate" || path.startsWith("/gestione/edizione") },
   { to: "/albo", label: "Albo d'oro", icon: Award, match: (path: string) => path === "/albo" },
   { to: "/#news", label: "PalaPadel News", icon: Newspaper, match: (path: string, hash: string) => path === "/" && (!hash || hash === "#news") },
-  { to: "/notifiche", label: "Notifiche", icon: Bell, match: (path: string) => path === "/notifiche" },
   { to: "/analytics", label: "Analytics", icon: BarChart3, match: (path: string) => path === "/analytics" },
-  { to: "/gestione#utenti", label: "Utenti e ruoli", icon: ShieldCheck, match: (path: string, hash: string) => path === "/gestione" && hash === "#utenti" },
-  { to: "/gestione#impostazioni", label: "Impostazioni", icon: Settings, match: (path: string, hash: string) => path === "/gestione" && hash === "#impostazioni" },
+  { to: "/utenti-impostazioni", label: "Utenti e impostazioni", icon: ShieldCheck, match: (path: string) => path === "/utenti-impostazioni" || path === "/notifiche" },
 ];
 
 export function SuperAdminShell({ children }: { children: React.ReactNode }) {
@@ -124,6 +119,7 @@ export function SuperAdminShell({ children }: { children: React.ReactNode }) {
         </header>
         <main className="flex-1 pb-24 xl:px-8 xl:py-6 xl:pb-10">
           <div className="xl:mx-auto xl:w-full xl:max-w-[1440px]">{children}</div>
+          <InLabCredit />
         </main>
         <div className="xl:hidden">
           <BottomNav />

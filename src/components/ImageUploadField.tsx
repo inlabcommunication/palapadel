@@ -14,6 +14,10 @@ interface ImageUploadFieldProps {
   removeLabel?: string;
   onFileChange: (file: File | null) => void;
   onRemoveImage?: () => void;
+  /** Classe aspect-ratio del riquadro anteprima. Default "aspect-video" (16:9, usato per le news). */
+  previewAspectClassName?: string;
+  /** object-fit dell'anteprima. Default "cover". Per i loghi usare "contain": non deve mai tagliare scritte o simboli. */
+  previewObjectFit?: "cover" | "contain";
 }
 
 export function ImageUploadField({
@@ -28,6 +32,8 @@ export function ImageUploadField({
   removeLabel = "Elimina immagine",
   onFileChange,
   onRemoveImage,
+  previewAspectClassName = "aspect-video",
+  previewObjectFit = "cover",
 }: ImageUploadFieldProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -110,7 +116,7 @@ export function ImageUploadField({
             disabled={loading}
             aria-label="Apri anteprima immagine"
           >
-            <img src={previewUrl} alt={currentAlt} className="w-full aspect-video object-cover" />
+            <img src={previewUrl} alt={currentAlt} className={`w-full ${previewAspectClassName} ${previewObjectFit === "contain" ? "object-contain bg-white" : "object-cover"}`} />
             <span className="absolute right-2 top-2 rounded-full bg-black/55 p-1.5 text-[#FBF3DE] opacity-0 transition group-hover:opacity-100">
               <Maximize2 size={14} />
             </span>

@@ -9,22 +9,34 @@ import { NewsPage } from "./pages/News";
 import { AlboPage } from "./pages/Albo";
 import { NotifichePage } from "./pages/Notifiche";
 import { LoginPage } from "./pages/Login";
-import { GestionePage } from "./pages/Gestione";
+import { GestionePage, OperationalChampionshipsPage } from "./pages/Gestione";
 import { GiornatePage } from "./pages/Giornate";
 import { AnalyticsPage } from "./pages/Analytics";
+import { AdminSettingsPage } from "./pages/AdminSettings";
 import { useAuth } from "./contexts/AuthContext";
 import { canTrackAnalytics, configureAnalyticsContext, trackAnalyticsEvent } from "./lib/analyticsClient";
 import { bindForegroundNotificationTracking } from "./lib/notificationClient";
 import { isSuperAdminWorkspacePath } from "./lib/superAdminRoutes";
+import { OfflineIndicator } from "./components/OfflineIndicator";
+import { AppErrorBoundary } from "./components/AppErrorBoundary";
+import { InLabCredit } from "./components/InLabCredit";
 
 export default function App() {
   const location = useLocation();
-  const { appUser, loading: authLoading } = useAuth();
+  const { appUser, authenticatedAppUser, viewMode, loading: authLoading } = useAuth();
   const sessionTrackedRef = useRef(false);
 
   useEffect(() => {
-    configureAnalyticsContext(appUser?.role ?? null, !authLoading);
-  }, [appUser?.role, authLoading]);
+    if ("serviceWorker" in navigator) {
+      void navigator.serviceWorker.register("/firebase-messaging-sw.js").catch((err) => {
+        console.error("Registrazione service worker non riuscita", err);
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    configureAnalyticsContext(authenticatedAppUser?.role ?? null, !authLoading);
+  }, [authenticatedAppUser?.role, authLoading, viewMode]);
 
   useEffect(() => {
     if (!canTrackAnalytics() || sessionTrackedRef.current) return;
@@ -50,12 +62,12 @@ export default function App() {
       navigator.serviceWorker?.removeEventListener("message", onServiceWorkerMessage);
       unbind?.();
     };
-  }, [appUser?.role, authLoading]);
+  }, [authenticatedAppUser?.role, authLoading, viewMode]);
 
   useEffect(() => {
     if (!canTrackAnalytics()) return;
     trackAnalyticsEvent("page_view", { path: location.pathname });
-  }, [location.pathname, appUser?.role, authLoading]);
+  }, [location.pathname, authenticatedAppUser?.role, authLoading, viewMode]);
 
   const routes = (
     <Routes>
@@ -68,20 +80,26 @@ export default function App() {
       <Route path="/notifiche" element={<NotifichePage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/gestione" element={<GestionePage />} />
+      <Route path="/giornate" element={<OperationalChampionshipsPage />} />
       <Route path="/gestione/edizione/:editionId" element={<GiornatePage />} />
       <Route path="/analytics" element={<AnalyticsPage />} />
+      <Route path="/utenti-impostazioni" element={<AdminSettingsPage />} />
     </Routes>
   );
 
-  if (appUser?.role === "superadmin" && isSuperAdminWorkspacePath(location.pathname)) {
-    return <SuperAdminShell>{routes}</SuperAdminShell>;
+  if (appUser?.role === "superAdmin" && isSuperAdminWorkspacePath(location.pathname)) {
+    return <AppErrorBoundary><OfflineIndicator /><SuperAdminShell>{routes}</SuperAdminShell></AppErrorBoundary>;
   }
 
   return (
-    <div className="min-h-screen max-w-[480px] mx-auto flex flex-col bg-[#123008]">
+    <AppErrorBoundary><div className="min-h-screen max-w-[480px] mx-auto flex flex-col bg-[#123008]">
+      <OfflineIndicator />
       <TopBar />
-      <main className="flex-1 pb-24">{routes}</main>
+      <main className="flex-1 pb-24">
+        {routes}
+        <InLabCredit />
+      </main>
       <BottomNav />
-    </div>
+    </div></AppErrorBoundary>
   );
 }

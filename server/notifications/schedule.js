@@ -1,19 +1,18 @@
 import { getAdminApp, admin } from "../_lib/firebaseAdmin.js";
 import { HttpError, requirePost, sendError, verifyCaller } from "../_lib/auth.js";
 import { buildNotificationPayload } from "../_lib/notifications.js";
+import { notificationEventSchema, parseBody, z } from "../_lib/validation.js";
 
 export default async function handler(req, res) {
   try {
     requirePost(req);
     const app = getAdminApp();
-    const caller = await verifyCaller(app, req, ["superadmin"]);
-    const scheduledAt = typeof req.body?.scheduledAt === "string" ? req.body.scheduledAt : "";
-    if (!scheduledAt || Number.isNaN(Date.parse(scheduledAt))) {
-      throw new HttpError(400, "scheduledAt non valido");
-    }
+    const caller = await verifyCaller(app, req, ["superAdmin"]);
+    const input = parseBody(z.object({ scheduledAt: z.string().datetime(), event: notificationEventSchema }).strict(), req.body);
+    const scheduledAt = input.scheduledAt;
 
     const db = admin.firestore(app);
-    const payload = buildNotificationPayload(req.body?.event);
+    const payload = buildNotificationPayload(input.event);
     const now = new Date().toISOString();
     const ref = db.collection("notificationDrafts").doc();
     await ref.set({

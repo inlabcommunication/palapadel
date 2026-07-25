@@ -1,16 +1,22 @@
 import { getAdminApp, admin } from "../_lib/firebaseAdmin.js";
 import { requirePost, sendError, verifyCaller } from "../_lib/auth.js";
 import { buildNotificationPayload } from "../_lib/notifications.js";
+import { notificationEventSchema, parseBody, z } from "../_lib/validation.js";
 
 export default async function handler(req, res) {
   try {
     requirePost(req);
     const app = getAdminApp();
-    const caller = await verifyCaller(app, req, ["superadmin"]);
+    const caller = await verifyCaller(app, req, ["superAdmin"]);
     const db = admin.firestore(app);
-    const payload = buildNotificationPayload(req.body?.event);
-    const scheduledAt = typeof req.body?.scheduledAt === "string" && req.body.scheduledAt ? req.body.scheduledAt : null;
-    const idempotencyKey = typeof req.body?.idempotencyKey === "string" ? req.body.idempotencyKey.slice(0, 120) : null;
+    const input = parseBody(z.object({
+      event: notificationEventSchema,
+      scheduledAt: z.string().datetime().nullable().optional(),
+      idempotencyKey: z.string().trim().min(1).max(120).nullable().optional(),
+    }).strict(), req.body);
+    const payload = buildNotificationPayload(input.event);
+    const scheduledAt = input.scheduledAt ?? null;
+    const idempotencyKey = input.idempotencyKey ?? null;
     const now = new Date().toISOString();
     const ref = idempotencyKey ? db.doc(`notificationDrafts/${idempotencyKey}`) : db.collection("notificationDrafts").doc();
 

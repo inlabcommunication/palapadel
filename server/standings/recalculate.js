@@ -6,8 +6,10 @@
 // Body atteso: { editionId: string, dryRun?: boolean }
 
 import admin from "firebase-admin";
+import { roleAllowed } from "../_lib/roles.js";
 import { enqueueNotificationEvent } from "../_lib/notificationEvents.js";
 import { computeStandingsUpdates } from "../_lib/standingsRules.js";
+import { documentId, parseBody, z } from "../_lib/validation.js";
 
 function getAdminApp() {
   if (admin.apps.length) return admin.app();
@@ -31,7 +33,7 @@ async function verifyCaller(app, req) {
   if (!callerSnap.exists) throw new HttpError(403, "Utente non registrato");
   const callerData = callerSnap.data();
   if (callerData.disabled) throw new HttpError(403, "Account disattivato");
-  if (!["superadmin", "admin"].includes(callerData.role)) {
+  if (!roleAllowed(callerData.role, ["superAdmin"])) {
     throw new HttpError(403, "Solo admin o superAdmin possono ricalcolare la classifica");
   }
   return { uid: decoded.uid, role: callerData.role };
@@ -48,7 +50,12 @@ export default async function handler(req, res) {
     const auth = await verifyCaller(app, req);
     const db = admin.firestore(app);
 
-    const { editionId, dryRun } = req.body || {};
+    const input = parseBody(z.object({
+      editionId: documentId,
+      dryRun: z.boolean().optional(),
+      idempotencyKey: z.string().trim().max(120).optional(),
+    }).strict(), req.body);
+    const { editionId, dryRun } = input;
     if (!editionId) throw new HttpError(400, "editionId mancante");
 
     const editionRef = db.doc(`championshipEditions/${editionId}`);
@@ -130,7 +137,7 @@ export default async function handler(req, res) {
           },
           {
             createdBy: auth.uid,
-            idempotencyKey: req.body?.idempotencyKey || `standings-${editionId}-${timestamp}`,
+            idempotencyKey: input.idempotencyKey || `standings-${editionId}-${timestamp}`,
             sourceRef: `championshipEditions/${editionId}`,
           }
         );
@@ -141,6 +148,10 @@ export default async function handler(req, res) {
 
     res.status(200).json({ ok: true, applied: appliedChanges, notification });
   } catch (err) {
+    if (err?.details?.code === "VALIDATION_ERROR") {
+      res.status(err.status ?? 400).json({ success: false, error: { code: "VALIDATION_ERROR", message: err.message, fields: err.details.fields ?? {} } });
+      return;
+    }
     if (err instanceof HttpError) {
       res.status(err.status).json({ error: err.message });
       return;

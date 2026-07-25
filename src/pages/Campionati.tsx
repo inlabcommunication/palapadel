@@ -1,11 +1,9 @@
-import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { addDoc, collection, deleteDoc, doc, updateDoc, where } from "firebase/firestore";
+import { useEffect, useRef, useState } from "react";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { where } from "firebase/firestore";
 import { useCollection } from "../hooks/useCollection";
 import { useAuth } from "../contexts/AuthContext";
-import { db } from "../firebase";
 import { confirmDelete } from "../lib/confirmDelete";
-import { freezeEdition } from "../lib/freezeEdition";
 import { compareStandingRows } from "../lib/standingsEngine";
 import { importStandings, importFemaleStandings, StandingsApiError, type ImportStandingsRow, type ImportFemaleRow } from "../lib/standingsApi";
 import {
@@ -18,7 +16,7 @@ import {
 } from "../lib/standingsAdminApi";
 import { computeTeamEditionStats } from "../lib/teamStats";
 import { matchTeamName, findDuplicateImportedNames } from "../lib/teamNameMatch";
-import { Plus, Pencil, Trash2, Settings, X, Upload, ChevronDown, Lock, RefreshCw, Trophy, Calendar, Clock, Ban } from "lucide-react";
+import { Plus, Pencil, Trash2, Settings, X, Upload, ChevronDown, ChevronUp, Lock, RefreshCw, Trophy, Calendar, Clock, Ban, Eye, EyeOff } from "lucide-react";
 import type {
   ChampionshipEdition,
   ChampionshipType,
@@ -34,7 +32,12 @@ import type {
 import { ChampionshipTypeManagement, TeamManagement } from "../components/ChampionshipManagement";
 import { BracketSection } from "../components/BracketSection";
 import { StandingsShareButton } from "../components/StandingsShareButton";
+import { TypeBadge } from "../components/TypeBadge";
 import { parsePastedTable } from "../lib/parsePastedTable";
+import { resolveActiveMatchdayId } from "../lib/activeMatchday";
+import { closeEdition, reorderChampionships, setChampionshipVisibility } from "../lib/championshipAdminApi";
+import { createChampionshipEdition, deleteChampionshipEdition, updateChampionshipEdition } from "../lib/championshipApi";
+import { createFemaleParticipant, deleteFemaleParticipant, recalculateFemaleParticipants, updateFemaleParticipant } from "../lib/femaleParticipantApi";
 
 
 function statusLabel(status: EditionStatus) {
@@ -67,25 +70,35 @@ const RANK_COLORS = [
 export function CampionatiPage() {
   const { editionId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { appUser } = useAuth();
-  const isAdmin = appUser?.role === "admin" || appUser?.role === "superadmin";
+  const isAdmin = appUser?.role === "superAdmin";
 
-  const { data: types } = useCollection<ChampionshipType>("championshipTypes");
+  const typesQuery = useCollection<ChampionshipType>("championshipTypes");
+  const { data: types } = typesQuery;
   // Come in Home: il pubblico non deve interrogare edizioni bozza/nascoste, non solo
   // "non vederle" — altrimenti la query verrebbe comunque rifiutata dalle regole Firestore.
-  const { data: editions } = useCollection<ChampionshipEdition>(
+  const editionsQuery = useCollection<ChampionshipEdition>(
     "championshipEditions",
-    isAdmin ? [] : [where("status", "in", ["attiva", "conclusa"])],
+    isAdmin ? [] : [where("status", "in", ["attiva", "conclusa"]), where("isPubliclyVisible", "==", true)],
     [isAdmin]
   );
+  const { data: loadedEditions } = editionsQuery;
+  const editions = loadedEditions
+    .filter((item) => isAdmin || item.isPubliclyVisible !== false)
+    .sort((a, b) => (a.displayOrder ?? Number.MAX_SAFE_INTEGER) - (b.displayOrder ?? Number.MAX_SAFE_INTEGER));
 
   const [showNewEdition, setShowNewEdition] = useState(false);
   const [showTypeSettings, setShowTypeSettings] = useState(false);
-  const [showTeamSettings, setShowTeamSettings] = useState(false);
+  const [managementTab, setManagementTab] = useState<"championships" | "teams">("championships");
   const [showSeasonPicker, setShowSeasonPicker] = useState(false);
   const [editingEdition, setEditingEdition] = useState(false);
   const [manualTypeId, setManualTypeId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [ordering, setOrdering] = useState(false);
+  const [contentTab, setContentTab] = useState<"standings" | "calendar">(
+    searchParams.get("tab") === "calendar" ? "calendar" : "standings"
+  );
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -111,6 +124,7 @@ export function CampionatiPage() {
     setManualTypeId(typeId);
     setEditingEdition(false);
     setShowSeasonPicker(false);
+    setContentTab("standings");
     const def = pickDefaultEdition(editions.filter((e) => e.typeId === typeId));
     if (def) navigate(`/campionati/${def.id}`);
     else navigate("/campionati");
@@ -120,21 +134,87 @@ export function CampionatiPage() {
     setManualTypeId(ed.typeId);
     setShowSeasonPicker(false);
     setEditingEdition(false);
+    setContentTab("standings");
     navigate(`/campionati/${ed.id}`);
   };
 
+  const orderedEditions = [...editions].sort(
+    (a, b) => (a.displayOrder ?? Number.MAX_SAFE_INTEGER) - (b.displayOrder ?? Number.MAX_SAFE_INTEGER) || a.season.localeCompare(b.season)
+  );
+
+  const moveEdition = async (id: string, direction: -1 | 1) => {
+    const index = orderedEditions.findIndex((item) => item.id === id);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= orderedEditions.length) return;
+    const next = [...orderedEditions];
+    [next[index], next[target]] = [next[target], next[index]];
+    setOrdering(true);
+    try {
+      await reorderChampionships(next.map((item) => item.id));
+      showToast("Ordine dei campionati aggiornato.");
+    } catch (err) {
+      console.error(err);
+      showToast("Impossibile aggiornare l'ordine.");
+    } finally {
+      setOrdering(false);
+    }
+  };
+
+  const toggleVisibility = async (item: ChampionshipEdition) => {
+    setOrdering(true);
+    try {
+      await setChampionshipVisibility(item.id, item.isPubliclyVisible === false);
+      showToast(item.isPubliclyVisible === false ? "Campionato nuovamente visibile." : "Campionato nascosto al pubblico.");
+    } catch (err) {
+      console.error(err);
+      showToast("Impossibile modificare la visibilità.");
+    } finally {
+      setOrdering(false);
+    }
+  };
+
+  if (typesQuery.loading || editionsQuery.loading) {
+    return <div className="p-4"><h2 className="text-[13px] font-extrabold uppercase">Campionati</h2><p className="mt-3 text-sm text-[rgba(251,243,222,0.58)]">Caricamento campionati...</p></div>;
+  }
+
+  const loadingError = typesQuery.error ?? editionsQuery.error;
+  if (loadingError) {
+    return (
+      <div className="p-4">
+        <h2 className="font-bold">Campionati non disponibili</h2>
+        <p className="my-2 text-sm text-[rgba(251,243,222,0.58)]">{loadingError.message}</p>
+        <button onClick={() => { typesQuery.retry(); editionsQuery.retry(); }} className="text-sm font-bold text-[#BBFF5E]">Riprova</button>
+      </div>
+    );
+  }
+
+  if (isAdmin && managementTab === "teams") {
+    return (
+      <div className="p-4">
+        <div className="mb-4 grid grid-cols-2 rounded-lg bg-[#0A0B08] p-1" role="tablist" aria-label="Campionati e squadre">
+          <button role="tab" aria-selected={false} onClick={() => setManagementTab("championships")}
+            className="rounded-md px-3 py-2.5 text-sm font-bold text-[rgba(251,243,222,0.72)]">Campionati</button>
+          <button role="tab" aria-selected className="rounded-md bg-[#BBFF5E] px-3 py-2.5 text-sm font-bold text-[#081208]">Squadre</button>
+        </div>
+        <TeamManagement onDone={showToast} />
+        {toast && <div className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full border border-[rgba(187,255,94,0.3)] bg-[#0A0B08] px-4 py-2.5 text-center text-[12.5px]">{toast}</div>}
+      </div>
+    );
+  }
+
   return (
     <div className="p-4">
+      {isAdmin && (
+        <div className="mb-4 grid grid-cols-2 rounded-lg bg-[#0A0B08] p-1" role="tablist" aria-label="Campionati e squadre">
+          <button role="tab" aria-selected className="rounded-md bg-[#BBFF5E] px-3 py-2.5 text-sm font-bold text-[#081208]">Campionati</button>
+          <button role="tab" aria-selected={false} onClick={() => setManagementTab("teams")}
+            className="rounded-md px-3 py-2.5 text-sm font-bold text-[rgba(251,243,222,0.72)]">Squadre</button>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE]">Campionati</h2>
         {isAdmin && (
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => setShowTeamSettings((v) => !v)}
-              className="flex items-center gap-1 text-xs text-[rgba(251,243,222,0.58)]"
-            >
-              <Settings size={14} /> Squadre
-            </button>
             <button
               onClick={() => setShowTypeSettings((v) => !v)}
               className="flex items-center gap-1 text-xs text-[rgba(251,243,222,0.58)]"
@@ -145,16 +225,35 @@ export function CampionatiPage() {
         )}
       </div>
 
-      {showTeamSettings && (
-        <div className="mb-4 bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
-          <TeamManagement onDone={showToast} />
-        </div>
-      )}
-
       {showTypeSettings && (
         <div className="mb-4 bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
           <ChampionshipTypeManagement onDone={showToast} />
         </div>
+      )}
+
+      {isAdmin && (
+        <section className="mb-4 rounded-lg border border-[rgba(251,243,222,0.10)] bg-[#0A0B08] p-3">
+          <h3 className="mb-2 text-xs font-extrabold uppercase text-[#FBF3DE]">Ordine e visibilità</h3>
+          <div className="space-y-1">
+            {orderedEditions.map((item, index) => {
+              const type = types.find((candidate) => candidate.id === item.typeId);
+              return (
+                <div key={item.id} className="flex items-center gap-2 rounded-lg bg-[rgba(251,243,222,0.05)] px-2 py-2">
+                  <span className="min-w-0 flex-1 truncate text-xs font-semibold">{type?.name ?? "Campionato"} {item.season}</span>
+                  <button aria-label="Sposta campionato in alto" disabled={ordering || index === 0} onClick={() => moveEdition(item.id, -1)}
+                    className="rounded-md p-1.5 hover:bg-[rgba(251,243,222,0.08)] disabled:opacity-25"><ChevronUp size={15} /></button>
+                  <button aria-label="Sposta campionato in basso" disabled={ordering || index === orderedEditions.length - 1} onClick={() => moveEdition(item.id, 1)}
+                    className="rounded-md p-1.5 hover:bg-[rgba(251,243,222,0.08)] disabled:opacity-25"><ChevronDown size={15} /></button>
+                  <button aria-label={item.isPubliclyVisible === false ? "Rendi visibile il campionato" : "Nascondi il campionato"}
+                    disabled={ordering} onClick={() => toggleVisibility(item)}
+                    className={`rounded-md p-1.5 ${item.isPubliclyVisible === false ? "text-[#FF9B6B]" : "text-[#BBFF5E]"}`}>
+                    {item.isPubliclyVisible === false ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       {/* Riga 1: una scheda per ogni tipologia di campionato (Serie B, Serie C, Principianti, Femminile...) */}
@@ -165,15 +264,26 @@ export function CampionatiPage() {
             <button
               key={t.id}
               onClick={() => selectType(t.id)}
-              className={`whitespace-nowrap rounded-full px-3.5 py-2 text-[12.5px] font-semibold shrink-0 ${
+              className={`whitespace-nowrap rounded-full px-3.5 py-2 text-[12.5px] font-semibold shrink-0 flex items-center gap-1.5 ${
                 isSel ? "bg-lime text-[#081208]" : "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.85)]"
               }`}
             >
+              <TypeBadge type={t} size={20} className="rounded-[7px]" />
               {t.name}
             </button>
           );
         })}
       </div>
+
+      {/* Intestazione: piccolo logo della categoria + nome + stagione, sopra Classifica/Calendario/Tabellone */}
+      {activeType && edition && (
+        <div className="flex items-center gap-2 mb-2">
+          <TypeBadge type={activeType} variant="header" />
+          <p className="font-display text-[19px] leading-none text-[#FBF3DE]">
+            {activeType.name} <span className="text-[rgba(251,243,222,0.55)]">{edition.season}</span>
+          </p>
+        </div>
+      )}
 
       {/* Riga 2: selettore di stagione per la tipologia scelta, + azioni admin */}
       <div className="flex items-center gap-2 mb-4 relative">
@@ -186,7 +296,7 @@ export function CampionatiPage() {
             <ChevronDown size={13} />
           </button>
         ) : (
-          <span className="text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna edizione ancora per questa tipologia.</span>
+          <span className="text-[12.5px] text-[rgba(251,243,222,0.50)]">Nessuna edizione ancora per questa tipologia.</span>
         )}
         {isAdmin && (
           <button
@@ -208,7 +318,7 @@ export function CampionatiPage() {
                 }`}
               >
                 <span>{e.season}</span>
-                <span className="text-[10px] text-[rgba(251,243,222,0.35)]">{statusLabel(e.status)}</span>
+                <span className="text-[10px] text-[rgba(251,243,222,0.50)]">{statusLabel(e.status)}</span>
               </button>
             ))}
           </div>
@@ -255,7 +365,7 @@ export function CampionatiPage() {
                   <>
                     {statusLabel(edition.status)}
                     {edition.status === "conclusa" && edition.closedAt && (
-                      <span className="text-[rgba(251,243,222,0.35)] flex items-center gap-1">
+                      <span className="text-[rgba(251,243,222,0.50)] flex items-center gap-1">
                         <Lock size={11} /> storico congelato
                       </span>
                     )}
@@ -263,22 +373,6 @@ export function CampionatiPage() {
                 )}
               </p>
               <div className="flex items-center gap-3">
-                {isAdmin && edition.status === "conclusa" && activeType && (
-                  <button
-                    onClick={async () => {
-                      try {
-                        await freezeEdition(edition, activeType);
-                        showToast("Storico ricongelato con i dati attuali.");
-                      } catch (err) {
-                        console.error(err);
-                        showToast("Errore nel ricongelamento.");
-                      }
-                    }}
-                    className="flex items-center gap-1 text-xs text-[#BBFF5E] font-semibold"
-                  >
-                    <RefreshCw size={13} /> Ricongela
-                  </button>
-                )}
                 {isAdmin && (
                   <button onClick={() => setEditingEdition(true)} className="flex items-center gap-1 text-xs text-[#BBFF5E] font-semibold">
                     <Pencil size={13} /> Modifica edizione
@@ -291,11 +385,26 @@ export function CampionatiPage() {
       )}
 
       {edition && activeType?.hasTeams && (
-        <TeamStandings edition={edition} championshipName={activeType.name} isAdmin={isAdmin} showToast={showToast} />
-      )}
-      {edition && activeType?.hasTeams && <PublicCalendar edition={edition} />}
-      {edition && activeType?.hasTeams && (
-        <BracketSection edition={edition} isAdmin={isAdmin} showToast={showToast} />
+        <>
+          <div className="mb-4 grid grid-cols-2 rounded-lg bg-[#0A0B08] p-1" role="tablist" aria-label="Contenuti del campionato">
+            <button role="tab" aria-selected={contentTab === "standings"} onClick={() => setContentTab("standings")}
+              className={`rounded-md px-3 py-2.5 text-sm font-bold ${contentTab === "standings" ? "bg-[#BBFF5E] text-[#081208]" : "text-[rgba(251,243,222,0.72)]"}`}>
+              Classifica
+            </button>
+            <button role="tab" aria-selected={contentTab === "calendar"} onClick={() => setContentTab("calendar")}
+              className={`rounded-md px-3 py-2.5 text-sm font-bold ${contentTab === "calendar" ? "bg-[#BBFF5E] text-[#081208]" : "text-[rgba(251,243,222,0.72)]"}`}>
+              Calendario
+            </button>
+          </div>
+          {contentTab === "standings" ? (
+            <TeamStandings edition={edition} championshipName={activeType.name} isAdmin={isAdmin} showToast={showToast} />
+          ) : (
+            <>
+              <PublicCalendar edition={edition} />
+              <BracketSection edition={edition} isAdmin={isAdmin} showToast={showToast} />
+            </>
+          )}
+        </>
       )}
       {edition && activeType && !activeType.hasTeams && (
         <FemaleStandings edition={edition} championshipName={activeType.name} isAdmin={isAdmin} showToast={showToast} />
@@ -332,13 +441,12 @@ function NewEditionForm({
     if (!typeId || !season.trim()) return;
     setSaving(true);
     try {
-      const ref = await addDoc(collection(db, "championshipEditions"), {
+      const response = await createChampionshipEdition({
         typeId,
         season: season.trim(),
         status,
-        createdAt: new Date().toISOString(),
       });
-      onDone("Edizione creata.", ref.id);
+      onDone("Edizione creata.", response.id);
     } catch (err) {
       console.error(err);
       onDone("Errore nella creazione dell'edizione.");
@@ -351,7 +459,7 @@ function NewEditionForm({
     <div className="mb-4 bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Nuova edizione</p>
-        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
+        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.50)]" /></button>
       </div>
       <select
         value={typeId}
@@ -411,13 +519,12 @@ function EditEditionForm({
     setSaving(true);
     try {
       const newStatus = status;
-      await updateDoc(doc(db, "championshipEditions", edition.id), { typeId, season: season.trim(), status: newStatus });
       const isNewlyConcluded = newStatus === "conclusa" && edition.status !== "conclusa";
       if (isNewlyConcluded) {
-        const type = types.find((t) => t.id === typeId);
-        if (type) {
-          await freezeEdition({ ...edition, typeId, season: season.trim(), status: newStatus }, type);
-        }
+        await updateChampionshipEdition({ editionId: edition.id, typeId, season: season.trim(), status: edition.status === "conclusa" ? "attiva" : edition.status });
+        await closeEdition(edition.id);
+      } else {
+        await updateChampionshipEdition({ editionId: edition.id, typeId, season: season.trim(), status: newStatus as Exclude<EditionStatus, "conclusa"> });
       }
       onDone(isNewlyConcluded ? "Edizione conclusa: classifica, tabellone e vincitore sono stati congelati." : "Edizione aggiornata.");
     } catch (err) {
@@ -432,7 +539,7 @@ function EditEditionForm({
     const t = types.find((x) => x.id === edition.typeId);
     if (!confirmDelete(`${t?.name} ${edition.season}`)) return;
     try {
-      await deleteDoc(doc(db, "championshipEditions", edition.id));
+      await deleteChampionshipEdition(edition.id);
       onDelete();
     } catch (err) {
       console.error(err);
@@ -495,7 +602,7 @@ function TeamStandings({
   showToast: (msg: string) => void;
 }) {
   const { appUser } = useAuth();
-  const canShareAsResultManager = ["gestore", "resultManager"].includes(String(appUser?.role ?? ""));
+  const canShareAsResultManager = appUser?.role === "resultManager";
   const editionId = edition.id;
   const { data: editionTeams } = useCollection<EditionTeam>(
     "editionTeams",
@@ -591,7 +698,7 @@ function TeamStandings({
                     {i + 1}
                   </span>
                 ) : (
-                  <span className="text-[rgba(251,243,222,0.35)]">{i + 1}</span>
+                  <span className="text-[rgba(251,243,222,0.50)]">{i + 1}</span>
                 )}
               </span>
               <button onClick={() => setSelectedTeamId(r.id)} className="flex-1 text-left font-semibold truncate">
@@ -610,7 +717,7 @@ function TeamStandings({
             </div>
           ))}
           {frozenRows.length === 0 && (
-            <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna squadra iscritta.</p>
+            <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.50)]">Nessuna squadra iscritta.</p>
           )}
         </div>
         {canShareAsResultManager && (
@@ -627,7 +734,7 @@ function TeamStandings({
               input={{ categoryName: championshipName, season: edition.season, kind: "team", rows: frozenShareRows }}
               showToast={showToast}
             />
-            <button onClick={() => setShowLive(true)} className="flex items-center gap-1 text-xs text-[rgba(251,243,222,0.35)]">
+            <button onClick={() => setShowLive(true)} className="flex items-center gap-1 text-xs text-[rgba(251,243,222,0.50)]">
               <Lock size={11} /> Correggi dati e ricongela
             </button>
           </div>
@@ -673,7 +780,7 @@ function TeamStandings({
                     {i + 1}
                   </span>
                 ) : (
-                  <span className="text-[rgba(251,243,222,0.35)]">{i + 1}</span>
+                  <span className="text-[rgba(251,243,222,0.50)]">{i + 1}</span>
                 )}
               </span>
               <button
@@ -700,7 +807,7 @@ function TeamStandings({
             </div>
           )
         )}
-        {rows.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna squadra iscritta.</p>}
+        {rows.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.50)]">Nessuna squadra iscritta.</p>}
       </div>
 
       {canShareAsResultManager && (
@@ -845,6 +952,48 @@ function TeamProfileModal({
   const currentType = types.find((x) => x.id === edition.typeId);
   const stats = computeTeamEditionStats(matches, teamId);
   const roster = team?.roster ?? [];
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const dialog = dialogRef.current;
+    const focusable = () => Array.from(
+      dialog?.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])') ?? []
+    ).filter((element) => !element.hasAttribute("disabled"));
+    (focusable()[0] ?? dialog)?.focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const elements = focusable();
+      if (elements.length === 0) {
+        event.preventDefault();
+        dialog?.focus();
+        return;
+      }
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, [onClose]);
 
   return (
     <div
@@ -852,6 +1001,8 @@ function TeamProfileModal({
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label={`Profilo ${team?.name ?? "squadra"}`}
@@ -879,7 +1030,7 @@ function TeamProfileModal({
 
         <div className="p-4">
           <h3 className="text-[18px] font-extrabold leading-tight text-[#FBF3DE] mb-1">{team?.name ?? "Squadra"}</h3>
-          <p className="text-[11px] uppercase tracking-wider text-[rgba(251,243,222,0.35)] font-bold mb-2">
+          <p className="text-[11px] uppercase tracking-wider text-[rgba(251,243,222,0.50)] font-bold mb-2">
             Statistiche {currentType?.name ?? "campionato"} {edition.season}
           </p>
           <div className="grid grid-cols-3 gap-2 mb-4">
@@ -889,20 +1040,20 @@ function TeamProfileModal({
               { label: "Perse", value: stats.losses },
             ].map((item) => (
               <div key={item.label} className="rounded-lg bg-[#123008] px-3 py-2 text-center">
-                <p className="text-[10px] uppercase tracking-wider text-[rgba(251,243,222,0.35)] font-bold">{item.label}</p>
+                <p className="text-[10px] uppercase tracking-wider text-[rgba(251,243,222,0.50)] font-bold">{item.label}</p>
                 <p className="font-display text-[20px] text-[#BBFF5E]">{statsLoading ? "..." : item.value}</p>
               </div>
             ))}
           </div>
 
-          <p className="text-[11px] uppercase tracking-wider text-[rgba(251,243,222,0.35)] font-bold mb-1">Rosa</p>
+          <p className="text-[11px] uppercase tracking-wider text-[rgba(251,243,222,0.50)] font-bold mb-1">Rosa</p>
           <p className="text-[13px] text-[rgba(251,243,222,0.85)] leading-snug mb-4">
             {roster.length > 0 ? roster.join(", ") : "Nessun giocatore registrato."}
           </p>
 
-          <p className="text-[11px] uppercase tracking-wider text-[rgba(251,243,222,0.35)] font-bold mb-2">Titoli vinti</p>
+          <p className="text-[11px] uppercase tracking-wider text-[rgba(251,243,222,0.50)] font-bold mb-2">Titoli vinti</p>
           {wins.length === 0 ? (
-            <p className="text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessun titolo vinto ancora.</p>
+            <p className="text-[12.5px] text-[rgba(251,243,222,0.50)]">Nessun titolo vinto ancora.</p>
           ) : (
             <div className="flex flex-col gap-2">
               {wins.map((w) => {
@@ -912,7 +1063,7 @@ function TeamProfileModal({
                     <Trophy size={15} className="text-[#F5C842] shrink-0" />
                     <div className="min-w-0">
                       <p className="text-[13px] font-semibold truncate">{t?.name ?? "Campionato"}</p>
-                      <p className="text-[11px] text-[rgba(251,243,222,0.35)]">{w.season}</p>
+                      <p className="text-[11px] text-[rgba(251,243,222,0.50)]">{w.season}</p>
                     </div>
                   </div>
                 );
@@ -942,15 +1093,7 @@ function PublicCalendar({ edition }: { edition: ChampionshipEdition }) {
   const matchesFor = (matchdayId: string) => matches.filter((m) => m.matchdayId === matchdayId);
   const teamName = (id: string) => teams.find((t) => t.id === id)?.name ?? "Squadra eliminata";
 
-  const defaultMatchdayId = (() => {
-    const withIncomplete = sortedMatchdays.find((md) => matchesFor(md.id).some((m) => m.status === "da_giocare"));
-    if (withIncomplete) return withIncomplete.id;
-    const played = [...sortedMatchdays]
-      .reverse()
-      .find((md) => matchesFor(md.id).some((m) => m.status === "conclusa"));
-    if (played) return played.id;
-    return sortedMatchdays[0]?.id ?? null;
-  })();
+  const defaultMatchdayId = resolveActiveMatchdayId(edition.activeMatchdayId, sortedMatchdays, matches);
 
   const activeMatchdayId = selectedMatchdayId ?? defaultMatchdayId;
   const activeMatchday = sortedMatchdays.find((md) => md.id === activeMatchdayId);
@@ -980,13 +1123,13 @@ function PublicCalendar({ edition }: { edition: ChampionshipEdition }) {
       {activeMatchday && (
         <div className="flex flex-col gap-2">
           {matchesFor(activeMatchday.id).length === 0 && (
-            <p className="text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna partita in questa giornata.</p>
+            <p className="text-[12.5px] text-[rgba(251,243,222,0.50)]">Nessuna partita in questa giornata.</p>
           )}
           {matchesFor(activeMatchday.id).map((m) => (
             <div key={m.id} className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl px-3.5 py-3 flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-[13px] font-semibold truncate">
-                  {teamName(m.team1Id)} <span className="text-[rgba(251,243,222,0.35)]">vs</span> {teamName(m.team2Id)}
+                  {teamName(m.team1Id)} <span className="text-[rgba(251,243,222,0.50)]">vs</span> {teamName(m.team2Id)}
                 </p>
                 {(m.matchDate || m.matchTime) && (
                   <p className="mt-1 text-[11px] text-[rgba(251,243,222,0.48)]">
@@ -998,7 +1141,7 @@ function PublicCalendar({ edition }: { edition: ChampionshipEdition }) {
                 <span className="font-display text-[15px] text-[#BBFF5E] shrink-0">{m.result}</span>
               )}
               {m.status === "da_giocare" && (
-                <span className="text-[12px] text-[rgba(251,243,222,0.35)] font-semibold shrink-0">VS</span>
+                <span className="text-[12px] text-[rgba(251,243,222,0.50)] font-semibold shrink-0">VS</span>
               )}
               {m.status === "rinviata" && (
                 <span className="flex items-center gap-1 text-[11px] text-[#FF9B6B] shrink-0">
@@ -1006,7 +1149,7 @@ function PublicCalendar({ edition }: { edition: ChampionshipEdition }) {
                 </span>
               )}
               {m.status === "annullata" && (
-                <span className="flex items-center gap-1 text-[11px] text-[rgba(251,243,222,0.35)] shrink-0">
+                <span className="flex items-center gap-1 text-[11px] text-[rgba(251,243,222,0.50)] shrink-0">
                   <Ban size={12} /> Annullata
                 </span>
               )}
@@ -1203,12 +1346,12 @@ function ImportTeamStandings({
     <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5 w-full">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Importa classifica (incolla da Excel/Word)</p>
-        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
+        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.50)]" /></button>
       </div>
 
       {!ambiguousRows && !preview && (
         <>
-          <p className="text-[12px] text-[rgba(251,243,222,0.35)] mb-2">Scegli la modalità di importazione:</p>
+          <p className="text-[12px] text-[rgba(251,243,222,0.50)] mb-2">Scegli la modalità di importazione:</p>
           <div className="flex flex-col gap-1.5 mb-3">
             <label className="flex items-start gap-2 text-[12.5px]">
               <input type="radio" checked={mode === 1} onChange={() => setMode(1)} className="mt-0.5" />
@@ -1252,7 +1395,7 @@ function ImportTeamStandings({
 
       {!ambiguousRows && !preview && (
         <>
-          <p className="text-[12px] text-[rgba(251,243,222,0.35)] mb-2">
+          <p className="text-[12px] text-[rgba(251,243,222,0.50)] mb-2">
             Copia le righe da Excel o da una tabella Word e incollale qui sotto. Ogni riga deve contenere il nome
             della squadra seguito da <strong>Punti</strong> e <strong>Partite giocate</strong> (in quest'ordine). Le
             squadre non ancora esistenti vengono create automaticamente (con rosa vuota da completare dopo).
@@ -1349,7 +1492,7 @@ function ImportTeamStandings({
             </p>
             {preview.ignoredCount > 0 && <p className="mb-1">{preview.ignoredCount} riga/righe ignorate su tua scelta.</p>}
             {missingFromText.length > 0 && (
-              <p className="text-[rgba(251,243,222,0.35)]">
+              <p className="text-[rgba(251,243,222,0.50)]">
                 Non presenti nel testo (manterranno i dati attuali): {missingFromText.map((m) => m.team?.name).join(", ")}
               </p>
             )}
@@ -1425,7 +1568,7 @@ function AddTeamToEdition({
     <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Aggiungi squadra</p>
-        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
+        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.50)]" /></button>
       </div>
       <div className="flex gap-2 mb-3">
         <button
@@ -1443,7 +1586,7 @@ function AddTeamToEdition({
       </div>
       {mode === "existing" ? (
         availableTeams.length === 0 ? (
-          <p className="text-[12.5px] text-[rgba(251,243,222,0.35)] mb-2">Tutte le squadre esistenti sono già iscritte. Creane una nuova.</p>
+          <p className="text-[12.5px] text-[rgba(251,243,222,0.50)] mb-2">Tutte le squadre esistenti sono già iscritte. Creane una nuova.</p>
         ) : (
           <select
             value={teamId}
@@ -1515,6 +1658,7 @@ function EditionTeamEditRow({
   const [order, setOrder] = useState(String(editionTeam.order));
   const [status, setStatus] = useState<ParticipationStatus>(editionTeam.status);
   const [policy, setPolicy] = useState<1 | 2 | 3 | 4>(1);
+  const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
 
   const matchPoints = editionTeam.matchPoints ?? 0;
@@ -1528,6 +1672,10 @@ function EditionTeamEditRow({
   // manage-entry.js, l'eventuale cambio di stato (con effetto a cascata sulle partite
   // coinvolte) passa separatamente da set-status.js.
   const save = async () => {
+    if (reason.trim().length < 5) {
+      onDone("Inserisci una motivazione di almeno 5 caratteri.");
+      return;
+    }
     setSaving(true);
     try {
       if (statusChanged) {
@@ -1536,6 +1684,7 @@ function EditionTeamEditRow({
           editionTeamId: editionTeam.id,
           newStatus: status,
           policy: statusNeedsPolicy ? policy : undefined,
+          reason: reason.trim(),
         });
       }
       await updateStandingsEntry({
@@ -1546,6 +1695,7 @@ function EditionTeamEditRow({
         manualPointsAdjustment: Number(manualAdjustment) || 0,
         manualPlayedAdjustment: Number(manualPlayedAdjustment) || 0,
         order: Number(order) || 0,
+        reason: reason.trim(),
       });
       onDone("Dati aggiornati.");
       onCancel();
@@ -1559,9 +1709,13 @@ function EditionTeamEditRow({
   };
 
   const remove = async () => {
+    if (reason.trim().length < 5) {
+      onDone("Inserisci una motivazione di almeno 5 caratteri.");
+      return;
+    }
     if (!confirmDelete(label)) return;
     try {
-      await removeStandingsEntry({ editionId, editionTeamId: editionTeam.id });
+      await removeStandingsEntry({ editionId, editionTeamId: editionTeam.id, reason: reason.trim() });
       onDone("Squadra rimossa dalla classifica.");
       onCancel();
     } catch (err) {
@@ -1576,7 +1730,7 @@ function EditionTeamEditRow({
       <p className="text-[12.5px] font-semibold mb-2">{label}</p>
       <div className="flex gap-2 mb-2">
         <div className="flex-1">
-          <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Punti calcolati</p>
+          <p className="text-[11px] text-[rgba(251,243,222,0.50)] mb-1">Punti calcolati</p>
           <input
             type="number"
             value={baselinePoints}
@@ -1585,7 +1739,7 @@ function EditionTeamEditRow({
           />
         </div>
         <div className="flex-1">
-          <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Correzione (+/-)</p>
+          <p className="text-[11px] text-[rgba(251,243,222,0.50)] mb-1">Correzione (+/-)</p>
           <input
             type="number"
             value={manualAdjustment}
@@ -1595,28 +1749,28 @@ function EditionTeamEditRow({
         </div>
       </div>
       {(matchPoints !== 0 || matchPlayed !== 0) && (
-        <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-2">
+        <p className="text-[11px] text-[rgba(251,243,222,0.50)] mb-2">
           + {matchPoints} pt / {matchPlayed} PG dalle partite già registrate in questa edizione
         </p>
       )}
       <p className="text-[12px] text-[rgba(251,243,222,0.58)] mb-2">
         Punti finali: <span className="font-display text-[15px] text-[#BBFF5E]">{finalPoints}</span>
         {Number(manualAdjustment) !== 0 && (
-          <span className="text-[rgba(251,243,222,0.35)]"> · sopravvive a un futuro import Excel</span>
+          <span className="text-[rgba(251,243,222,0.50)]"> · sopravvive a un futuro import Excel</span>
         )}
         {" · "}PG finali: <span className="font-display text-[15px] text-[#BBFF5E]">{finalPlayed}</span>
       </p>
       <div className="flex gap-2 mb-2">
         <div className="flex-1">
-          <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">PG</p>
+          <p className="text-[11px] text-[rgba(251,243,222,0.50)] mb-1">PG</p>
           <input type="number" value={baselinePlayed} onChange={(e) => setBaselinePlayed(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
         </div>
         <div className="flex-1">
-          <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Correzione PG (+/-)</p>
+          <p className="text-[11px] text-[rgba(251,243,222,0.50)] mb-1">Correzione PG (+/-)</p>
           <input type="number" value={manualPlayedAdjustment} onChange={(e) => setManualPlayedAdjustment(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
         </div>
         <div className="w-16">
-          <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Ordine</p>
+          <p className="text-[11px] text-[rgba(251,243,222,0.50)] mb-1">Ordine</p>
           <input type="number" value={order} onChange={(e) => setOrder(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
         </div>
       </div>
@@ -1644,8 +1798,13 @@ function EditionTeamEditRow({
           </div>
         </div>
       )}
+      <label className="mb-2 block text-[11px] font-bold text-[rgba(251,243,222,0.72)]">
+        Motivazione obbligatoria
+        <textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={2}
+          className="mt-1 w-full rounded-lg border border-[rgba(251,243,222,0.18)] px-3 py-2 text-sm" />
+      </label>
       <div className="flex gap-2 mb-2">
-        <button onClick={save} disabled={saving} className="flex-1 bg-lime text-[#081208] rounded-lg py-2 text-sm font-bold disabled:opacity-50">
+        <button onClick={save} disabled={saving || reason.trim().length < 5} className="flex-1 bg-lime text-[#081208] rounded-lg py-2 text-sm font-bold disabled:opacity-50">
           {saving ? "Salvataggio..." : "Salva"}
         </button>
         <button onClick={onCancel} className="flex-1 border border-[rgba(251,243,222,0.18)] rounded-lg py-2 text-sm font-semibold">
@@ -1673,7 +1832,7 @@ function FemaleStandings({
   showToast: (msg: string) => void;
 }) {
   const { appUser } = useAuth();
-  const canShareAsResultManager = ["gestore", "resultManager"].includes(String(appUser?.role ?? ""));
+  const canShareAsResultManager = appUser?.role === "resultManager";
   const editionId = edition.id;
   const { data: participants } = useCollection<FemaleParticipant>(
     "femaleParticipants",
@@ -1711,9 +1870,7 @@ function FemaleStandings({
     if (!recalcPreview || recalcPreview.length === 0) return;
     setRecalculating(true);
     try {
-      for (const c of recalcPreview) {
-        await updateDoc(doc(db, "femaleParticipants", c.id), { points: c.to });
-      }
+      await recalculateFemaleParticipants(editionId, recalcPreview.map((change) => ({ participantId: change.id, points: change.to })));
       showToast("Classifica ricalcolata.");
       setRecalcPreview(null);
     } catch (err) {
@@ -1753,7 +1910,7 @@ function FemaleStandings({
                     {i + 1}
                   </span>
                 ) : (
-                  <span className="text-[rgba(251,243,222,0.35)]">{i + 1}</span>
+                  <span className="text-[rgba(251,243,222,0.50)]">{i + 1}</span>
                 )}
               </span>
               <span className="flex-1 font-semibold truncate">{r.name}</span>
@@ -1768,7 +1925,7 @@ function FemaleStandings({
             </div>
           ))}
           {frozenRows.length === 0 && (
-            <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna giocatrice ancora.</p>
+            <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.50)]">Nessuna giocatrice ancora.</p>
           )}
         </div>
         {canShareAsResultManager && (
@@ -1785,7 +1942,7 @@ function FemaleStandings({
               input={{ categoryName: championshipName, season: edition.season, kind: "female", rows: frozenShareRows }}
               showToast={showToast}
             />
-            <button onClick={() => setShowLive(true)} className="flex items-center gap-1 text-xs text-[rgba(251,243,222,0.35)]">
+            <button onClick={() => setShowLive(true)} className="flex items-center gap-1 text-xs text-[rgba(251,243,222,0.50)]">
               <Lock size={11} /> Correggi dati e ricongela
             </button>
           </div>
@@ -1823,7 +1980,7 @@ function FemaleStandings({
                     {i + 1}
                   </span>
                 ) : (
-                  <span className="text-[rgba(251,243,222,0.35)]">{i + 1}</span>
+                  <span className="text-[rgba(251,243,222,0.50)]">{i + 1}</span>
                 )}
               </span>
               <span className="flex-1 font-semibold">{r.name}</span>
@@ -1843,7 +2000,7 @@ function FemaleStandings({
             </div>
           )
         )}
-        {rows.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna giocatrice ancora.</p>}
+        {rows.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.50)]">Nessuna giocatrice ancora.</p>}
       </div>
 
       {canShareAsResultManager && (
@@ -1967,13 +2124,7 @@ function AddFemaleParticipant({
     if (!name.trim()) return;
     setSaving(true);
     try {
-      await addDoc(collection(db, "femaleParticipants"), {
-        editionId,
-        name: name.trim(),
-        points: 0,
-        stages: 0,
-        status: "normale",
-      });
+      await createFemaleParticipant(editionId, name.trim());
       onDone(`Giocatrice "${name}" aggiunta.`);
     } catch (err) {
       console.error(err);
@@ -1987,7 +2138,7 @@ function AddFemaleParticipant({
     <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Aggiungi giocatrice</p>
-        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
+        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.50)]" /></button>
       </div>
       <input
         placeholder="Nome giocatrice"
@@ -2157,12 +2308,12 @@ function ImportFemaleParticipants({
     <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5 w-full">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Importa classifica (incolla da Excel/Word)</p>
-        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
+        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.50)]" /></button>
       </div>
 
       {!ambiguousRows && !preview && (
         <>
-          <p className="text-[12px] text-[rgba(251,243,222,0.35)] mb-2">Scegli la modalità di importazione:</p>
+          <p className="text-[12px] text-[rgba(251,243,222,0.50)] mb-2">Scegli la modalità di importazione:</p>
           <div className="flex flex-col gap-1.5 mb-3">
             <label className="flex items-start gap-2 text-[12.5px]">
               <input type="radio" checked={mode === 1} onChange={() => setMode(1)} className="mt-0.5" disabled={existing.length > 0} />
@@ -2191,7 +2342,7 @@ function ImportFemaleParticipants({
               <span><strong>Aggiornamento parziale</strong> — aggiorna solo le giocatrici presenti nel testo, le altre restano invariate.</span>
             </label>
           </div>
-          <p className="text-[12px] text-[rgba(251,243,222,0.35)] mb-2">
+          <p className="text-[12px] text-[rgba(251,243,222,0.50)] mb-2">
             Copia le righe da Excel o da una tabella Word e incollale qui sotto. Ogni riga deve contenere il nome
             della giocatrice seguito da <strong>Punti</strong> e <strong>Tappe disputate</strong> (in quest'ordine).
           </p>
@@ -2269,12 +2420,12 @@ function ImportFemaleParticipants({
             </p>
             {preview.ignoredCount > 0 && <p className="mb-1">{preview.ignoredCount} riga/righe ignorate su tua scelta.</p>}
             {mode !== 2 && missingFromText.length > 0 && (
-              <p className="text-[rgba(251,243,222,0.35)]">
+              <p className="text-[rgba(251,243,222,0.50)]">
                 Non presenti nel testo (manterranno i dati attuali): {missingFromText.map((m) => m.name).join(", ")}
               </p>
             )}
             {mode === 2 && missingFromText.length > 0 && (
-              <p className="text-[rgba(251,243,222,0.35)]">
+              <p className="text-[rgba(251,243,222,0.50)]">
                 Assenti dal testo ({mode2AbsentPolicy === "keep" ? "resteranno invariate" : mode2AbsentPolicy === "retire" ? "diventeranno ritirate" : "verranno rimosse"}):{" "}
                 {missingFromText.map((m) => m.name).join(", ")}
               </p>
@@ -2318,11 +2469,12 @@ function FemaleEditRow({
   const save = async () => {
     setSaving(true);
     try {
-      await updateDoc(doc(db, "femaleParticipants", participant.id), {
+      await updateFemaleParticipant({
+        participantId: participant.id,
+        editionId: participant.editionId,
         name: name.trim(),
         calculatedPoints: Number(calculatedPoints) || 0,
         manualPointsAdjustment: Number(manualAdjustment) || 0,
-        points: finalPoints,
         stages: Number(stages) || 0,
         order: Number(order) || 0,
         status,
@@ -2340,7 +2492,7 @@ function FemaleEditRow({
   const remove = async () => {
     if (!confirmDelete(participant.name)) return;
     try {
-      await deleteDoc(doc(db, "femaleParticipants", participant.id));
+      await deleteFemaleParticipant(participant.editionId, participant.id);
       onDone("Giocatrice eliminata.");
       onCancel();
     } catch (err) {
@@ -2358,21 +2510,21 @@ function FemaleEditRow({
       />
       <div className="flex gap-2 mb-2">
         <div className="flex-1">
-          <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Tappe</p>
+          <p className="text-[11px] text-[rgba(251,243,222,0.50)] mb-1">Tappe</p>
           <input type="number" value={stages} onChange={(e) => setStages(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
         </div>
         <div className="flex-1">
-          <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Punti calcolati</p>
+          <p className="text-[11px] text-[rgba(251,243,222,0.50)] mb-1">Punti calcolati</p>
           <input type="number" value={calculatedPoints} onChange={(e) => setCalculatedPoints(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
         </div>
         <div className="flex-1">
-          <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Correzione (+/-)</p>
+          <p className="text-[11px] text-[rgba(251,243,222,0.50)] mb-1">Correzione (+/-)</p>
           <input type="number" value={manualAdjustment} onChange={(e) => setManualAdjustment(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
         </div>
       </div>
       <div className="flex gap-2 mb-2">
         <div className="w-20">
-          <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Ordine</p>
+          <p className="text-[11px] text-[rgba(251,243,222,0.50)] mb-1">Ordine</p>
           <input type="number" value={order} onChange={(e) => setOrder(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
         </div>
       </div>

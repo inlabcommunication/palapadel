@@ -42,3 +42,13 @@ function splitFilename(name: string): [string, string] {
   if (dot <= 0 || dot === name.length - 1) return [name, ""];
   return [name.slice(0, dot), name.slice(dot + 1)];
 }
+
+/**
+ * Messaggio d'errore leggibile per un fallimento di upload/salvataggio immagine: usa
+ * il messaggio reale dell'errore quando disponibile, altrimenti un fallback generico.
+ * Mai un falso messaggio di successo.
+ */
+export function getImageErrorMessage(err: unknown, fallback: string) {
+  if (err instanceof Error && err.message) return `${fallback} ${err.message}`;
+  return fallback;
+}

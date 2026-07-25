@@ -42,15 +42,22 @@ export async function postToBackend<TResponse>(path: string, body: unknown): Pro
     throw new BackendApiError("Impossibile contattare il server. Controlla la connessione e riprova.");
   }
 
-  let json: { ok?: boolean; error?: string; details?: unknown } = {};
+  let json: {
+    ok?: boolean;
+    success?: boolean;
+    error?: string | { code?: string; message?: string; fields?: Record<string, string> };
+    details?: unknown;
+  } = {};
   try {
     json = await response.json();
   } catch {
     // risposta non-JSON: tratteremo come errore generico sotto
   }
 
-  if (!response.ok || !json.ok) {
-    throw new BackendApiError(json.error || "Operazione non riuscita.", response.status, json.details);
+  if (!response.ok || (!json.ok && !json.success)) {
+    const structuredError = typeof json.error === "object" ? json.error : null;
+    const message = structuredError?.message || (typeof json.error === "string" ? json.error : "Operazione non riuscita.");
+    throw new BackendApiError(message, response.status, structuredError?.fields ?? json.details);
   }
 
   return json as TResponse;

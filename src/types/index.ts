@@ -1,4 +1,12 @@
-export type Role = "superadmin" | "admin" | "gestore";
+export type Role = "superAdmin" | "admin" | "resultManager";
+export type StoredRole = Role | "superadmin" | "gestore";
+
+export function normalizeRole(role: unknown): Role | null {
+  if (role === "superAdmin" || role === "superadmin") return "superAdmin";
+  if (role === "admin") return "admin";
+  if (role === "resultManager" || role === "gestore") return "resultManager";
+  return null;
+}
 
 export type EditionStatus = "bozza" | "attiva" | "conclusa" | "nascosta";
 export type ParticipationStatus = "normale" | "ritirata" | "squalificata";
@@ -21,6 +29,12 @@ export interface ChampionshipType {
   name: string;
   hasTeams: boolean;
   badgeColor: "serie-b" | "serie-c" | "principianti" | "femminile" | string;
+  /** Posizione nell'elenco tipologie (schede in Campionati, Albo, ecc.). Assente = 0, poi ordine alfabetico. Riordino riservato al Super Admin. */
+  order?: number;
+  /** Logo della categoria caricato dal Super Admin (branding/championships/{id}/logo/...). Se assente, l'app mostra un placeholder con le iniziali fisse della categoria. */
+  logoUrl?: string;
+  logoStoragePath?: string;
+  logoAlt?: string;
 }
 
 /** championshipEditions/{id} */
@@ -44,6 +58,9 @@ export interface ChampionshipEdition {
   frozenBracket?: FrozenBracketRound[];
   winnerId?: string;
   winnerName?: string;
+  activeMatchdayId?: string;
+  displayOrder?: number;
+  isPubliclyVisible?: boolean;
 }
 
 /** Riga di classifica congelata al momento della conclusione dell'edizione. */
@@ -79,6 +96,8 @@ export interface Team {
   /** Percorso Firebase Storage della foto, usato per sostituzione/eliminazione coerente. */
   teamPhotoStoragePath?: string;
   roster: string[]; // 2-6 nomi
+  /** Se presente, limita la squadra alle tipologie indicate; assente significa compatibile con tutte. */
+  compatibleTypeIds?: string[];
 }
 
 /**
@@ -110,6 +129,7 @@ export interface EditionTeam {
   matchPlayed?: number;
   manualPointsAdjustment?: number;
   manualPlayedAdjustment?: number;
+  operationalNotes?: string;
   /** Fase 15 — versione del modello dati applicata a questo documento dalla migrazione. */
   dataModelVersion?: number;
   migratedAt?: string;
@@ -141,6 +161,8 @@ export interface Matchday {
   id: string;
   editionId: string;
   number: number;
+  isHidden?: boolean;
+  deletedAt?: string;
 }
 
 /** matches/{id} */
@@ -155,6 +177,7 @@ export interface Match {
   matchDate?: string;
   matchTime?: string;
   court?: string;
+  notes?: string;
   /** Fase 14 - stato reale dell'aggiornamento legato a questo risultato. */
   notificationStatus?: "none" | "draft" | "sent" | "failed";
   notificationDraftCreatedAt?: string;
@@ -241,6 +264,9 @@ export interface AuditLogEntry {
   before?: unknown;
   after?: unknown;
   timestamp: string;
+  entity?: string;
+  undoneAt?: string;
+  undoneBy?: string;
 }
 
 export const BADGE_COLORS: Record<string, { bg: string; text: string; label: string }> = {
@@ -251,7 +277,18 @@ export const BADGE_COLORS: Record<string, { bg: string; text: string; label: str
 };
 
 export const ROLE_LABELS: Record<Role, string> = {
-  superadmin: "Super amministratore",
+  superAdmin: "Super amministratore",
   admin: "Amministratore",
-  gestore: "Gestore risultati",
+  resultManager: "Gestore risultati",
 };
+
+/**
+ * settings/branding — documento unico globale per il logo InLab (footer "Web app
+ * creata da InLab" mostrato in fondo a ogni pagina). Scrittura riservata al Super Admin,
+ * lettura pubblica (serve a mostrare il logo a chiunque usi l'app).
+ */
+export interface BrandingSettings {
+  inlabLogoUrl?: string;
+  inlabLogoStoragePath?: string;
+  inlabLogoAlt?: string;
+}

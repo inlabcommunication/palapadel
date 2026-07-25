@@ -1,13 +1,13 @@
 import { useState } from "react";
-import { addDoc, collection, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { useCollection } from "../hooks/useCollection";
 import { useAuth } from "../contexts/AuthContext";
-import { db } from "../firebase";
 import { confirmDelete } from "../lib/confirmDelete";
 import { groupHallOfFameRows, type HallOfFameRow } from "../lib/hallOfFame";
 import type { ChampionshipType, HistoricalWin, Team } from "../types";
 import { BADGE_COLORS } from "../types";
+import { TypeBadge } from "../components/TypeBadge";
 import { Plus, X, Pencil, Trash2, Award, ChevronRight } from "lucide-react";
+import { createHallOfFameWin, deleteHallOfFameWin, updateHallOfFameWin } from "../lib/hallOfFameApi";
 
 const RANK_COLORS = [
   { bg: "#F5C842", text: "#4A2E00" },
@@ -20,10 +20,13 @@ type HallRow = HallOfFameRow;
 
 export function AlboPage() {
   const { appUser } = useAuth();
-  const isAdmin = appUser?.role === "admin" || appUser?.role === "superadmin";
-  const { data: types } = useCollection<ChampionshipType>("championshipTypes");
-  const { data: teams } = useCollection<Team>("teams");
-  const { data: wins } = useCollection<HistoricalWin>("historicalWins");
+  const isAdmin = appUser?.role === "superAdmin";
+  const typesQuery = useCollection<ChampionshipType>("championshipTypes");
+  const teamsQuery = useCollection<Team>("teams");
+  const winsQuery = useCollection<HistoricalWin>("historicalWins");
+  const { data: types } = typesQuery;
+  const { data: teams } = teamsQuery;
+  const { data: wins } = winsQuery;
   const [tab, setTab] = useState<"teams" | "players">("teams");
   const [filterTypeId, setFilterTypeId] = useState("");
   const [selected, setSelected] = useState<HallRow | null>(null);
@@ -57,9 +60,11 @@ export function AlboPage() {
   const visibleRows =
     tab === "players"
       ? playerRows
-      : teamRows.filter(
+        : teamRows.filter(
           (row) => !filterTypeId || row.wins.some((win) => win.typeId === filterTypeId)
         );
+  const loading = typesQuery.loading || teamsQuery.loading || winsQuery.loading;
+  const loadingError = typesQuery.error ?? teamsQuery.error ?? winsQuery.error;
 
   return (
     <div className="p-4 pb-6">
@@ -106,14 +111,23 @@ export function AlboPage() {
       )}
 
       <div className="overflow-hidden rounded-lg border border-[rgba(251,243,222,0.10)] bg-[#0A0B08]">
-        {visibleRows.length === 0 && (
+        {loading && (
+          <p className="px-4 py-8 text-center text-[12.5px] text-[rgba(251,243,222,0.58)]">Caricamento Albo d'oro...</p>
+        )}
+        {!loading && loadingError && (
+          <div className="px-4 py-6 text-center">
+            <p className="text-sm">{loadingError.message}</p>
+            <button onClick={() => { typesQuery.retry(); teamsQuery.retry(); winsQuery.retry(); }} className="mt-2 text-sm font-bold text-[#BBFF5E]">Riprova</button>
+          </div>
+        )}
+        {!loading && !loadingError && visibleRows.length === 0 && (
           <p className="px-4 py-8 text-center text-[12.5px] text-[rgba(251,243,222,0.42)]">
             {tab === "teams"
               ? "Nessuna squadra vincitrice per questo filtro."
               : "Nessuna vincitrice femminile registrata."}
           </p>
         )}
-        {visibleRows.map((row) => (
+        {!loading && !loadingError && visibleRows.map((row) => (
           <button
             type="button"
             key={row.key}
@@ -230,7 +244,7 @@ function HallDetailModal({ row, onClose }: { row: HallRow; onClose: () => void }
 
 export function AlboManagementPanel({ embedded = false }: { embedded?: boolean }) {
   const { appUser } = useAuth();
-  const isAdmin = appUser?.role === "admin" || appUser?.role === "superadmin";
+  const isAdmin = appUser?.role === "superAdmin";
 
   const { data: types } = useCollection<ChampionshipType>("championshipTypes");
   const { data: teams } = useCollection<Team>("teams");
@@ -265,7 +279,7 @@ export function AlboManagementPanel({ embedded = false }: { embedded?: boolean }
   const remove = async (w: HistoricalWin, label: string) => {
     if (!confirmDelete(`${label} — ${w.season}`)) return;
     try {
-      await deleteDoc(doc(db, "historicalWins", w.id));
+      await deleteHallOfFameWin(w.id);
       showToast("Vittoria eliminata.");
     } catch (err) {
       console.error(err);
@@ -285,10 +299,11 @@ export function AlboManagementPanel({ embedded = false }: { embedded?: boolean }
           <button
             key={t.id}
             onClick={() => setSelectedType(t.id)}
-            className={`whitespace-nowrap rounded-full px-3.5 py-2 text-[12.5px] font-semibold shrink-0 ${
+            className={`whitespace-nowrap rounded-full px-3.5 py-2 text-[12.5px] font-semibold shrink-0 flex items-center gap-1.5 ${
               activeType === t.id ? "bg-lime text-[#081208]" : "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.85)]"
             }`}
           >
+            <TypeBadge type={t} size={20} className="rounded-[7px]" />
             {t.name}
           </button>
         ))}
@@ -296,7 +311,7 @@ export function AlboManagementPanel({ embedded = false }: { embedded?: boolean }
 
       <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl overflow-hidden mb-3">
         {rows.length === 0 && (
-          <p className="px-3.5 py-3 text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessun titolo registrato per questa categoria.</p>
+          <p className="px-3.5 py-3 text-[12.5px] text-[rgba(251,243,222,0.50)]">Nessun titolo registrato per questa categoria.</p>
         )}
         {rows.map((r, idx) => (
           <div key={r.label} className="flex gap-3 px-3.5 py-3 border-b border-[rgba(251,243,222,0.08)] last:border-b-0">
@@ -338,7 +353,7 @@ export function AlboManagementPanel({ embedded = false }: { embedded?: boolean }
                     <div key={w.id} className="flex items-center justify-between text-[12.5px] text-[rgba(251,243,222,0.58)] gap-2">
                       <span>
                         {w.season}
-                        {w.note && <span className="text-[rgba(251,243,222,0.35)]"> · {w.note}</span>}
+                        {w.note && <span className="text-[rgba(251,243,222,0.50)]"> · {w.note}</span>}
                       </span>
                       {isAdmin && (
                         <div className="flex items-center gap-2 shrink-0">
@@ -379,7 +394,7 @@ export function AlboManagementPanel({ embedded = false }: { embedded?: boolean }
         </div>
       )}
 
-      <p className="text-[12px] text-[rgba(251,243,222,0.35)] mt-4">
+      <p className="text-[12px] text-[rgba(251,243,222,0.50)] mt-4">
         Qui aggiungi le vittorie precedenti alla creazione dell'app. Quando in futuro un campionato gestito
         nell'app verrà concluso (Fase 4), l'Albo d'oro si aggiornerà automaticamente da solo.
       </p>
@@ -416,7 +431,7 @@ function AddWinForm({
     if (!type.hasTeams && !participantName.trim()) return;
     setSaving(true);
     try {
-      await addDoc(collection(db, "historicalWins"), {
+      await createHallOfFameWin({
         typeId: type.id,
         ...(type.hasTeams ? { teamId } : { participantName: participantName.trim() }),
         season: season.trim(),
@@ -438,12 +453,12 @@ function AddWinForm({
     <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Aggiungi vittoria — {type.name}</p>
-        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
+        <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.50)]" /></button>
       </div>
 
       {type.hasTeams ? (
         teams.length === 0 ? (
-          <p className="text-[12.5px] text-[rgba(251,243,222,0.35)] mb-2">
+          <p className="text-[12.5px] text-[rgba(251,243,222,0.50)] mb-2">
             Nessuna squadra esistente. Creane una prima nella pagina Campionati.
           </p>
         ) : (
@@ -506,7 +521,8 @@ function EditWinForm({
   const save = async () => {
     setSaving(true);
     try {
-      await updateDoc(doc(db, "historicalWins", win.id), {
+      await updateHallOfFameWin({
+        winId: win.id,
         season: season.trim(),
         note: note.trim(),
         ...(win.participantName !== undefined ? { participantName: participantName.trim() } : {}),

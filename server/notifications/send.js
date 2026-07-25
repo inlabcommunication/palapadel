@@ -2,24 +2,29 @@ import { getAdminApp, admin } from "../_lib/firebaseAdmin.js";
 import { HttpError, requirePost, sendError, verifyCaller } from "../_lib/auth.js";
 import { buildNotificationPayload } from "../_lib/notifications.js";
 import { dispatchNotification } from "../_lib/notificationDispatch.js";
+import { documentId, notificationEventSchema, parseBody, z } from "../_lib/validation.js";
 
 export default async function handler(req, res) {
   try {
     requirePost(req);
     const app = getAdminApp();
-    const caller = await verifyCaller(app, req, ["superadmin"]);
+    const caller = await verifyCaller(app, req, ["superAdmin"]);
     const db = admin.firestore(app);
-    const idempotencyKey = typeof req.body?.idempotencyKey === "string" ? req.body.idempotencyKey.slice(0, 120) : null;
+    const input = parseBody(z.union([
+      z.object({ draftId: documentId, idempotencyKey: z.string().trim().max(120).optional() }).strict(),
+      z.object({ event: notificationEventSchema, idempotencyKey: z.string().trim().max(120).optional() }).strict(),
+    ]), req.body);
+    const idempotencyKey = input.idempotencyKey ?? null;
 
     let draftRef = null;
     let payload = null;
-    if (req.body?.draftId) {
-      draftRef = db.doc(`notificationDrafts/${req.body.draftId}`);
+    if ("draftId" in input) {
+      draftRef = db.doc(`notificationDrafts/${input.draftId}`);
       const draftSnap = await draftRef.get();
       if (!draftSnap.exists) throw new HttpError(404, "Bozza notifica non trovata");
       payload = draftSnap.data().payload;
     } else {
-      payload = buildNotificationPayload(req.body?.event);
+      payload = buildNotificationPayload(input.event);
     }
 
     const result = await dispatchNotification(app, db, payload, caller.uid, { draftRef, idempotencyKey });
