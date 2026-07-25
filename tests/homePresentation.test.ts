@@ -21,3 +21,24 @@ test("la Home mostra solo news pubblicate ordinate dalla piu recente", () => {
 
   assert.deepEqual(getPublishedNewsForHome(news).map((item) => item.id), ["new", "old"]);
 });
+
+test("la parte pubblica esclude news disattivate, eliminate, scadute o programmate", () => {
+  const now = new Date("2026-07-25T12:00:00.000Z");
+  const base: HomeNews = {
+    id: "valid",
+    title: "Valida",
+    body: "Testo",
+    date: "2026-07-25T10:00:00.000Z",
+    status: "pubblicato",
+  };
+  const news: HomeNews[] = [
+    base,
+    { ...base, id: "inactive", isActive: false },
+    { ...base, id: "deleted", deletedAt: "2026-07-25T11:00:00.000Z" },
+    { ...base, id: "expired", expiresAt: "2026-07-25T11:00:00.000Z" },
+    { ...base, id: "future", publishedAt: "2026-07-26T10:00:00.000Z" },
+    { ...base, id: "draft", status: "bozza" },
+  ];
+
+  assert.deepEqual(getPublishedNewsForHome(news, now).map((item) => item.id), ["valid"]);
+});

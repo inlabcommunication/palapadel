@@ -1,7 +1,9 @@
 import createResultUpdate from "../../server/home-news/create-result-update.js";
+import deleteNews from "../../server/home-news/delete.js";
 
 const handlers = {
   "create-result-update": createResultUpdate,
+  delete: deleteNews,
 };
 
 export default function handler(req, res) {

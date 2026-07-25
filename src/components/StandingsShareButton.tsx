@@ -106,7 +106,7 @@ export function StandingsShareButton({ input, showToast }: StandingsShareButtonP
 
             <div className="p-4">
               {generating && (
-                <div className="aspect-video rounded-lg bg-[#123008] flex items-center justify-center text-[12.5px] text-[rgba(251,243,222,0.58)]">
+                <div className="aspect-[9/16] max-h-[62dvh] rounded-lg bg-[#123008] flex items-center justify-center text-[12.5px] text-[rgba(251,243,222,0.58)]">
                   Generazione...
                 </div>
               )}
@@ -116,7 +116,7 @@ export function StandingsShareButton({ input, showToast }: StandingsShareButtonP
                   <img
                     src={selected.dataUrl}
                     alt={`Classifica ${input.categoryName} ${input.season}`}
-                    className="w-full aspect-video object-contain rounded-lg border border-[rgba(251,243,222,0.10)] bg-[#06140B]"
+                    className="mx-auto aspect-[9/16] max-h-[62dvh] w-auto max-w-full object-contain rounded-lg border border-[rgba(251,243,222,0.10)] bg-[#06140B]"
                   />
 
                   {images.length > 1 && (

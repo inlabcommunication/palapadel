@@ -152,6 +152,9 @@ export interface Match {
   team2Id: string;
   result?: "2-0" | "2-1" | "1-2" | "0-2";
   status: MatchStatus;
+  matchDate?: string;
+  matchTime?: string;
+  court?: string;
   /** Fase 14 - stato reale dell'aggiornamento legato a questo risultato. */
   notificationStatus?: "none" | "draft" | "sent" | "failed";
   notificationDraftCreatedAt?: string;
@@ -201,6 +204,10 @@ export interface HomeNews {
   imageAlt?: string;
   category?: string;
   status: ContentStatus;
+  isActive?: boolean;
+  publishedAt?: string;
+  expiresAt?: string;
+  deletedAt?: string;
 }
 
 /**

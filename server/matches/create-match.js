@@ -47,13 +47,15 @@ export default async function handler(req, res) {
     const app = getAdminApp();
     const auth = await verifyCaller(app, req);
 
-    const { editionId, matchdayId, team1Id, team2Id } = req.body || {};
+    const { editionId, matchdayId, team1Id, team2Id, matchDate, matchTime } = req.body || {};
     if (!editionId || !matchdayId || !team1Id || !team2Id) {
       throw new HttpError(400, "Dati mancanti");
     }
     if (areSameTeamIds(team1Id, team2Id)) {
       throw new HttpError(400, "Le due squadre coincidono.");
     }
+    if (matchDate && !/^\d{4}-\d{2}-\d{2}$/.test(matchDate)) throw new HttpError(400, "Data partita non valida.");
+    if (matchTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(matchTime)) throw new HttpError(400, "Ora partita non valida.");
 
     const db = admin.firestore(app);
     const matchRef = db.collection("matches").doc();
@@ -105,6 +107,8 @@ export default async function handler(req, res) {
         team1Id,
         team2Id,
         status: "da_giocare",
+        ...(matchDate ? { matchDate } : {}),
+        ...(matchTime ? { matchTime } : {}),
         updatedAt: timestamp,
         updatedBy: auth.uid,
       });
@@ -113,7 +117,7 @@ export default async function handler(req, res) {
         action: "match_created",
         detail: JSON.stringify({ role: auth.role, editionId, matchdayId, matchId: matchRef.id }),
         before: null,
-        after: { team1Id, team2Id, status: "da_giocare" },
+        after: { team1Id, team2Id, status: "da_giocare", matchDate: matchDate ?? null, matchTime: matchTime ?? null },
         timestamp,
       });
     });

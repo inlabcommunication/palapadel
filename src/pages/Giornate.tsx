@@ -11,12 +11,14 @@ import {
   setMatchStatus as apiSetMatchStatus,
   saveMatchdayBulk,
   createMatch,
+  updateMatch,
   deleteMatch,
   createHomeNewsUpdate,
   MatchApiError,
   type ApiMatchStatus,
 } from "../lib/matchApi";
 import { derivePermissions } from "../lib/permissions";
+import { MatchdayShareButton } from "../components/MatchdayShareButton";
 import type { ChampionshipEdition, ChampionshipType, EditionTeam, Team, Matchday, Match, MatchStatus } from "../types";
 import { ArrowLeft, Plus, Clock, Ban, Trash2, X, Pencil } from "lucide-react";
 
@@ -205,6 +207,8 @@ function MatchdayDetail({
   const [showAddMatch, setShowAddMatch] = useState(false);
   const [team1Id, setTeam1Id] = useState("");
   const [team2Id, setTeam2Id] = useState("");
+  const [matchDate, setMatchDate] = useState("");
+  const [matchTime, setMatchTime] = useState("");
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkSaving, setBulkSaving] = useState(false);
   // Fase 1: nessuna scrittura diretta su Firestore per il flusso risultato/stato — solo
@@ -255,10 +259,19 @@ function MatchdayDetail({
       return;
     }
     try {
-      await createMatch({ editionId, matchdayId: matchday.id, team1Id, team2Id });
+      await createMatch({
+        editionId,
+        matchdayId: matchday.id,
+        team1Id,
+        team2Id,
+        ...(matchDate ? { matchDate } : {}),
+        ...(matchTime ? { matchTime } : {}),
+      });
       setShowAddMatch(false);
       setTeam1Id("");
       setTeam2Id("");
+      setMatchDate("");
+      setMatchTime("");
       showToast("Partita aggiunta.");
     } catch (err) {
       console.error(err);
@@ -427,6 +440,25 @@ function MatchdayDetail({
           </button>
         )}
       </div>
+      <div className="mb-3">
+        <MatchdayShareButton
+          input={{
+            categoryName: typeName,
+            season,
+            matchdayNumber: matchday.number,
+            matches: matches.map((match) => ({
+              homeTeam: teamName(match.team1Id),
+              awayTeam: teamName(match.team2Id),
+              result: match.result,
+              status: match.status,
+              matchDate: match.matchDate,
+              matchTime: match.matchTime,
+              court: match.court,
+            })),
+          }}
+          showToast={showToast}
+        />
+      </div>
 
       {pendingNotify && (
         <div className="bg-[#123008] border border-[rgba(251,243,222,0.18)] rounded-2xl p-3.5 mb-3">
@@ -563,6 +595,16 @@ function MatchdayDetail({
               onSaveResult={(result) => saveResult(m, result)}
               onRemove={() => removeMatch(m)}
               onSetStatus={(status) => changeStatus(m, status)}
+              canEditSchedule={canCreateMatches}
+              onUpdateSchedule={async (date, time) => {
+                try {
+                  await updateMatch({ matchId: m.id, matchDate: date || null, matchTime: time || null });
+                  showToast("Data e ora aggiornate.");
+                } catch (error) {
+                  console.error(error);
+                  showToast(error instanceof MatchApiError ? error.message : "Errore nell'aggiornamento.");
+                }
+              }}
             />
           ))}
         </div>
@@ -590,6 +632,16 @@ function MatchdayDetail({
                   </option>
                 ))}
               </select>
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <label className="text-[11px] text-[rgba(251,243,222,0.58)]">
+                  Data della partita - facoltativa
+                  <input type="date" value={matchDate} onChange={(event) => setMatchDate(event.target.value)} className="mt-1 w-full rounded-lg border border-[rgba(251,243,222,0.18)] px-3 py-2 text-[13px]" />
+                </label>
+                <label className="text-[11px] text-[rgba(251,243,222,0.58)]">
+                  Ora della partita - facoltativa
+                  <input type="time" value={matchTime} onChange={(event) => setMatchTime(event.target.value)} className="mt-1 w-full rounded-lg border border-[rgba(251,243,222,0.18)] px-3 py-2 text-[13px]" />
+                </label>
+              </div>
               <select
                 value={team2Id}
                 onChange={(e) => setTeam2Id(e.target.value)}
@@ -630,6 +682,8 @@ function MatchRow({
   onSaveResult,
   onRemove,
   onSetStatus,
+  canEditSchedule,
+  onUpdateSchedule,
 }: {
   match: Match;
   teamName: (id: string) => string;
@@ -639,10 +693,15 @@ function MatchRow({
   onSaveResult: (result: string) => void;
   onRemove: () => void;
   onSetStatus: (status: MatchStatus) => void;
+  canEditSchedule: boolean;
+  onUpdateSchedule: (date: string, time: string) => Promise<void>;
 }) {
   // Fase 6: azione esplicita "Correggi risultato" su una partita già conclusa, invece
   // di dover prima riaprire e poi reinserire il risultato.
   const [correcting, setCorrecting] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState(false);
+  const [date, setDate] = useState(match.matchDate ?? "");
+  const [time, setTime] = useState(match.matchTime ?? "");
 
   return (
     <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
@@ -664,6 +723,19 @@ function MatchRow({
           </span>
         )}
       </div>
+      {(match.matchDate || match.matchTime) && (
+        <p className="mb-2 text-[11.5px] text-[rgba(251,243,222,0.55)]">
+          {formatMatchSchedule(match.matchDate, match.matchTime)}
+        </p>
+      )}
+      {editingSchedule && canEditSchedule && (
+        <div className="mb-2 grid grid-cols-2 gap-2 rounded-lg bg-[#123008] p-2.5">
+          <input aria-label="Data della partita" type="date" value={date} onChange={(event) => setDate(event.target.value)} className="rounded-lg border border-[rgba(251,243,222,0.18)] px-2 py-2 text-xs" />
+          <input aria-label="Ora della partita" type="time" value={time} onChange={(event) => setTime(event.target.value)} className="rounded-lg border border-[rgba(251,243,222,0.18)] px-2 py-2 text-xs" />
+          <button onClick={async () => { await onUpdateSchedule(date, time); setEditingSchedule(false); }} className="rounded-lg bg-lime py-2 text-xs font-bold text-[#081208]">Salva</button>
+          <button onClick={() => setEditingSchedule(false)} className="rounded-lg border border-[rgba(251,243,222,0.18)] py-2 text-xs">Annulla</button>
+        </div>
+      )}
 
       {match.status === "da_giocare" && canEditResults && (
         <div className="flex gap-1.5 mb-2">
@@ -737,8 +809,27 @@ function MatchRow({
               <Trash2 size={11} /> Elimina
             </button>
           )}
+          {canEditSchedule && !editingSchedule && (
+            <button onClick={() => setEditingSchedule(true)} className="text-[11px] text-[#BBFF5E]">
+              Data e ora
+            </button>
+          )}
         </div>
       )}
     </div>
   );
+}
+
+function formatMatchSchedule(date?: string, time?: string) {
+  const parts: string[] = [];
+  if (date) {
+    const parsed = new Date(`${date}T12:00:00`);
+    parts.push(Number.isNaN(parsed.getTime()) ? date : parsed.toLocaleDateString("it-IT", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    }));
+  }
+  if (time) parts.push(`ore ${time}`);
+  return parts.join(" - ");
 }

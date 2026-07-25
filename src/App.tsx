@@ -1,11 +1,11 @@
 import { useEffect, useRef } from "react";
-import { Routes, Route, useLocation } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { TopBar } from "./components/TopBar";
 import { BottomNav } from "./components/BottomNav";
 import { SuperAdminShell } from "./components/SuperAdminShell";
 import { HomePage } from "./pages/Home";
 import { CampionatiPage } from "./pages/Campionati";
-import { StoricoPage } from "./pages/Storico";
+import { NewsPage } from "./pages/News";
 import { AlboPage } from "./pages/Albo";
 import { NotifichePage } from "./pages/Notifiche";
 import { LoginPage } from "./pages/Login";
@@ -62,7 +62,8 @@ export default function App() {
       <Route path="/" element={<HomePage />} />
       <Route path="/campionati" element={<CampionatiPage />} />
       <Route path="/campionati/:editionId" element={<CampionatiPage />} />
-      <Route path="/storico" element={<StoricoPage />} />
+      <Route path="/news" element={<NewsPage />} />
+      <Route path="/storico" element={<Navigate to="/news" replace />} />
       <Route path="/albo" element={<AlboPage />} />
       <Route path="/notifiche" element={<NotifichePage />} />
       <Route path="/login" element={<LoginPage />} />

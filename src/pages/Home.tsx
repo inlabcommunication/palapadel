@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, deleteDoc, deleteField, doc, setDoc, updateDoc, where } from "firebase/firestore";
+import { collection, deleteField, doc, setDoc, updateDoc, where } from "firebase/firestore";
 import { ImageUploadField } from "../components/ImageUploadField";
 import { useCollection } from "../hooks/useCollection";
 import { useAuth } from "../contexts/AuthContext";
@@ -9,6 +9,7 @@ import { confirmDelete } from "../lib/confirmDelete";
 import { deleteHomeNewsImage, getNewsExcerpt, getNewsImageAlt, uploadHomeNewsImage } from "../lib/homeNewsImageUpload";
 import { getPublishedNewsForHome, HOME_NEWS_SUBTITLE, HOME_NEWS_TITLE } from "../lib/homePresentation";
 import { notifyNotificationEvent } from "../lib/notificationClient";
+import { deleteHomeNews as deleteHomeNewsRecord } from "../lib/homeNewsApi";
 import type { ChampionshipEdition, ChampionshipType, ContentStatus, HomeNews, Matchday } from "../types";
 import { BADGE_COLORS } from "../types";
 import { ChevronRight, AlertCircle, Plus, X, Pencil, Trash2, Trophy, Megaphone, CalendarDays, Newspaper } from "lucide-react";
@@ -59,9 +60,8 @@ export function HomePage() {
   const removeNews = async (n: HomeNews) => {
     if (!confirmDelete(n.title)) return;
     try {
-      await deleteDoc(doc(db, "homeNews", n.id));
-      await deleteHomeNewsImage(n.imageStoragePath ?? n.imageUrl);
-      showToast("Novita eliminata.");
+      await deleteHomeNewsRecord(n.id);
+      showToast("News eliminata.");
     } catch (err) {
       console.error(err);
       showToast("Errore nell'eliminazione.");

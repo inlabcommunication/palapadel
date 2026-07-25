@@ -4,9 +4,10 @@ import { useCollection } from "../hooks/useCollection";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase";
 import { confirmDelete } from "../lib/confirmDelete";
+import { groupHallOfFameRows, type HallOfFameRow } from "../lib/hallOfFame";
 import type { ChampionshipType, HistoricalWin, Team } from "../types";
 import { BADGE_COLORS } from "../types";
-import { Plus, X, Pencil, Trash2, Award } from "lucide-react";
+import { Plus, X, Pencil, Trash2, Award, ChevronRight } from "lucide-react";
 
 const RANK_COLORS = [
   { bg: "#F5C842", text: "#4A2E00" },
@@ -15,7 +16,219 @@ const RANK_COLORS = [
 ];
 
 
+type HallRow = HallOfFameRow;
+
 export function AlboPage() {
+  const { appUser } = useAuth();
+  const isAdmin = appUser?.role === "admin" || appUser?.role === "superadmin";
+  const { data: types } = useCollection<ChampionshipType>("championshipTypes");
+  const { data: teams } = useCollection<Team>("teams");
+  const { data: wins } = useCollection<HistoricalWin>("historicalWins");
+  const [tab, setTab] = useState<"teams" | "players">("teams");
+  const [filterTypeId, setFilterTypeId] = useState("");
+  const [selected, setSelected] = useState<HallRow | null>(null);
+  const [showManagement, setShowManagement] = useState(false);
+
+  const femaleTypeIds = new Set(
+    types
+      .filter((type) => !type.hasTeams || type.badgeColor === "femminile")
+      .map((type) => type.id)
+  );
+  const teamTypes = types.filter(
+    (type) =>
+      type.hasTeams &&
+      ["serie-b", "serie-c", "principianti"].includes(type.badgeColor)
+  );
+  const teamRows = groupHallOfFameRows(
+    wins.filter((win) => !femaleTypeIds.has(win.typeId) && Boolean(win.teamId)),
+    types,
+    (win) => win.teamId ?? "unknown",
+    (win) =>
+      win.winnerNameSnapshot ??
+      teams.find((team) => team.id === win.teamId)?.name ??
+      "Squadra eliminata"
+  );
+  const playerRows = groupHallOfFameRows(
+    wins.filter((win) => femaleTypeIds.has(win.typeId) && Boolean(win.participantName)),
+    types,
+    (win) => win.participantName?.trim().toLocaleLowerCase("it-IT") ?? "unknown",
+    (win) => win.winnerNameSnapshot ?? win.participantName ?? "Giocatrice"
+  );
+  const visibleRows =
+    tab === "players"
+      ? playerRows
+      : teamRows.filter(
+          (row) => !filterTypeId || row.wins.some((win) => win.typeId === filterTypeId)
+        );
+
+  return (
+    <div className="p-4 pb-6">
+      <div className="mb-4 flex items-center gap-2">
+        <Award size={16} className="text-[#BBFF5E]" />
+        <h1 className="font-display text-[30px] leading-none text-[#FBF3DE]">ALBO D'ORO</h1>
+      </div>
+
+      <div className="mb-4 grid grid-cols-2 rounded-lg bg-[#0A0B08] p-1" role="tablist">
+        {[
+          { id: "teams" as const, label: "Squadre" },
+          { id: "players" as const, label: "Giocatrici" },
+        ].map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === item.id}
+            onClick={() => setTab(item.id)}
+            className={`rounded-md px-3 py-2.5 text-[13px] font-bold ${
+              tab === item.id ? "bg-[#BBFF5E] text-[#081208]" : "text-[rgba(251,243,222,0.58)]"
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "teams" && (
+        <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
+          <FilterButton active={!filterTypeId} onClick={() => setFilterTypeId("")}>
+            Tutte
+          </FilterButton>
+          {teamTypes.map((type) => (
+            <FilterButton
+              key={type.id}
+              active={filterTypeId === type.id}
+              onClick={() => setFilterTypeId(type.id)}
+            >
+              {type.name}
+            </FilterButton>
+          ))}
+        </div>
+      )}
+
+      <div className="overflow-hidden rounded-lg border border-[rgba(251,243,222,0.10)] bg-[#0A0B08]">
+        {visibleRows.length === 0 && (
+          <p className="px-4 py-8 text-center text-[12.5px] text-[rgba(251,243,222,0.42)]">
+            {tab === "teams"
+              ? "Nessuna squadra vincitrice per questo filtro."
+              : "Nessuna vincitrice femminile registrata."}
+          </p>
+        )}
+        {visibleRows.map((row) => (
+          <button
+            type="button"
+            key={row.key}
+            onClick={() => setSelected(row)}
+            className="flex w-full items-center gap-3 border-b border-[rgba(251,243,222,0.08)] px-3.5 py-3 text-left last:border-b-0 hover:bg-[rgba(251,243,222,0.04)]"
+          >
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+              <span className="truncate text-[14px] font-bold">{row.label}</span>
+              <div className="flex flex-wrap gap-1.5" aria-label={`${row.wins.length} medaglie`}>
+                {row.wins.map((win) => {
+                  const badge = BADGE_COLORS[win.type?.badgeColor ?? "serie-b"];
+                  return (
+                    <span
+                      key={win.id}
+                      title={`${win.type?.name ?? "Campionato"} - ${win.season}`}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-full border-2"
+                      style={{ background: badge.bg, color: badge.text, borderColor: badge.text }}
+                    >
+                      <Award size={14} aria-hidden="true" />
+                      <span className="sr-only">{win.type?.name ?? "Campionato"}, {win.season}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+            <ChevronRight size={17} className="shrink-0 text-[#BBFF5E]" />
+          </button>
+        ))}
+      </div>
+
+      {isAdmin && (
+        <div className="mt-5 border-t border-[rgba(251,243,222,0.10)] pt-4">
+          <button
+            type="button"
+            onClick={() => setShowManagement((value) => !value)}
+            className="text-[13px] font-bold text-[#BBFF5E]"
+          >
+            {showManagement ? "Chiudi gestione vittorie" : "Gestisci vittorie storiche"}
+          </button>
+          {showManagement && <AlboManagementPanel embedded />}
+        </div>
+      )}
+
+      {selected && <HallDetailModal row={selected} onClose={() => setSelected(null)} />}
+    </div>
+  );
+}
+
+function FilterButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`shrink-0 rounded-full px-3.5 py-2 text-[12.5px] font-semibold ${
+        active
+          ? "bg-[#BBFF5E] text-[#081208]"
+          : "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.82)]"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function HallDetailModal({ row, onClose }: { row: HallRow; onClose: () => void }) {
+  const groupedByType = new Map<string, { label: string; seasons: string[] }>();
+  row.wins.forEach((win) => {
+    const key = win.typeId;
+    const entry = groupedByType.get(key) ?? {
+      label: win.type?.name ?? "Campionato",
+      seasons: [],
+    };
+    entry.seasons.push(win.season);
+    groupedByType.set(key, entry);
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="hall-detail-title"
+        className="max-h-[calc(100dvh-64px-env(safe-area-inset-bottom))] w-full max-w-md overflow-y-auto rounded-lg border border-[rgba(251,243,222,0.12)] bg-[#0A0B08] p-5"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <h2 id="hall-detail-title" className="font-display text-[26px] leading-tight">{row.label}</h2>
+          <button type="button" aria-label="Chiudi" onClick={onClose} className="rounded-full bg-[rgba(251,243,222,0.08)] p-2">
+            <X size={17} />
+          </button>
+        </div>
+        <div className="mt-5 space-y-4">
+          {[...groupedByType.values()].map((group) => (
+            <section key={group.label}>
+              <h3 className="text-[12px] font-extrabold uppercase text-[#BBFF5E]">{group.label}</h3>
+              {[...group.seasons].sort().reverse().map((season) => (
+                <p key={season} className="mt-1 text-[14px] text-[rgba(251,243,222,0.78)]">{season}</p>
+              ))}
+            </section>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function AlboManagementPanel({ embedded = false }: { embedded?: boolean }) {
   const { appUser } = useAuth();
   const isAdmin = appUser?.role === "admin" || appUser?.role === "superadmin";
 
@@ -61,7 +274,7 @@ export function AlboPage() {
   };
 
   return (
-    <div className="p-4 pb-6">
+    <div className={embedded ? "mt-4" : "p-4 pb-6"}>
       <div className="flex items-center gap-2 mb-3">
         <Award size={15} className="text-[#BBFF5E]" />
         <h2 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE]">Albo d'oro</h2>

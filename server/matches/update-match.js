@@ -44,8 +44,14 @@ export default async function handler(req, res) {
     const app = getAdminApp();
     const auth = await verifyCaller(app, req);
     const db = admin.firestore(app);
-    const { matchId, matchdayId, team1Id, team2Id } = req.body || {};
+    const { matchId, matchdayId, team1Id, team2Id, matchDate, matchTime } = req.body || {};
     if (!matchId) throw new HttpError(400, "matchId mancante");
+    if (matchDate !== undefined && matchDate !== null && !/^\d{4}-\d{2}-\d{2}$/.test(matchDate)) {
+      throw new HttpError(400, "Data partita non valida.");
+    }
+    if (matchTime !== undefined && matchTime !== null && !/^([01]\d|2[0-3]):[0-5]\d$/.test(matchTime)) {
+      throw new HttpError(400, "Ora partita non valida.");
+    }
 
     const matchRef = db.doc(`matches/${matchId}`);
     const timestamp = new Date().toISOString();
@@ -58,6 +64,8 @@ export default async function handler(req, res) {
       const nextMatchdayId = matchdayId ?? before.matchdayId;
       const nextTeam1Id = team1Id ?? before.team1Id;
       const nextTeam2Id = team2Id ?? before.team2Id;
+      const nextMatchDate = matchDate === undefined ? before.matchDate : matchDate || null;
+      const nextMatchTime = matchTime === undefined ? before.matchTime : matchTime || null;
 
       if (areSameTeamIds(nextTeam1Id, nextTeam2Id)) throw new HttpError(400, "Le due squadre coincidono.");
 
@@ -110,6 +118,8 @@ export default async function handler(req, res) {
         matchdayId: nextMatchdayId,
         team1Id: nextTeam1Id,
         team2Id: nextTeam2Id,
+        matchDate: nextMatchDate,
+        matchTime: nextMatchTime,
         updatedAt: timestamp,
         updatedBy: auth.uid,
       });
@@ -119,8 +129,8 @@ export default async function handler(req, res) {
         actor: auth.uid,
         action: "match_updated",
         detail: JSON.stringify({ role: auth.role, editionId, matchId, fromMatchdayId: before.matchdayId, toMatchdayId: nextMatchdayId }),
-        before: { matchdayId: before.matchdayId, team1Id: before.team1Id, team2Id: before.team2Id, status: before.status, result: before.result ?? null },
-        after: { matchdayId: nextMatchdayId, team1Id: nextTeam1Id, team2Id: nextTeam2Id, status: before.status, result: before.result ?? null },
+        before: { matchdayId: before.matchdayId, team1Id: before.team1Id, team2Id: before.team2Id, status: before.status, result: before.result ?? null, matchDate: before.matchDate ?? null, matchTime: before.matchTime ?? null },
+        after: { matchdayId: nextMatchdayId, team1Id: nextTeam1Id, team2Id: nextTeam2Id, status: before.status, result: before.result ?? null, matchDate: nextMatchDate, matchTime: nextMatchTime },
         timestamp,
       });
     });

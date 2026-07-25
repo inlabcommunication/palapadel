@@ -24,9 +24,9 @@ export interface GeneratedStandingsShareImage {
   blob: Blob;
 }
 
-export const STANDINGS_SHARE_WIDTH = 1920;
-export const STANDINGS_SHARE_HEIGHT = 1080;
-export const STANDINGS_SHARE_MAX_ROWS_PER_IMAGE = 18;
+export const STANDINGS_SHARE_WIDTH = 1080;
+export const STANDINGS_SHARE_HEIGHT = 1920;
+export const STANDINGS_SHARE_MAX_ROWS_PER_IMAGE = 14;
 
 export function paginateStandingRows<T>(rows: T[], maxRows = STANDINGS_SHARE_MAX_ROWS_PER_IMAGE): T[][] {
   if (maxRows < 1) throw new Error("maxRows must be greater than zero");
@@ -124,37 +124,37 @@ function drawImagePage(input: StandingsShareInput, rows: StandingShareRow[], pag
 
   ctx.strokeStyle = "rgba(251,243,222,0.09)";
   ctx.lineWidth = 5;
-  for (let i = 0; i < 7; i += 1) {
-    const y = 250 + i * 104;
+  for (let i = 0; i < 10; i += 1) {
+    const y = 300 + i * 150;
     ctx.beginPath();
-    ctx.moveTo(112, y);
-    ctx.lineTo(width - 112, y - 190);
+    ctx.moveTo(100, y);
+    ctx.lineTo(width - 100, y - 130);
     ctx.stroke();
   }
 
   ctx.fillStyle = "#BBFF5E";
-  ctx.font = `900 44px ${font}`;
-  ctx.fillText("PALA PADEL", 120, 116);
+  ctx.font = `900 38px ${font}`;
+  ctx.fillText("PALA PADEL", 100, 210);
 
   ctx.fillStyle = "#FBF3DE";
-  drawTextFit(ctx, "CLASSIFICA", 120, 210, 650, font, 92, 64, "900");
+  drawTextFit(ctx, "CLASSIFICA", 100, 310, 880, font, 84, 58, "900");
 
   ctx.fillStyle = "rgba(251,243,222,0.82)";
-  drawTextFit(ctx, `${input.categoryName} - ${input.season}`, 120, 268, 980, font, 38, 26, "700");
+  drawTextFit(ctx, `${input.categoryName} - ${input.season}`, 100, 370, 880, font, 36, 25, "700");
 
   if (pageCount > 1) {
     ctx.textAlign = "right";
     ctx.fillStyle = "rgba(251,243,222,0.62)";
-    ctx.font = `700 28px ${font}`;
-    ctx.fillText(`PAGINA ${page}/${pageCount}`, width - 120, 124);
+    ctx.font = `700 25px ${font}`;
+    ctx.fillText(`CLASSIFICA - ${page} DI ${pageCount}`, width - 100, 210);
     ctx.textAlign = "left";
   }
 
-  const tableX = 120;
-  const tableY = 330;
-  const tableW = width - 240;
-  const rowH = 34;
-  const headerH = 56;
+  const tableX = 100;
+  const tableY = 450;
+  const tableW = width - 200;
+  const rowH = 76;
+  const headerH = 70;
 
   drawRoundRect(ctx, tableX, tableY, tableW, headerH + rowH * Math.max(rows.length, 1) + 28, 18);
   ctx.fillStyle = "rgba(10,11,8,0.62)";
@@ -164,18 +164,18 @@ function drawImagePage(input: StandingsShareInput, rows: StandingShareRow[], pag
   ctx.stroke();
 
   ctx.fillStyle = "rgba(251,243,222,0.48)";
-  ctx.font = `800 24px ${font}`;
+  ctx.font = `800 25px ${font}`;
   ctx.fillText("#", tableX + 34, tableY + 38);
-  ctx.fillText(input.kind === "team" ? "SQUADRA" : "GIOCATRICE", tableX + 138, tableY + 38);
+  ctx.fillText(input.kind === "team" ? "SQUADRA" : "GIOCATRICE", tableX + 105, tableY + 44);
   ctx.textAlign = "center";
-  ctx.fillText(input.kind === "team" ? "PG" : "TAPPE", tableX + tableW - 330, tableY + 38);
-  ctx.fillText("PT", tableX + tableW - 128, tableY + 38);
+  ctx.fillText(input.kind === "team" ? "PG" : "TAPPE", tableX + tableW - 180, tableY + 44);
+  ctx.fillText("PT", tableX + tableW - 62, tableY + 44);
   ctx.textAlign = "left";
 
   if (rows.length === 0) {
     ctx.fillStyle = "rgba(251,243,222,0.62)";
     ctx.font = `700 36px ${font}`;
-    ctx.fillText("Nessuna riga in classifica.", tableX + 34, tableY + 132);
+    ctx.fillText("Nessuna riga in classifica.", tableX + 34, tableY + 150);
   }
 
   rows.forEach((row, index) => {
@@ -187,37 +187,37 @@ function drawImagePage(input: StandingsShareInput, rows: StandingShareRow[], pag
     }
 
     ctx.fillStyle = inactive ? "rgba(251,243,222,0.48)" : "#FBF3DE";
-    ctx.font = `800 23px ${font}`;
-    ctx.fillText(String(row.position), tableX + 34, y + 25);
+    ctx.font = `800 27px ${font}`;
+    ctx.fillText(String(row.position), tableX + 34, y + 49);
 
-    drawTextFit(ctx, row.name, tableX + 138, y + 25, tableW - 620, font, 25, 18, "800");
+    drawTextFit(ctx, row.name, tableX + 105, y + 49, tableW - 365, font, 29, 21, "800");
 
     const outLabel = statusLabel(row.status);
     if (outLabel) {
       ctx.fillStyle = "#FF9B6B";
-      ctx.font = `900 18px ${font}`;
+      ctx.font = `900 15px ${font}`;
       ctx.textAlign = "right";
-      ctx.fillText(outLabel, tableX + tableW - 430, y + 24);
+      ctx.fillText(outLabel, tableX + tableW - 250, y + 65);
       ctx.textAlign = "left";
     }
 
     ctx.fillStyle = inactive ? "rgba(251,243,222,0.42)" : "rgba(251,243,222,0.84)";
-    ctx.font = `800 24px ${font}`;
+    ctx.font = `800 27px ${font}`;
     ctx.textAlign = "center";
-    ctx.fillText(String(input.kind === "team" ? row.played ?? 0 : row.stages ?? 0), tableX + tableW - 330, y + 25);
+    ctx.fillText(String(input.kind === "team" ? row.played ?? 0 : row.stages ?? 0), tableX + tableW - 180, y + 49);
 
     ctx.fillStyle = inactive ? "#FF9B6B" : "#BBFF5E";
-    ctx.font = `900 27px ${font}`;
-    ctx.fillText(String(row.points), tableX + tableW - 128, y + 26);
+    ctx.font = `900 31px ${font}`;
+    ctx.fillText(String(row.points), tableX + tableW - 62, y + 50);
     ctx.textAlign = "left";
   });
 
   ctx.fillStyle = "rgba(251,243,222,0.42)";
   ctx.font = `700 22px ${font}`;
-  ctx.fillText("palapadel.it", 120, height - 96);
+  ctx.fillText("palapadel.it", 100, height - 250);
 
   ctx.textAlign = "right";
-  ctx.fillText(new Date().toLocaleDateString("it-IT"), width - 120, height - 96);
+  ctx.fillText(new Date().toLocaleDateString("it-IT"), width - 100, height - 250);
   ctx.textAlign = "left";
 
   return canvas;

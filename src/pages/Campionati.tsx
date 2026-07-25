@@ -494,6 +494,8 @@ function TeamStandings({
   isAdmin: boolean;
   showToast: (msg: string) => void;
 }) {
+  const { appUser } = useAuth();
+  const canShareAsResultManager = ["gestore", "resultManager"].includes(String(appUser?.role ?? ""));
   const editionId = edition.id;
   const { data: editionTeams } = useCollection<EditionTeam>(
     "editionTeams",
@@ -611,6 +613,14 @@ function TeamStandings({
             <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna squadra iscritta.</p>
           )}
         </div>
+        {canShareAsResultManager && (
+          <div className="mt-3">
+            <StandingsShareButton
+              input={{ categoryName: championshipName, season: edition.season, kind: "team", rows: frozenShareRows }}
+              showToast={showToast}
+            />
+          </div>
+        )}
         {isAdmin && (
           <div className="mt-3 flex flex-col gap-2 items-start">
             <StandingsShareButton
@@ -693,6 +703,25 @@ function TeamStandings({
         {rows.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna squadra iscritta.</p>}
       </div>
 
+      {canShareAsResultManager && (
+        <div className="mt-3">
+          <StandingsShareButton
+            input={{
+              categoryName: championshipName,
+              season: edition.season,
+              kind: "team",
+              rows: rows.map((r, i) => ({
+                position: i + 1,
+                name: r.team?.name ?? "Squadra",
+                points: r.points,
+                played: r.played,
+                status: r.status,
+              })),
+            }}
+            showToast={showToast}
+          />
+        </div>
+      )}
       {isAdmin && (
         <div className="mt-3 flex flex-col gap-2 items-start">
           <StandingsShareButton
@@ -818,9 +847,15 @@ function TeamProfileModal({
   const roster = team?.roster ?? [];
 
   return (
-    <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center bg-black/60 p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 px-4 pb-[calc(104px+env(safe-area-inset-bottom))] pt-[max(24px,env(safe-area-inset-top))] sm:p-6"
+      onClick={onClose}
+    >
       <div
-        className="w-full max-w-sm bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl overflow-hidden max-h-[85vh] overflow-y-auto"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Profilo ${team?.name ?? "squadra"}`}
+        className="w-full max-w-2xl bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-lg overflow-hidden max-h-[calc(100dvh-24px-104px-env(safe-area-inset-top)-env(safe-area-inset-bottom))] sm:max-h-[calc(100dvh-48px)] overflow-y-auto overscroll-contain"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Fase 7 — foto di gruppo della squadra: grande, orizzontale (16:9), object-cover.
@@ -836,7 +871,7 @@ function TeamProfileModal({
               </p>
             </div>
           )}
-          <button onClick={onClose} className="absolute top-2.5 right-2.5 bg-black/50 rounded-full p-1.5">
+          <button aria-label="Chiudi profilo squadra" onClick={onClose} className="absolute top-2.5 right-2.5 bg-black/60 rounded-full p-2">
             <X size={16} className="text-[#FBF3DE]" />
           </button>
           <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-black/70 to-transparent" />
@@ -949,9 +984,16 @@ function PublicCalendar({ edition }: { edition: ChampionshipEdition }) {
           )}
           {matchesFor(activeMatchday.id).map((m) => (
             <div key={m.id} className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl px-3.5 py-3 flex items-center justify-between gap-2">
-              <p className="text-[13px] font-semibold truncate">
-                {teamName(m.team1Id)} <span className="text-[rgba(251,243,222,0.35)]">vs</span> {teamName(m.team2Id)}
-              </p>
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold truncate">
+                  {teamName(m.team1Id)} <span className="text-[rgba(251,243,222,0.35)]">vs</span> {teamName(m.team2Id)}
+                </p>
+                {(m.matchDate || m.matchTime) && (
+                  <p className="mt-1 text-[11px] text-[rgba(251,243,222,0.48)]">
+                    {formatPublicMatchSchedule(m.matchDate, m.matchTime)}
+                  </p>
+                )}
+              </div>
               {m.status === "conclusa" && m.result && (
                 <span className="font-display text-[15px] text-[#BBFF5E] shrink-0">{m.result}</span>
               )}
@@ -974,6 +1016,20 @@ function PublicCalendar({ edition }: { edition: ChampionshipEdition }) {
       )}
     </div>
   );
+}
+
+function formatPublicMatchSchedule(date?: string, time?: string) {
+  const parts: string[] = [];
+  if (date) {
+    const parsed = new Date(`${date}T12:00:00`);
+    parts.push(Number.isNaN(parsed.getTime()) ? date : parsed.toLocaleDateString("it-IT", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    }));
+  }
+  if (time) parts.push(`ore ${time}`);
+  return parts.join(" - ");
 }
 
 function ImportTeamStandings({
@@ -1616,6 +1672,8 @@ function FemaleStandings({
   isAdmin: boolean;
   showToast: (msg: string) => void;
 }) {
+  const { appUser } = useAuth();
+  const canShareAsResultManager = ["gestore", "resultManager"].includes(String(appUser?.role ?? ""));
   const editionId = edition.id;
   const { data: participants } = useCollection<FemaleParticipant>(
     "femaleParticipants",
@@ -1713,6 +1771,14 @@ function FemaleStandings({
             <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna giocatrice ancora.</p>
           )}
         </div>
+        {canShareAsResultManager && (
+          <div className="mt-3">
+            <StandingsShareButton
+              input={{ categoryName: championshipName, season: edition.season, kind: "female", rows: frozenShareRows }}
+              showToast={showToast}
+            />
+          </div>
+        )}
         {isAdmin && (
           <div className="mt-3 flex flex-col gap-2 items-start">
             <StandingsShareButton
@@ -1780,6 +1846,25 @@ function FemaleStandings({
         {rows.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna giocatrice ancora.</p>}
       </div>
 
+      {canShareAsResultManager && (
+        <div className="mt-3">
+          <StandingsShareButton
+            input={{
+              categoryName: championshipName,
+              season: edition.season,
+              kind: "female",
+              rows: rows.map((r, i) => ({
+                position: i + 1,
+                name: r.name,
+                points: r.points,
+                stages: r.stages,
+                status: r.status,
+              })),
+            }}
+            showToast={showToast}
+          />
+        </div>
+      )}
       {isAdmin && (
         <div className="mt-3 flex flex-col gap-2 items-start">
           <StandingsShareButton

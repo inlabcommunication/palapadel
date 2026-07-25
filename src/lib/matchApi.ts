@@ -41,6 +41,8 @@ export interface CreateMatchInput {
   matchdayId: string;
   team1Id: string;
   team2Id: string;
+  matchDate?: string;
+  matchTime?: string;
 }
 
 export interface DeleteMatchInput {
@@ -52,6 +54,8 @@ export interface UpdateMatchInput {
   matchdayId?: string;
   team1Id?: string;
   team2Id?: string;
+  matchDate?: string | null;
+  matchTime?: string | null;
 }
 
 /**

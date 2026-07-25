@@ -1,11 +1,11 @@
 import { NavLink } from "react-router-dom";
-import { Home, Trophy, History, Award, Bell, Settings } from "lucide-react";
+import { Home, Trophy, Newspaper, Award, Bell, Settings } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 
 const items = [
   { to: "/", label: "Home", icon: Home, end: true },
   { to: "/campionati", label: "Campionati", icon: Trophy },
-  { to: "/storico", label: "Storico", icon: History },
+  { to: "/news", label: "News", icon: Newspaper },
   { to: "/albo", label: "Albo d'oro", icon: Award },
   { to: "/notifiche", label: "Notifiche", icon: Bell },
 ];
