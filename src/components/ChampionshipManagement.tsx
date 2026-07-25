@@ -3,7 +3,10 @@ import { addDoc, collection, deleteDoc, deleteField, doc, setDoc, updateDoc } fr
 import { useCollection } from "../hooks/useCollection";
 import { db } from "../firebase";
 import { confirmDelete } from "../lib/confirmDelete";
+<<<<<<< HEAD
 import { uploadTeamPhoto, deleteTeamPhotoByUrl, TeamPhotoError } from "../lib/teamPhotoUpload";
+=======
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
 import type { ChampionshipType, Team } from "../types";
 import { BADGE_COLORS } from "../types";
 
@@ -202,7 +205,11 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
   const { data: teams } = useCollection<Team>("teams");
   const [name, setName] = useState("");
   const [rosterText, setRosterText] = useState("");
+<<<<<<< HEAD
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+=======
+  const [logoUrl, setLogoUrl] = useState("");
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -219,6 +226,7 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
     }
     setCreating(true);
     try {
+<<<<<<< HEAD
       const ref = await addDoc(collection(db, "teams"), { name: name.trim(), roster });
       if (photoFile) {
         const teamPhotoUrl = await uploadTeamPhoto(ref.id, photoFile);
@@ -227,6 +235,12 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
       setName("");
       setRosterText("");
       setPhotoFile(null);
+=======
+      await addDoc(collection(db, "teams"), { name: name.trim(), roster, ...(logoUrl.trim() ? { logoUrl: logoUrl.trim() } : {}) });
+      setName("");
+      setRosterText("");
+      setLogoUrl("");
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
       onDone(`Squadra "${name}" creata.`);
     } catch (err) {
       console.error(err);
@@ -260,7 +274,20 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
           ) : (
             <div key={t.id} className="px-3.5 py-2.5 text-[13px] border-b border-[rgba(251,243,222,0.08)] last:border-b-0">
               <div className="flex items-center justify-between gap-2">
+<<<<<<< HEAD
                 <p className="font-semibold truncate flex-1 min-w-0">{t.name}</p>
+=======
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  {t.logoUrl ? (
+                    <img src={t.logoUrl} alt={t.name} className="w-7 h-7 rounded-lg object-cover shrink-0" />
+                  ) : (
+                    <div className="w-7 h-7 rounded-lg shrink-0 flex items-center justify-center bg-[#123008] text-[9px] font-extrabold text-[#BBFF5E]">
+                      {t.name.slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                  <p className="font-semibold truncate">{t.name}</p>
+                </div>
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
                 <button onClick={() => setEditingId(t.id)} className="text-[#BBFF5E] text-xs font-semibold shrink-0">
                   Modifica
                 </button>
@@ -284,6 +311,15 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
         value={rosterText}
         onChange={(e) => setRosterText(e.target.value)}
         className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
+<<<<<<< HEAD
+=======
+      />
+      <input
+        placeholder="Link foto squadra (opzionale)"
+        value={logoUrl}
+        onChange={(e) => setLogoUrl(e.target.value)}
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
       />
       <label className="block mb-2">
         <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Foto di gruppo della squadra (opzionale, JPG/PNG/WebP, max 5 MB)</p>
@@ -316,8 +352,12 @@ function EditTeamRow({
 }) {
   const [name, setName] = useState(team.name);
   const [rosterText, setRosterText] = useState(team.roster.join(", "));
+<<<<<<< HEAD
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [removePhoto, setRemovePhoto] = useState(false);
+=======
+  const [logoUrl, setLogoUrl] = useState(team.logoUrl ?? "");
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
@@ -331,6 +371,7 @@ function EditTeamRow({
     }
     setSaving(true);
     try {
+<<<<<<< HEAD
       let teamPhotoUrl: string | undefined;
       if (photoFile) {
         // Fase 7 — carica prima la nuova foto e ottieni l'URL; elimina quella
@@ -344,6 +385,13 @@ function EditTeamRow({
       });
       if (photoFile && team.teamPhotoUrl) await deleteTeamPhotoByUrl(team.teamPhotoUrl);
       if (removePhoto && !photoFile && team.teamPhotoUrl) await deleteTeamPhotoByUrl(team.teamPhotoUrl);
+=======
+      await updateDoc(doc(db, "teams", team.id), {
+        name: name.trim(),
+        roster,
+        ...(logoUrl.trim() ? { logoUrl: logoUrl.trim() } : { logoUrl: deleteField() }),
+      });
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
       onDone("Squadra aggiornata.");
       onCancel();
     } catch (err) {
@@ -366,6 +414,15 @@ function EditTeamRow({
         value={rosterText}
         onChange={(e) => setRosterText(e.target.value)}
         className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm mb-2"
+<<<<<<< HEAD
+=======
+      />
+      <input
+        placeholder="Link foto squadra (opzionale)"
+        value={logoUrl}
+        onChange={(e) => setLogoUrl(e.target.value)}
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm mb-2"
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
       />
       {team.teamPhotoUrl && !removePhoto && (
         <div className="mb-2">

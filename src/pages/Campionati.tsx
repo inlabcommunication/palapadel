@@ -1,11 +1,16 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+<<<<<<< HEAD
 import { addDoc, collection, deleteDoc, doc, updateDoc, where } from "firebase/firestore";
+=======
+import { addDoc, collection, deleteDoc, doc, getDocs, query, setDoc, updateDoc, where } from "firebase/firestore";
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
 import { useCollection } from "../hooks/useCollection";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase";
 import { confirmDelete } from "../lib/confirmDelete";
 import { freezeEdition } from "../lib/freezeEdition";
+<<<<<<< HEAD
 import { compareStandingRows } from "../lib/standingsEngine";
 import { importStandings, importFemaleStandings, StandingsApiError, type ImportStandingsRow, type ImportFemaleRow } from "../lib/standingsApi";
 import {
@@ -19,6 +24,9 @@ import {
 import { computeTeamEditionStats } from "../lib/teamStats";
 import { matchTeamName, findDuplicateImportedNames } from "../lib/teamNameMatch";
 import { Plus, Pencil, Trash2, Settings, X, Upload, ChevronDown, Lock, RefreshCw, Trophy, Calendar, Clock, Ban } from "lucide-react";
+=======
+import { Plus, Pencil, Trash2, Settings, X, Upload, ChevronDown, Lock, RefreshCw, Trophy } from "lucide-react";
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
 import type {
   ChampionshipEdition,
   ChampionshipType,
@@ -26,8 +34,11 @@ import type {
   EditionTeam,
   FemaleParticipant,
   HistoricalWin,
+<<<<<<< HEAD
   Match,
   Matchday,
+=======
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
   ParticipationStatus,
   Team,
 } from "../types";
@@ -290,15 +301,23 @@ export function CampionatiPage() {
         </div>
       )}
 
+<<<<<<< HEAD
       {edition && activeType?.hasTeams && (
         <TeamStandings edition={edition} championshipName={activeType.name} isAdmin={isAdmin} showToast={showToast} />
       )}
       {edition && activeType?.hasTeams && <PublicCalendar edition={edition} />}
+=======
+      {edition && activeType?.hasTeams && <TeamStandings edition={edition} isAdmin={isAdmin} showToast={showToast} />}
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
       {edition && activeType?.hasTeams && (
         <BracketSection edition={edition} isAdmin={isAdmin} showToast={showToast} />
       )}
       {edition && activeType && !activeType.hasTeams && (
+<<<<<<< HEAD
         <FemaleStandings edition={edition} championshipName={activeType.name} isAdmin={isAdmin} showToast={showToast} />
+=======
+        <FemaleStandings edition={edition} isAdmin={isAdmin} showToast={showToast} />
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
       )}
 
       {toast && (
@@ -485,12 +504,18 @@ function EditEditionForm({
 
 function TeamStandings({
   edition,
+<<<<<<< HEAD
   championshipName,
+=======
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
   isAdmin,
   showToast,
 }: {
   edition: ChampionshipEdition;
+<<<<<<< HEAD
   championshipName: string;
+=======
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
   isAdmin: boolean;
   showToast: (msg: string) => void;
 }) {
@@ -506,7 +531,11 @@ function TeamStandings({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [showLive, setShowLive] = useState(false);
+<<<<<<< HEAD
   const [recalcPreview, setRecalcPreview] = useState<StandingsChange[] | null>(null);
+=======
+  const [recalcPreview, setRecalcPreview] = useState<{ id: string; name: string; from: number; to: number }[] | null>(null);
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
   const [recalculating, setRecalculating] = useState(false);
 
   const isFrozen = edition.status === "conclusa" && !!edition.frozenStandings;
@@ -558,10 +587,44 @@ function TeamStandings({
     }
   };
 
+  const openRecalcPreview = () => {
+    const changes = rows
+      .map((r) => ({
+        id: r.id,
+        name: r.team?.name ?? "—",
+        from: r.points,
+        to: (r.calculatedPoints ?? r.points) + (r.manualPointsAdjustment ?? 0),
+      }))
+      .filter((c) => c.from !== c.to);
+    if (changes.length === 0) {
+      showToast("La classifica è già aggiornata: nessuna modifica da applicare.");
+      return;
+    }
+    setRecalcPreview(changes);
+  };
+
+  const confirmRecalc = async () => {
+    if (!recalcPreview || recalcPreview.length === 0) return;
+    setRecalculating(true);
+    try {
+      for (const c of recalcPreview) {
+        await updateDoc(doc(db, "editionTeams", c.id), { points: c.to });
+      }
+      showToast("Classifica ricalcolata.");
+      setRecalcPreview(null);
+    } catch (err) {
+      console.error(err);
+      showToast("Errore nel ricalcolo.");
+    } finally {
+      setRecalculating(false);
+    }
+  };
+
   const availableTeams = teams.filter((t) => !editionTeams.some((et) => et.teamId === t.id));
 
   if (isFrozen && !showLive) {
     const frozenRows = edition.frozenStandings!;
+<<<<<<< HEAD
     const frozenShareRows = frozenRows.map((r, i) => ({
       position: i + 1,
       name: r.name,
@@ -569,6 +632,8 @@ function TeamStandings({
       played: r.played ?? 0,
       status: r.status,
     }));
+=======
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
     return (
       <div>
         <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl overflow-hidden">
@@ -612,6 +677,7 @@ function TeamStandings({
           )}
         </div>
         {isAdmin && (
+<<<<<<< HEAD
           <div className="mt-3 flex flex-col gap-2 items-start">
             <StandingsShareButton
               input={{ categoryName: championshipName, season: edition.season, kind: "team", rows: frozenShareRows }}
@@ -623,6 +689,13 @@ function TeamStandings({
           </div>
         )}
         {selectedTeamId && <TeamProfileModal teamId={selectedTeamId} edition={edition} onClose={() => setSelectedTeamId(null)} />}
+=======
+          <button onClick={() => setShowLive(true)} className="mt-2 flex items-center gap-1 text-xs text-[rgba(251,243,222,0.35)]">
+            <Lock size={11} /> Correggi dati e ricongela
+          </button>
+        )}
+        {selectedTeamId && <TeamProfileModal teamId={selectedTeamId} onClose={() => setSelectedTeamId(null)} />}
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
       </div>
     );
   }
@@ -744,6 +817,41 @@ function TeamStandings({
           ) : (
             <button onClick={() => setShowImport(true)} className="flex items-center gap-1.5 text-[13px] font-semibold text-[#BBFF5E]">
               <Upload size={15} /> Incolla classifica da Excel o Word
+<<<<<<< HEAD
+=======
+            </button>
+          )}
+
+          {recalcPreview ? (
+            <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5 w-full">
+              <p className="text-[13px] font-bold mb-2">Ricalcola classifica</p>
+              <div className="flex flex-col gap-1 mb-3 text-[12.5px]">
+                {recalcPreview.map((c) => (
+                  <p key={c.id}>
+                    <strong>{c.name}</strong>: da {c.from} a {c.to} punti
+                  </p>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={confirmRecalc}
+                  disabled={recalculating}
+                  className="flex-1 bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+                >
+                  {recalculating ? "Ricalcolo in corso..." : "Conferma ricalcolo"}
+                </button>
+                <button
+                  onClick={() => setRecalcPreview(null)}
+                  className="flex-1 border border-[rgba(251,243,222,0.18)] rounded-lg py-2.5 text-sm font-semibold"
+                >
+                  Annulla
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={openRecalcPreview} className="flex items-center gap-1.5 text-[13px] font-semibold text-[#BBFF5E]">
+              <RefreshCw size={15} /> Ricalcola classifica
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
             </button>
           )}
 
@@ -972,6 +1080,71 @@ function PublicCalendar({ edition }: { edition: ChampionshipEdition }) {
           ))}
         </div>
       )}
+
+      {selectedTeamId && <TeamProfileModal teamId={selectedTeamId} onClose={() => setSelectedTeamId(null)} />}
+    </div>
+  );
+}
+
+/**
+ * Popup con il profilo di una squadra: nome, foto (o iniziali se assente), rosa
+ * giocatori e i titoli vinti (dall'Albo d'oro, sia storici che generati automaticamente).
+ */
+function TeamProfileModal({ teamId, onClose }: { teamId: string; onClose: () => void }) {
+  const { data: teams } = useCollection<Team>("teams");
+  const { data: wins } = useCollection<HistoricalWin>("historicalWins", [where("teamId", "==", teamId)], [teamId]);
+  const { data: types } = useCollection<ChampionshipType>("championshipTypes");
+  const team = teams.find((t) => t.id === teamId);
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-sm bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-4 max-h-[85vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[15px] font-bold">{team?.name ?? "Squadra"}</p>
+          <button onClick={onClose}>
+            <X size={18} className="text-[rgba(251,243,222,0.35)]" />
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3 mb-4">
+          {team?.logoUrl ? (
+            <img src={team.logoUrl} alt={team.name} className="w-14 h-14 rounded-xl object-cover shrink-0" />
+          ) : (
+            <div className="w-14 h-14 rounded-xl shrink-0 flex items-center justify-center bg-[#123008] text-[15px] font-extrabold text-[#BBFF5E]">
+              {(team?.name ?? "?").slice(0, 2).toUpperCase()}
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="text-[11px] uppercase tracking-wider text-[rgba(251,243,222,0.35)] font-bold mb-1">Rosa</p>
+            <p className="text-[13px] text-[rgba(251,243,222,0.85)] leading-snug">
+              {team && team.roster.length > 0 ? team.roster.join(", ") : "Nessun giocatore registrato."}
+            </p>
+          </div>
+        </div>
+
+        <p className="text-[11px] uppercase tracking-wider text-[rgba(251,243,222,0.35)] font-bold mb-2">Titoli vinti</p>
+        {wins.length === 0 ? (
+          <p className="text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessun titolo vinto ancora.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {wins.map((w) => {
+              const t = types.find((x) => x.id === w.typeId);
+              return (
+                <div key={w.id} className="flex items-center gap-2.5 bg-[#123008] rounded-lg px-3 py-2">
+                  <Trophy size={15} className="text-[#F5C842] shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-semibold truncate">{t?.name ?? "Campionato"}</p>
+                    <p className="text-[11px] text-[rgba(251,243,222,0.35)]">{w.season}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1122,6 +1295,7 @@ function ImportTeamStandings({
     setSaving(true);
     setError(null);
     try {
+<<<<<<< HEAD
       const result = await importStandings({
         editionId,
         mode,
@@ -1129,6 +1303,44 @@ function ImportTeamStandings({
         mode2ThresholdMatchdayNumber: mode === 2 && mode2Choice === "B" ? thresholdMatchdayNumber ?? undefined : undefined,
         rows: preview.rows,
       });
+=======
+      for (const { row, num1, num2 } of preview.matched) {
+        const adjustment = row.manualPointsAdjustment ?? 0;
+        await updateDoc(doc(db, "editionTeams", row.id), {
+          calculatedPoints: num1,
+          points: num1 + adjustment,
+          played: num2,
+        });
+      }
+      for (const { team, num1, num2 } of preview.toEnroll) {
+        const id = `${editionId}_${team.id}`;
+        await setDoc(doc(db, "editionTeams", id), {
+          id,
+          editionId,
+          teamId: team.id,
+          calculatedPoints: num1,
+          points: num1,
+          played: num2,
+          order: 0,
+          status: "normale",
+        });
+      }
+      for (const { name, num1, num2 } of preview.toCreate) {
+        const teamRef = await addDoc(collection(db, "teams"), { name, roster: [] });
+        const id = `${editionId}_${teamRef.id}`;
+        await setDoc(doc(db, "editionTeams", id), {
+          id,
+          editionId,
+          teamId: teamRef.id,
+          calculatedPoints: num1,
+          points: num1,
+          played: num2,
+          order: 0,
+          status: "normale",
+        });
+      }
+      const createdCount = preview.toEnroll.length + preview.toCreate.length;
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
       onDone(
         `Importazione completata: ${result.matchedCount} aggiornate, ${result.createdCount} create/iscritte.` +
           (missingFromText.length > 0 ? ` ${missingFromText.length} non presenti nel testo hanno mantenuto i dati precedenti.` : "") +
@@ -1149,6 +1361,7 @@ function ImportTeamStandings({
         <p className="text-[13px] font-bold">Importa classifica (incolla da Excel/Word)</p>
         <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
       </div>
+<<<<<<< HEAD
 
       {!ambiguousRows && !preview && (
         <>
@@ -1297,6 +1510,67 @@ function ImportTeamStandings({
                 Non presenti nel testo (manterranno i dati attuali): {missingFromText.map((m) => m.team?.name).join(", ")}
               </p>
             )}
+=======
+      <p className="text-[12px] text-[rgba(251,243,222,0.35)] mb-2">
+        Copia le righe da Excel o da una tabella Word e incollale qui sotto. Ogni riga deve contenere il nome
+        della squadra seguito da <strong>Punti</strong> e <strong>Partite giocate</strong> (in quest'ordine). Le
+        squadre non ancora esistenti vengono create automaticamente (con rosa vuota da completare dopo).
+      </p>
+      <textarea
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          setPreview(null);
+        }}
+        placeholder={"Los Locos Padel\t9\t4\nSmash Taranto\t7\t4\n..."}
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2 min-h-[120px] font-mono"
+      />
+
+      {!preview ? (
+        <button
+          onClick={analyze}
+          disabled={!text.trim()}
+          className="w-full bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+        >
+          Analizza
+        </button>
+      ) : (
+        <div>
+          <div className="bg-[#123008] rounded-lg p-2.5 mb-2 text-[12.5px]">
+            <p className="mb-1">
+              <strong>{preview.matched.length}</strong> squadre già iscritte verranno aggiornate.
+            </p>
+            {preview.matched.some((m) => (m.row.manualPointsAdjustment ?? 0) !== 0) && (
+              <p className="mb-1 text-[#BBFF5E]">
+                Correzioni manuali che verranno mantenute:{" "}
+                {preview.matched
+                  .filter((m) => (m.row.manualPointsAdjustment ?? 0) !== 0)
+                  .map((m) => `${m.row.team?.name} (${m.row.manualPointsAdjustment! > 0 ? "+" : ""}${m.row.manualPointsAdjustment})`)
+                  .join(", ")}
+              </p>
+            )}
+            {preview.toEnroll.length > 0 && (
+              <p className="mb-1">
+                <strong>{preview.toEnroll.length}</strong> squadre esistenti verranno iscritte a questa
+                classifica: {preview.toEnroll.map((e) => e.team.name).join(", ")}
+              </p>
+            )}
+            {preview.toCreate.length > 0 && (
+              <p className="mb-1">
+                <strong>{preview.toCreate.length}</strong> squadre nuove verranno create (con rosa vuota) e
+                iscritte: {preview.toCreate.map((c) => c.name).join(", ")}
+              </p>
+            )}
+            {preview.missing.length > 0 && (
+              <p className="text-[rgba(251,243,222,0.35)]">
+                Non presenti nel testo (manterranno i dati attuali):{" "}
+                {preview.missing.map((m) => m.team?.name).join(", ")}
+              </p>
+            )}
+            {preview.skipped.length > 0 && (
+              <p className="text-[rgba(251,243,222,0.35)] mt-1">{preview.skipped.length} riga/righe non riconosciute e ignorate.</p>
+            )}
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
           </div>
           {error && <p className="text-[12px] text-[#FF6B6B] mb-2">{error}</p>}
           <div className="flex gap-2">
@@ -1446,6 +1720,7 @@ function EditionTeamEditRow({
   onCancel: () => void;
   onDone: (msg: string) => void;
 }) {
+<<<<<<< HEAD
   // "Punti calcolati" / "PG" in questa scheda rappresentano la BASELINE manuale: il
   // ricalcolo automatico (Fase 5) somma sopra questi valori i punti/partite giocate
   // che derivano dalle partite in matches (matchPoints/matchPlayed), che qui restano
@@ -1456,11 +1731,17 @@ function EditionTeamEditRow({
   const [manualAdjustment, setManualAdjustment] = useState(String(editionTeam.manualPointsAdjustment ?? 0));
   const [baselinePlayed, setBaselinePlayed] = useState(String(editionTeam.baselinePlayed ?? editionTeam.played));
   const [manualPlayedAdjustment, setManualPlayedAdjustment] = useState(String(editionTeam.manualPlayedAdjustment ?? 0));
+=======
+  const [calculatedPoints, setCalculatedPoints] = useState(String(editionTeam.calculatedPoints ?? editionTeam.points));
+  const [manualAdjustment, setManualAdjustment] = useState(String(editionTeam.manualPointsAdjustment ?? 0));
+  const [played, setPlayed] = useState(String(editionTeam.played));
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
   const [order, setOrder] = useState(String(editionTeam.order));
   const [status, setStatus] = useState<ParticipationStatus>(editionTeam.status);
   const [policy, setPolicy] = useState<1 | 2 | 3 | 4>(1);
   const [saving, setSaving] = useState(false);
 
+<<<<<<< HEAD
   const matchPoints = editionTeam.matchPoints ?? 0;
   const matchPlayed = editionTeam.matchPlayed ?? 0;
   const finalPoints = (Number(baselinePoints) || 0) + matchPoints + (Number(manualAdjustment) || 0);
@@ -1489,6 +1770,18 @@ function EditionTeamEditRow({
         baselinePlayed: Number(baselinePlayed) || 0,
         manualPointsAdjustment: Number(manualAdjustment) || 0,
         manualPlayedAdjustment: Number(manualPlayedAdjustment) || 0,
+=======
+  const finalPoints = (Number(calculatedPoints) || 0) + (Number(manualAdjustment) || 0);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, "editionTeams", editionTeam.id), {
+        calculatedPoints: Number(calculatedPoints) || 0,
+        manualPointsAdjustment: Number(manualAdjustment) || 0,
+        points: finalPoints,
+        played: Number(played) || 0,
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
         order: Number(order) || 0,
       });
       onDone("Dati aggiornati.");
@@ -1523,8 +1816,13 @@ function EditionTeamEditRow({
           <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Punti calcolati</p>
           <input
             type="number"
+<<<<<<< HEAD
             value={baselinePoints}
             onChange={(e) => setBaselinePoints(e.target.value)}
+=======
+            value={calculatedPoints}
+            onChange={(e) => setCalculatedPoints(e.target.value)}
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
             className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm"
           />
         </div>
@@ -1538,26 +1836,36 @@ function EditionTeamEditRow({
           />
         </div>
       </div>
+<<<<<<< HEAD
       {(matchPoints !== 0 || matchPlayed !== 0) && (
         <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-2">
           + {matchPoints} pt / {matchPlayed} PG dalle partite già registrate in questa edizione
         </p>
       )}
+=======
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
       <p className="text-[12px] text-[rgba(251,243,222,0.58)] mb-2">
         Punti finali: <span className="font-display text-[15px] text-[#BBFF5E]">{finalPoints}</span>
         {Number(manualAdjustment) !== 0 && (
           <span className="text-[rgba(251,243,222,0.35)]"> · sopravvive a un futuro import Excel</span>
         )}
+<<<<<<< HEAD
         {" · "}PG finali: <span className="font-display text-[15px] text-[#BBFF5E]">{finalPlayed}</span>
+=======
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
       </p>
       <div className="flex gap-2 mb-2">
         <div className="flex-1">
           <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">PG</p>
+<<<<<<< HEAD
           <input type="number" value={baselinePlayed} onChange={(e) => setBaselinePlayed(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
         </div>
         <div className="flex-1">
           <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Correzione PG (+/-)</p>
           <input type="number" value={manualPlayedAdjustment} onChange={(e) => setManualPlayedAdjustment(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
+=======
+          <input type="number" value={played} onChange={(e) => setPlayed(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
         </div>
         <div className="w-16">
           <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Ordine</p>
@@ -1590,7 +1898,11 @@ function EditionTeamEditRow({
       )}
       <div className="flex gap-2 mb-2">
         <button onClick={save} disabled={saving} className="flex-1 bg-lime text-[#081208] rounded-lg py-2 text-sm font-bold disabled:opacity-50">
+<<<<<<< HEAD
           {saving ? "Salvataggio..." : "Salva"}
+=======
+          Salva
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
         </button>
         <button onClick={onCancel} className="flex-1 border border-[rgba(251,243,222,0.18)] rounded-lg py-2 text-sm font-semibold">
           Annulla
@@ -1607,12 +1919,18 @@ function EditionTeamEditRow({
 
 function FemaleStandings({
   edition,
+<<<<<<< HEAD
   championshipName,
+=======
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
   isAdmin,
   showToast,
 }: {
   edition: ChampionshipEdition;
+<<<<<<< HEAD
   championshipName: string;
+=======
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
   isAdmin: boolean;
   showToast: (msg: string) => void;
 }) {
@@ -1628,6 +1946,11 @@ function FemaleStandings({
   const [showLive, setShowLive] = useState(false);
   const [recalcPreview, setRecalcPreview] = useState<{ id: string; name: string; from: number; to: number }[] | null>(null);
   const [recalculating, setRecalculating] = useState(false);
+<<<<<<< HEAD
+=======
+
+  const isFrozen = edition.status === "conclusa" && !!edition.frozenStandings;
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
 
   const isFrozen = edition.status === "conclusa" && !!edition.frozenStandings;
 
@@ -1723,6 +2046,88 @@ function FemaleStandings({
               <Lock size={11} /> Correggi dati e ricongela
             </button>
           </div>
+        )}
+      </div>
+    );
+  }
+
+  const openRecalcPreview = () => {
+    const changes = rows
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        from: r.points,
+        to: (r.calculatedPoints ?? r.points) + (r.manualPointsAdjustment ?? 0),
+      }))
+      .filter((c) => c.from !== c.to);
+    if (changes.length === 0) {
+      showToast("La classifica è già aggiornata: nessuna modifica da applicare.");
+      return;
+    }
+    setRecalcPreview(changes);
+  };
+
+  const confirmRecalc = async () => {
+    if (!recalcPreview || recalcPreview.length === 0) return;
+    setRecalculating(true);
+    try {
+      for (const c of recalcPreview) {
+        await updateDoc(doc(db, "femaleParticipants", c.id), { points: c.to });
+      }
+      showToast("Classifica ricalcolata.");
+      setRecalcPreview(null);
+    } catch (err) {
+      console.error(err);
+      showToast("Errore nel ricalcolo.");
+    } finally {
+      setRecalculating(false);
+    }
+  };
+
+  if (isFrozen && !showLive) {
+    const frozenRows = edition.frozenStandings!;
+    return (
+      <div>
+        <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl overflow-hidden">
+          <div className="flex items-center px-3.5 py-2.5 text-xs font-bold text-[rgba(251,243,222,0.58)] border-b border-[rgba(251,243,222,0.08)]">
+            <span className="w-6">#</span>
+            <span className="flex-1">Giocatrice</span>
+            <span className="w-14 text-center">Tappe</span>
+            <span className="w-12 text-center">Pt</span>
+          </div>
+          {frozenRows.map((r, i) => (
+            <div key={r.id} className="flex items-center px-3.5 py-2.5 text-[13px] border-b border-[rgba(251,243,222,0.08)] last:border-b-0">
+              <span className="w-6 flex items-center justify-center shrink-0">
+                {i < 3 ? (
+                  <span
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-extrabold"
+                    style={{ background: RANK_COLORS[i].bg, color: RANK_COLORS[i].text }}
+                  >
+                    {i + 1}
+                  </span>
+                ) : (
+                  <span className="text-[rgba(251,243,222,0.35)]">{i + 1}</span>
+                )}
+              </span>
+              <span className="flex-1 font-semibold truncate">{r.name}</span>
+              <span className="w-14 text-center">{r.stages ?? "—"}</span>
+              <span className="w-12 text-center">
+                {r.status === "normale" ? (
+                  <span className="font-display text-[15px] text-[#BBFF5E]">{r.points}</span>
+                ) : (
+                  <span className="text-[11px] font-bold text-[#FF9B6B]">{r.status === "ritirata" ? "Rit." : "Sq."}</span>
+                )}
+              </span>
+            </div>
+          ))}
+          {frozenRows.length === 0 && (
+            <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna giocatrice ancora.</p>
+          )}
+        </div>
+        {isAdmin && (
+          <button onClick={() => setShowLive(true)} className="mt-2 flex items-center gap-1 text-xs text-[rgba(251,243,222,0.35)]">
+            <Lock size={11} /> Correggi dati e ricongela
+          </button>
         )}
       </div>
     );
@@ -2049,6 +2454,7 @@ function ImportFemaleParticipants({
     setSaving(true);
     setError(null);
     try {
+<<<<<<< HEAD
       const result = await importFemaleStandings({
         editionId,
         mode,
@@ -2059,6 +2465,32 @@ function ImportFemaleParticipants({
       if (result.retiredCount) parts.push(`${result.retiredCount} contrassegnate come ritirate`);
       if (result.removedCount) parts.push(`${result.removedCount} rimosse`);
       onDone(`Importazione completata: ${parts.join(", ")}.`);
+=======
+      for (const { existing: e, num1, num2 } of preview.matched) {
+        const adjustment = e.manualPointsAdjustment ?? 0;
+        await updateDoc(doc(db, "femaleParticipants", e.id), {
+          calculatedPoints: num1,
+          points: num1 + adjustment,
+          stages: num2,
+        });
+      }
+      for (const row of preview.fresh) {
+        await addDoc(collection(db, "femaleParticipants"), {
+          editionId,
+          name: row.name,
+          calculatedPoints: row.num1,
+          points: row.num1,
+          stages: row.num2,
+          status: "normale",
+        });
+      }
+      onDone(
+        `Importazione completata: ${preview.matched.length} aggiornate, ${preview.fresh.length} create.` +
+          (preview.missing.length > 0
+            ? ` ${preview.missing.length} non presenti nel testo hanno mantenuto i dati precedenti.`
+            : "")
+      );
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
     } catch (err) {
       console.error(err);
       const msg = err instanceof StandingsApiError ? err.message : "Errore durante l'importazione.";
@@ -2074,6 +2506,7 @@ function ImportFemaleParticipants({
         <p className="text-[13px] font-bold">Importa classifica (incolla da Excel/Word)</p>
         <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.35)]" /></button>
       </div>
+<<<<<<< HEAD
 
       {!ambiguousRows && !preview && (
         <>
@@ -2193,14 +2626,76 @@ function ImportFemaleParticipants({
                 Assenti dal testo ({mode2AbsentPolicy === "keep" ? "resteranno invariate" : mode2AbsentPolicy === "retire" ? "diventeranno ritirate" : "verranno rimosse"}):{" "}
                 {missingFromText.map((m) => m.name).join(", ")}
               </p>
+=======
+      <p className="text-[12px] text-[rgba(251,243,222,0.35)] mb-2">
+        Copia le righe da Excel o da una tabella Word e incollale qui sotto. Ogni riga deve contenere il nome
+        della giocatrice seguito da <strong>Punti</strong> e <strong>Tappe disputate</strong> (in quest'ordine).
+        Il numero di posizione iniziale, se presente, viene ignorato automaticamente.
+      </p>
+      <textarea
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          setPreview(null);
+        }}
+        placeholder={"Gabriella Schino\t19\t4\nFrancesca Boccardi\t16\t4\n..."}
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2 min-h-[120px] font-mono"
+      />
+
+      {!preview ? (
+        <button
+          onClick={analyze}
+          disabled={!text.trim()}
+          className="w-full bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+        >
+          Analizza
+        </button>
+      ) : (
+        <div>
+          <div className="bg-[#123008] rounded-lg p-2.5 mb-2 text-[12.5px]">
+            <p className="mb-1">
+              <strong>{preview.matched.length}</strong> giocatrici verranno aggiornate,{" "}
+              <strong>{preview.fresh.length}</strong> verranno create come nuove.
+            </p>
+            {preview.matched.some((m) => (m.existing.manualPointsAdjustment ?? 0) !== 0) && (
+              <p className="mb-1 text-[#BBFF5E]">
+                Correzioni manuali che verranno mantenute:{" "}
+                {preview.matched
+                  .filter((m) => (m.existing.manualPointsAdjustment ?? 0) !== 0)
+                  .map((m) => `${m.existing.name} (${m.existing.manualPointsAdjustment! > 0 ? "+" : ""}${m.existing.manualPointsAdjustment})`)
+                  .join(", ")}
+              </p>
+            )}
+            {preview.missing.length > 0 && (
+              <p className="text-[rgba(251,243,222,0.35)]">
+                Non presenti nel testo (manterranno i dati attuali): {preview.missing.map((m) => m.name).join(", ")}
+              </p>
+            )}
+            {preview.skipped.length > 0 && (
+              <p className="text-[rgba(251,243,222,0.35)] mt-1">{preview.skipped.length} riga/righe non riconosciute e ignorate.</p>
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
             )}
           </div>
           {error && <p className="text-[12px] text-[#FF6B6B] mb-2">{error}</p>}
           <div className="flex gap-2">
+<<<<<<< HEAD
             <button onClick={confirm} disabled={saving} className="flex-1 bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50">
               {saving ? "Importazione in corso..." : "Conferma importazione"}
             </button>
             <button onClick={() => setPreview(null)} className="flex-1 border border-[rgba(251,243,222,0.18)] rounded-lg py-2.5 text-sm font-semibold">
+=======
+            <button
+              onClick={confirm}
+              disabled={saving}
+              className="flex-1 bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+            >
+              {saving ? "Importazione in corso..." : "Conferma importazione"}
+            </button>
+            <button
+              onClick={() => setPreview(null)}
+              className="flex-1 border border-[rgba(251,243,222,0.18)] rounded-lg py-2.5 text-sm font-semibold"
+            >
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
               Modifica testo
             </button>
           </div>
@@ -2285,12 +2780,15 @@ function FemaleEditRow({
           <input type="number" value={manualAdjustment} onChange={(e) => setManualAdjustment(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
         </div>
       </div>
+<<<<<<< HEAD
       <div className="flex gap-2 mb-2">
         <div className="w-20">
           <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Ordine</p>
           <input type="number" value={order} onChange={(e) => setOrder(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
         </div>
       </div>
+=======
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
       <p className="text-[12px] text-[rgba(251,243,222,0.58)] mb-2">
         Punti finali: <span className="font-display text-[15px] text-[#BBFF5E]">{finalPoints}</span>
       </p>

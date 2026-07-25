@@ -98,6 +98,7 @@ export interface EditionTeam {
   id: string;
   editionId: string;
   teamId: string;
+<<<<<<< HEAD
   points: number; // finale mostrato ovunque = baselinePoints + matchPoints + manualPointsAdjustment
   played: number; // finale mostrato ovunque = baselinePlayed + matchPlayed + manualPlayedAdjustment
   order: number; // per spareggi manuali a pari punti
@@ -118,6 +119,19 @@ export interface EditionTeam {
    * scrive più.
    */
   calculatedPoints?: number;
+=======
+  points: number; // finale mostrato ovunque = calculatedPoints + manualPointsAdjustment
+  played: number;
+  order: number; // per spareggi manuali a pari punti
+  status: ParticipationStatus;
+  /**
+   * Punti "grezzi" dall'ultimo inserimento manuale o import Excel. Un nuovo import
+   * sovrascrive solo questo campo, mai manualPointsAdjustment, così una penalità o
+   * correzione manuale non va persa quando arriva una nuova importazione.
+   */
+  calculatedPoints?: number;
+  manualPointsAdjustment?: number;
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
 }
 
 /** femaleParticipants/{id} — campionato femminile, individuale */
@@ -130,8 +144,11 @@ export interface FemaleParticipant {
   status: ParticipationStatus;
   calculatedPoints?: number;
   manualPointsAdjustment?: number;
+<<<<<<< HEAD
   /** Fase 12 — ordine manuale o importato, usato come spareggio quando i punti coincidono. */
   order?: number;
+=======
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
 }
 
 /** matchdays/{id} */
@@ -150,6 +167,7 @@ export interface Match {
   team2Id: string;
   result?: "2-0" | "2-1" | "1-2" | "0-2";
   status: MatchStatus;
+<<<<<<< HEAD
   /** Fase 14 - stato reale dell'aggiornamento legato a questo risultato. */
   notificationStatus?: "none" | "draft" | "sent" | "failed";
   notificationDraftCreatedAt?: string;
@@ -160,6 +178,10 @@ export interface Match {
   /** Traccia chi ha salvato l'ultima modifica a risultato/stato e quando (audit log lato backend). */
   updatedAt?: string;
   updatedBy?: string;
+=======
+  /** Presente se per questo risultato è già stata creata una novità/notifica (vedi src/pages/Giornate.tsx). */
+  notifiedAt?: string;
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
 }
 
 /**

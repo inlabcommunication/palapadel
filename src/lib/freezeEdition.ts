@@ -1,6 +1,9 @@
 import { addDoc, collection, doc, getDocs, query, updateDoc, where } from "firebase/firestore";
 import { db } from "../firebase";
+<<<<<<< HEAD
 import { notifyNotificationEvent } from "./notificationClient";
+=======
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
 import type {
   BracketMatch,
   BracketRound,
@@ -149,6 +152,7 @@ export async function freezeEdition(edition: ChampionshipEdition, type: Champion
         winnerNameSnapshot: winnerName,
       });
     }
+<<<<<<< HEAD
 
     try {
       await notifyNotificationEvent(
@@ -165,6 +169,8 @@ export async function freezeEdition(edition: ChampionshipEdition, type: Champion
     } catch (err) {
       console.error("Errore notifica vincitore", err);
     }
+=======
+>>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
   }
 
   return { frozenStandings, frozenBracket, winnerName };
