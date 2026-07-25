@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { addDoc, collection, deleteDoc, doc, setDoc, updateDoc } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, deleteField, doc, setDoc, updateDoc } from "firebase/firestore";
 import { useCollection } from "../hooks/useCollection";
 import { db } from "../firebase";
+import { confirmDelete } from "../lib/confirmDelete";
+import { uploadTeamPhoto, deleteTeamPhotoByUrl, TeamPhotoError } from "../lib/teamPhotoUpload";
 import type { ChampionshipType, Team } from "../types";
 import { BADGE_COLORS } from "../types";
 
@@ -13,9 +15,6 @@ function slugify(text: string) {
     .replace(/(^-|-$)/g, "");
 }
 
-function confirmDelete(label: string) {
-  return window.confirm(`Eliminare definitivamente "${label}"? L'operazione non si può annullare.`);
-}
 
 /* =========================== Tipologie di campionato =========================== */
 
@@ -64,18 +63,18 @@ export function ChampionshipTypeManagement({ onDone }: { onDone: (msg: string) =
   return (
     <div className="mt-6">
       <p className="text-[13px] font-bold mb-2">Tipologie di campionato</p>
-      <div className="bg-white border border-[#EAE7DD] rounded-xl overflow-hidden mb-3">
+      <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl overflow-hidden mb-3">
         {types.map((t) =>
           editingId === t.id ? (
             <EditTypeRow key={t.id} type={t} onCancel={() => setEditingId(null)} onDone={onDone} />
           ) : (
             <div
               key={t.id}
-              className="flex items-center justify-between px-3.5 py-2.5 text-[13px] border-b border-[#F1EFE8] last:border-b-0 gap-2"
+              className="flex items-center justify-between px-3.5 py-2.5 text-[13px] border-b border-[rgba(251,243,222,0.08)] last:border-b-0 gap-2"
             >
               <span className="font-semibold flex-1">
                 {t.name}{" "}
-                <span className="text-[#9A9A94] font-normal">{t.hasTeams ? "· a squadre" : "· individuale"}</span>
+                <span className="text-[rgba(251,243,222,0.35)] font-normal">{t.hasTeams ? "· a squadre" : "· individuale"}</span>
               </span>
               <span
                 className="text-[10.5px] font-bold px-2 py-1 rounded-full shrink-0"
@@ -83,26 +82,26 @@ export function ChampionshipTypeManagement({ onDone }: { onDone: (msg: string) =
               >
                 {BADGE_COLORS[t.badgeColor]?.label}
               </span>
-              <button onClick={() => setEditingId(t.id)} className="text-court text-xs font-semibold shrink-0">
+              <button onClick={() => setEditingId(t.id)} className="text-[#BBFF5E] text-xs font-semibold shrink-0">
                 Modifica
               </button>
-              <button onClick={() => remove(t)} className="text-red-600 text-xs font-semibold shrink-0">
+              <button onClick={() => remove(t)} className="text-[#FF6B6B] text-xs font-semibold shrink-0">
                 Elimina
               </button>
             </div>
           )
         )}
-        {types.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[#9A9A94]">Nessuna tipologia ancora.</p>}
+        {types.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna tipologia ancora.</p>}
       </div>
 
-      <p className="text-xs text-[#9A9A94] mb-2">
+      <p className="text-xs text-[rgba(251,243,222,0.35)] mb-2">
         Crea una nuova tipologia se in futuro serve un campionato diverso da Serie B/C, Principianti, Femminile.
       </p>
       <input
         placeholder="Nome tipologia (es. Serie A, Under 18...)"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
       />
       <label className="flex items-center gap-2 text-[13px] mb-2">
         <input type="checkbox" checked={hasTeams} onChange={(e) => setHasTeams(e.target.checked)} />
@@ -111,7 +110,7 @@ export function ChampionshipTypeManagement({ onDone }: { onDone: (msg: string) =
       <select
         value={badgeColor}
         onChange={(e) => setBadgeColor(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2"
       >
         {badgeOptions.map((k) => (
           <option key={k} value={k}>
@@ -122,7 +121,7 @@ export function ChampionshipTypeManagement({ onDone }: { onDone: (msg: string) =
       <button
         onClick={create}
         disabled={creating || !name.trim()}
-        className="w-full bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+        className="w-full bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
       >
         {creating ? "Creazione in corso..." : "Crea tipologia"}
       </button>
@@ -159,11 +158,11 @@ function EditTypeRow({
   };
 
   return (
-    <div className="px-3.5 py-3 border-b border-[#F1EFE8] last:border-b-0 bg-[#FAF8F3]">
+    <div className="px-3.5 py-3 border-b border-[rgba(251,243,222,0.08)] last:border-b-0 bg-[#123008]">
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-sm mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm mb-2"
       />
       <label className="flex items-center gap-2 text-[13px] mb-2">
         <input type="checkbox" checked={hasTeams} onChange={(e) => setHasTeams(e.target.checked)} />
@@ -172,7 +171,7 @@ function EditTypeRow({
       <select
         value={badgeColor}
         onChange={(e) => setBadgeColor(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-[13px] bg-white mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2"
       >
         {Object.keys(BADGE_COLORS).map((k) => (
           <option key={k} value={k}>
@@ -184,11 +183,11 @@ function EditTypeRow({
         <button
           onClick={save}
           disabled={saving}
-          className="flex-1 bg-court text-white rounded-lg py-2 text-sm font-bold disabled:opacity-50"
+          className="flex-1 bg-lime text-[#081208] rounded-lg py-2 text-sm font-bold disabled:opacity-50"
         >
           Salva
         </button>
-        <button onClick={onCancel} className="flex-1 border border-[#E5E3DC] rounded-lg py-2 text-sm font-semibold">
+        <button onClick={onCancel} className="flex-1 border border-[rgba(251,243,222,0.18)] rounded-lg py-2 text-sm font-semibold">
           Annulla
         </button>
       </div>
@@ -203,6 +202,7 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
   const { data: teams } = useCollection<Team>("teams");
   const [name, setName] = useState("");
   const [rosterText, setRosterText] = useState("");
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -219,13 +219,19 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
     }
     setCreating(true);
     try {
-      await addDoc(collection(db, "teams"), { name: name.trim(), roster });
+      const ref = await addDoc(collection(db, "teams"), { name: name.trim(), roster });
+      if (photoFile) {
+        const teamPhotoUrl = await uploadTeamPhoto(ref.id, photoFile);
+        await updateDoc(doc(db, "teams", ref.id), { teamPhotoUrl });
+      }
       setName("");
       setRosterText("");
+      setPhotoFile(null);
       onDone(`Squadra "${name}" creata.`);
     } catch (err) {
       console.error(err);
-      onDone("Errore nella creazione della squadra.");
+      const msg = err instanceof TeamPhotoError ? err.message : "Errore nella creazione della squadra.";
+      onDone(msg);
     } finally {
       setCreating(false);
     }
@@ -235,6 +241,7 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
     if (!confirmDelete(t.name)) return;
     try {
       await deleteDoc(doc(db, "teams", t.id));
+      if (t.teamPhotoUrl) await deleteTeamPhotoByUrl(t.teamPhotoUrl);
       onDone(`Squadra "${t.name}" eliminata.`);
     } catch (err) {
       console.error(err);
@@ -245,23 +252,23 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
   return (
     <div className="mt-6">
       <p className="text-[13px] font-bold mb-2">Squadre</p>
-      <div className="bg-white border border-[#EAE7DD] rounded-xl overflow-hidden mb-3 max-h-72 overflow-y-auto">
-        {teams.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[#9A9A94]">Nessuna squadra ancora.</p>}
+      <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl overflow-hidden mb-3 max-h-72 overflow-y-auto">
+        {teams.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna squadra ancora.</p>}
         {teams.map((t) =>
           editingId === t.id ? (
             <EditTeamRow key={t.id} team={t} onCancel={() => setEditingId(null)} onDone={onDone} />
           ) : (
-            <div key={t.id} className="px-3.5 py-2.5 text-[13px] border-b border-[#F1EFE8] last:border-b-0">
+            <div key={t.id} className="px-3.5 py-2.5 text-[13px] border-b border-[rgba(251,243,222,0.08)] last:border-b-0">
               <div className="flex items-center justify-between gap-2">
-                <p className="font-semibold flex-1">{t.name}</p>
-                <button onClick={() => setEditingId(t.id)} className="text-court text-xs font-semibold shrink-0">
+                <p className="font-semibold truncate flex-1 min-w-0">{t.name}</p>
+                <button onClick={() => setEditingId(t.id)} className="text-[#BBFF5E] text-xs font-semibold shrink-0">
                   Modifica
                 </button>
-                <button onClick={() => remove(t)} className="text-red-600 text-xs font-semibold shrink-0">
+                <button onClick={() => remove(t)} className="text-[#FF6B6B] text-xs font-semibold shrink-0">
                   Elimina
                 </button>
               </div>
-              <p className="text-[12px] text-[#9A9A94]">{t.roster.join(", ")}</p>
+              <p className="text-[12px] text-[rgba(251,243,222,0.35)]">{t.roster.join(", ")}</p>
             </div>
           )
         )}
@@ -270,18 +277,27 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
         placeholder="Nome squadra"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
       />
       <input
         placeholder="Giocatori separati da virgola (min 2, max 6)"
         value={rosterText}
         onChange={(e) => setRosterText(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
       />
+      <label className="block mb-2">
+        <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Foto di gruppo della squadra (opzionale, JPG/PNG/WebP, max 5 MB)</p>
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          onChange={(e) => setPhotoFile(e.target.files?.[0] ?? null)}
+          className="w-full text-[12.5px] text-[rgba(251,243,222,0.58)]"
+        />
+      </label>
       <button
         onClick={create}
         disabled={creating || !name.trim()}
-        className="w-full bg-court text-white rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+        className="w-full bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
       >
         {creating ? "Creazione in corso..." : "Crea squadra"}
       </button>
@@ -300,6 +316,8 @@ function EditTeamRow({
 }) {
   const [name, setName] = useState(team.name);
   const [rosterText, setRosterText] = useState(team.roster.join(", "));
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [removePhoto, setRemovePhoto] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
@@ -313,38 +331,73 @@ function EditTeamRow({
     }
     setSaving(true);
     try {
-      await updateDoc(doc(db, "teams", team.id), { name: name.trim(), roster });
+      let teamPhotoUrl: string | undefined;
+      if (photoFile) {
+        // Fase 7 — carica prima la nuova foto e ottieni l'URL; elimina quella
+        // precedente SOLO dopo che il salvataggio su Firestore è andato a buon fine.
+        teamPhotoUrl = await uploadTeamPhoto(team.id, photoFile);
+      }
+      await updateDoc(doc(db, "teams", team.id), {
+        name: name.trim(),
+        roster,
+        ...(teamPhotoUrl ? { teamPhotoUrl } : removePhoto ? { teamPhotoUrl: deleteField() } : {}),
+      });
+      if (photoFile && team.teamPhotoUrl) await deleteTeamPhotoByUrl(team.teamPhotoUrl);
+      if (removePhoto && !photoFile && team.teamPhotoUrl) await deleteTeamPhotoByUrl(team.teamPhotoUrl);
       onDone("Squadra aggiornata.");
       onCancel();
     } catch (err) {
       console.error(err);
-      onDone("Errore nel salvataggio.");
+      const msg = err instanceof TeamPhotoError ? err.message : "Errore nel salvataggio.";
+      onDone(msg);
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="px-3.5 py-3 border-b border-[#F1EFE8] last:border-b-0 bg-[#FAF8F3]">
+    <div className="px-3.5 py-3 border-b border-[rgba(251,243,222,0.08)] last:border-b-0 bg-[#123008]">
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-sm mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm mb-2"
       />
       <input
         value={rosterText}
         onChange={(e) => setRosterText(e.target.value)}
-        className="w-full border border-[#E5E3DC] rounded-lg px-3 py-2 text-sm mb-2"
+        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm mb-2"
       />
+      {team.teamPhotoUrl && !removePhoto && (
+        <div className="mb-2">
+          <img src={team.teamPhotoUrl} alt={team.name} className="w-full aspect-video object-cover rounded-lg mb-1.5" />
+          <button onClick={() => setRemovePhoto(true)} className="text-[11px] text-[#FF6B6B] font-semibold">
+            Rimuovi foto di gruppo
+          </button>
+        </div>
+      )}
+      <label className="block mb-2">
+        <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">
+          {team.teamPhotoUrl ? "Sostituisci foto di gruppo" : "Foto di gruppo della squadra"} (JPG/PNG/WebP, max 5 MB)
+        </p>
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          onChange={(e) => {
+            setPhotoFile(e.target.files?.[0] ?? null);
+            setRemovePhoto(false);
+          }}
+          className="w-full text-[12.5px] text-[rgba(251,243,222,0.58)]"
+        />
+      </label>
       <div className="flex gap-2">
         <button
           onClick={save}
           disabled={saving}
-          className="flex-1 bg-court text-white rounded-lg py-2 text-sm font-bold disabled:opacity-50"
+          className="flex-1 bg-lime text-[#081208] rounded-lg py-2 text-sm font-bold disabled:opacity-50"
         >
-          Salva
+          {saving ? "Salvataggio..." : "Salva"}
         </button>
-        <button onClick={onCancel} className="flex-1 border border-[#E5E3DC] rounded-lg py-2 text-sm font-semibold">
+        <button onClick={onCancel} className="flex-1 border border-[rgba(251,243,222,0.18)] rounded-lg py-2 text-sm font-semibold">
           Annulla
         </button>
       </div>

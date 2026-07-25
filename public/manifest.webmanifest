@@ -4,8 +4,8 @@
   "description": "Campionati e tornei del PalaPadel",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#FAF8F3",
-  "theme_color": "#0F3B36",
+  "background_color": "#123008",
+  "theme_color": "#123008",
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }

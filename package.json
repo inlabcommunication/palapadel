@@ -7,7 +7,16 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "npm run test:unit",
+    "test:unit": "node --experimental-strip-types --test \"tests/**/*.test.ts\"",
+    "test:rules": "node --test \"tests/rules/**/*.test.mjs\"",
+    "test:emulator": "firebase emulators:exec --only auth,firestore,storage \"npm run test:rules\"",
+    "emulator:start": "firebase emulators:start --only auth,firestore,storage",
+    "migrate:standings:dry": "node scripts/migrateStandingsBaseline.mjs",
+    "migrate:standings:apply": "node scripts/migrateStandingsBaseline.mjs --apply",
+    "migrate:teamphoto:dry": "node scripts/migrateTeamPhoto.mjs",
+    "migrate:teamphoto:apply": "node scripts/migrateTeamPhoto.mjs --apply=keep"
   },
   "dependencies": {
     "firebase": "^11.0.0",
@@ -18,13 +27,20 @@
     "react-router-dom": "^7.0.0"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",
     "autoprefixer": "^10.4.20",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.26",
+    "firebase-tools": "^15.24.0",
+    "globals": "^15.15.0",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",
     "typescript": "^5.6.0",
+    "typescript-eslint": "^8.65.0",
     "vite": "^6.0.0"
   }
 }

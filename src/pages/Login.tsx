@@ -38,8 +38,8 @@ export function LoginPage() {
 
   return (
     <div className="p-4">
-      <h2 className="text-sm font-bold mb-1">Accesso area gestione</h2>
-      <p className="text-[12.5px] text-[#9A9A94] mb-4">
+      <h2 className="text-sm font-bold mb-1 text-[#FBF3DE]">Accesso area gestione</h2>
+      <p className="text-[12.5px] text-[rgba(251,243,222,0.58)] mb-4">
         Gli account (Super amministratore, Amministratore, Gestore risultati) vengono creati dal Super
         amministratore nella sezione Gestione utenti.
       </p>
@@ -49,15 +49,15 @@ export function LoginPage() {
           placeholder="Nome utente"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          className="border border-[#E5E3DC] rounded-lg px-3 py-2.5 text-sm"
+          className="border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm"
           required
         />
         <PasswordInput value={password} onChange={setPassword} placeholder="Password" />
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        {error && <p className="text-xs text-[#FF6B6B]">{error}</p>}
         <button
           type="submit"
           disabled={submitting}
-          className="bg-court text-white rounded-lg py-2.5 text-sm font-bold mt-2 disabled:opacity-50"
+          className="bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold mt-2 disabled:opacity-50"
         >
           {submitting ? "Accesso in corso..." : "Entra"}
         </button>
