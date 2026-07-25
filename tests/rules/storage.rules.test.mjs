@@ -43,6 +43,9 @@ beforeEach(async () => {
     await ctx.firestore().doc("users/admin-uid").set({ uid: "admin-uid", role: "admin" });
     await ctx.firestore().doc("users/superadmin-uid").set({ uid: "superadmin-uid", role: "superadmin" });
     await ctx.firestore().doc("users/gestore-uid").set({ uid: "gestore-uid", role: "gestore" });
+    await ctx.firestore().doc("users/disabled-admin-uid").set({ uid: "disabled-admin-uid", role: "admin", disabled: true });
+    await ctx.firestore().doc("homeNews/news-pub").set({ title: "Pubblica", body: "Testo", status: "pubblicato", date: "2026-07-25" });
+    await ctx.firestore().doc("homeNews/news-draft").set({ title: "Bozza", body: "Testo", status: "bozza", date: "2026-07-25" });
   });
 });
 
@@ -80,6 +83,55 @@ test("un resultManager NON può caricare una foto squadra", async () => {
   const gestore = testEnv.authenticatedContext("gestore-uid");
   await assertFails(
     gestore.storage().ref("teams/t1/team-photo/photo.jpg").put(TINY_JPEG, { contentType: "image/jpeg" })
+  );
+});
+
+test("un account admin disabled NON puo caricare foto squadra", async () => {
+  const disabledAdmin = testEnv.authenticatedContext("disabled-admin-uid");
+  await assertFails(
+    disabledAdmin.storage().ref("teams/t1/team-photo/photo.jpg").put(TINY_JPEG, { contentType: "image/jpeg" })
+  );
+});
+
+test("il pubblico puo leggere l'immagine di una news pubblicata", async () => {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.storage().ref("home-news/news-pub/cover/cover.jpg").put(TINY_JPEG, { contentType: "image/jpeg" });
+  });
+  const anon = testEnv.unauthenticatedContext();
+  await assertSucceeds(anon.storage().ref("home-news/news-pub/cover/cover.jpg").getDownloadURL());
+});
+
+test("il pubblico NON puo leggere l'immagine di una news in bozza", async () => {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.storage().ref("home-news/news-draft/cover/cover.jpg").put(TINY_JPEG, { contentType: "image/jpeg" });
+  });
+  const anon = testEnv.unauthenticatedContext();
+  await assertFails(anon.storage().ref("home-news/news-draft/cover/cover.jpg").getDownloadURL());
+});
+
+test("admin e superAdmin possono caricare immagini news valide", async () => {
+  const admin = testEnv.authenticatedContext("admin-uid");
+  const superAdmin = testEnv.authenticatedContext("superadmin-uid");
+  await assertSucceeds(
+    admin.storage().ref("home-news/news-pub/cover/admin.jpg").put(TINY_JPEG, { contentType: "image/jpeg" })
+  );
+  await assertSucceeds(
+    superAdmin.storage().ref("home-news/news-pub/cover/super.webp").put(TINY_JPEG, { contentType: "image/webp" })
+  );
+});
+
+test("resultManager, anonimo e admin disabled NON possono caricare immagini news", async () => {
+  const gestore = testEnv.authenticatedContext("gestore-uid");
+  const anon = testEnv.unauthenticatedContext();
+  const disabledAdmin = testEnv.authenticatedContext("disabled-admin-uid");
+  await assertFails(
+    gestore.storage().ref("home-news/news-pub/cover/gestore.jpg").put(TINY_JPEG, { contentType: "image/jpeg" })
+  );
+  await assertFails(
+    anon.storage().ref("home-news/news-pub/cover/anon.jpg").put(TINY_JPEG, { contentType: "image/jpeg" })
+  );
+  await assertFails(
+    disabledAdmin.storage().ref("home-news/news-pub/cover/disabled.jpg").put(TINY_JPEG, { contentType: "image/jpeg" })
   );
 });
 

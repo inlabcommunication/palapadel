@@ -76,6 +76,8 @@ export interface Team {
   name: string;
   /** Foto di gruppo della squadra (non un logo/avatar individuale). Formato 16:9 o 3:2. */
   teamPhotoUrl?: string;
+  /** Percorso Firebase Storage della foto, usato per sostituzione/eliminazione coerente. */
+  teamPhotoStoragePath?: string;
   roster: string[]; // 2-6 nomi
 }
 
@@ -195,6 +197,8 @@ export interface HomeNews {
   body: string;
   date: string;
   imageUrl?: string;
+  imageStoragePath?: string;
+  imageAlt?: string;
   category?: string;
   status: ContentStatus;
 }

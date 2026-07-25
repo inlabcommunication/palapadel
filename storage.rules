@@ -7,15 +7,20 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    // Il ruolo vive in Firestore (users/{uid}.role), non nei custom claims (piano
-    // Spark, coerente con firestore.rules). Storage Rules può leggere Firestore con
-    // firestore.get, esattamente come Firestore Rules usa get() su altri documenti.
+    function myUser() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
     function myRole() {
-      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role;
+      return myUser().role;
+    }
+
+    function isEnabledUser() {
+      return isSignedIn() && myUser().disabled != true;
     }
 
     function isAdminOrAbove() {
-      return isSignedIn() && (myRole() == 'superadmin' || myRole() == 'admin');
+      return isEnabledUser() && (myRole() == 'superadmin' || myRole() == 'admin');
     }
 
     function isValidImage() {
@@ -24,20 +29,25 @@ service firebase.storage {
     }
 
     function isUnderSizeLimit() {
-      return request.resource.size < 5 * 1024 * 1024; // 5 MB
+      return request.resource.size <= 5 * 1024 * 1024;
     }
 
-    // Fase 7 — foto di gruppo della squadra: teams/{teamId}/team-photo/{filename}.
-    // Lettura pubblica (mostrata a chiunque nel popup squadra), scrittura riservata ad
-    // admin/superAdmin. Il resultManager non è autorizzato in nessun caso.
+    function publishedHomeNews(newsId) {
+      return firestore.get(/databases/(default)/documents/homeNews/$(newsId)).data.status == 'pubblicato';
+    }
+
     match /teams/{teamId}/team-photo/{fileName} {
       allow read: if true;
-      allow write: if isAdminOrAbove() && isValidImage() && isUnderSizeLimit();
+      allow create, update: if isAdminOrAbove() && isValidImage() && isUnderSizeLimit();
       allow delete: if isAdminOrAbove();
     }
 
-    // Nessun altro percorso è ammesso: neghiamo esplicitamente tutto il resto,
-    // così un nuovo percorso introdotto per errore non è scrivibile di default.
+    match /home-news/{newsId}/cover/{fileName} {
+      allow read: if publishedHomeNews(newsId) || isAdminOrAbove();
+      allow create, update: if isAdminOrAbove() && isValidImage() && isUnderSizeLimit();
+      allow delete: if isAdminOrAbove();
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

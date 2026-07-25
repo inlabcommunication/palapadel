@@ -5,7 +5,7 @@ import {
   isValidInstallationId,
   normalizeNotificationSettings,
   resolveNotificationMode,
-} from "../api/_lib/notifications.js";
+} from "../server/_lib/notifications.js";
 
 test("normalizeNotificationSettings conserva solo modalita valide e completa i default", () => {
   const settings = normalizeNotificationSettings({

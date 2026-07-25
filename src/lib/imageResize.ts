@@ -19,11 +19,13 @@ export async function resizeImageFile(file: File, maxWidth: number = MAX_WIDTH):
   if (!ctx) return file; // fallback: nessun ridimensionamento possibile, carica l'originale
 
   ctx.drawImage(imageBitmap, 0, 0, targetWidth, targetHeight);
+  imageBitmap.close?.();
 
-  const outputType = file.type === "image/png" ? "image/png" : "image/jpeg";
+  const outputType = file.type === "image/png" ? "image/png" : file.type === "image/webp" ? "image/webp" : "image/jpeg";
   const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, outputType, 0.85));
   if (!blob) return file;
 
-  const newName = file.name.replace(/\.\w+$/, "") + (outputType === "image/png" ? ".png" : ".jpg");
+  const extension = outputType === "image/png" ? ".png" : outputType === "image/webp" ? ".webp" : ".jpg";
+  const newName = file.name.replace(/\.\w+$/, "") + extension;
   return new File([blob], newName, { type: outputType });
 }

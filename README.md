@@ -1,272 +1,240 @@
-# PalaPadel â€” Web app tornei e campionati
+# PalaPadel - Web app tornei e campionati
 
-Fase 1 completata: struttura progetto, database (Firestore), autenticazione con ruoli, navigazione, Home pubblica.
-Stack: Vite + React 19 + TypeScript + Tailwind + Firebase (Auth + Firestore, piano Spark/gratuito) + funzioni serverless Vercel (Firebase Admin SDK) per il salvataggio dei risultati.
+Web app per gestire campionati PalaPadel, squadre, giornate, risultati, classifiche, albo d'oro, news Home, notifiche push e analytics interni.
 
-## Flusso risultati: RISULTATO â†’ SALVATAGGIO PARTITA â†’ RICALCOLO CLASSIFICA â†’ AUDIT LOG
+Stack: Vite, React 19, TypeScript, Tailwind, Firebase Auth, Firestore, Firebase Storage e funzioni serverless Vercel con Firebase Admin SDK.
 
-Il frontend **non scrive mai** direttamente su `matches` o `editionTeams` per
-inserire/correggere un risultato o cambiare lo stato di una partita (rinviata/annullata/
-riapertura). Ogni azione passa da `src/lib/matchApi.ts`, che chiama gli endpoint
-backend:
+## Stato attuale
 
-- `POST /api/matches/save-result` â€” un singolo risultato o cambio di stato.
-- `POST /api/matches/save-bulk` - tutti i risultati/stati di una giornata in un colpo solo.
-- `POST /api/matches/update-match` - modifica squadre/giornata di una partita con validazioni atomiche.
+Il progetto include già:
 
-Gli endpoint partita (Firebase Admin SDK, `api/matches/*.js`) eseguono **una singola transazione
-Firestore**: leggono partita ed edizione, validano ruolo/stato/risultato, aggiornano la
-partita, ricalcolano da zero la classifica di tutta l'edizione, aggiornano `editionTeams`
-e scrivono l'audit log â€” tutto o niente. Le regole Firestore (`firestore.rules`) negano
-al client qualunque scrittura diretta su `matches` (update) ed `editionTeams` per i ruoli
-diversi da admin/superAdmin: l'unico modo per il resultManager di salvare un risultato Ã¨
-passare dagli endpoint. Le transazioni gestiscono anche la concorrenza: due salvataggi
-quasi simultanei sulla stessa edizione non si sovrascrivono, Firestore rilegge e riesegue
-automaticamente in caso di conflitto.
+- Home pubblica con sezione PALA PADEL NEWS, campionati attivi e albo d'oro.
+- Area Super Admin con gestione utenti, ruoli, notifiche, analytics e layout desktop dedicato.
+- Gestione campionati, edizioni, squadre, giornate, partite e classifiche.
+- Salvataggio risultati tramite backend con ricalcolo classifica e audit log.
+- Import classifiche a squadre e Femminile con modalità atomiche e controlli sui nomi simili.
+- Tabellone finale, storico e albo d'oro.
+- Notifiche push reali via FCM quando VAPID key e service account sono configurati.
+- Analytics interni anonimi, senza Google Analytics o script esterni.
+- Condivisione classifica in PNG 1920x1080.
+- Foto squadre caricate su Firebase Storage.
+- Immagini facoltative per PalaPadel News caricate da dispositivo, con preview, sostituzione, eliminazione e testo alternativo.
 
-### Ruoli e permessi (Fase 7)
+## Flusso risultati
 
-`src/lib/permissions.ts` (`derivePermissions`) deriva dal ruolo permessi puntuali, usati
-sia in UI sia (con verifica indipendente) nel backend:
+Il frontend non scrive mai direttamente su `matches` o `editionTeams` per inserire, correggere o cambiare lo stato di una partita. Ogni azione passa da `src/lib/matchApi.ts`, che chiama gli endpoint backend:
+
+- `POST /api/matches/save-result`: un singolo risultato o cambio di stato.
+- `POST /api/matches/save-bulk`: tutti i risultati/stati di una giornata in un colpo solo.
+- `POST /api/matches/create-match`: creazione partita.
+- `POST /api/matches/update-match`: modifica squadre/giornata di una partita.
+- `POST /api/matches/delete-match`: eliminazione partita.
+
+Gli endpoint partita usano Firebase Admin SDK e una transazione Firestore: leggono partita ed edizione, validano ruolo/stato/risultato, aggiornano la partita, ricalcolano da zero la classifica dell'edizione, aggiornano `editionTeams` e scrivono l'audit log.
+
+Le regole Firestore negano al client qualunque scrittura diretta su `matches` ed `editionTeams`; l'unico percorso di scrittura è il backend.
+
+## Ruoli e permessi
+
+I ruoli vivono in `users/{uid}` su Firestore, non nei custom claims. `src/lib/permissions.ts` deriva i permessi lato UI, mentre backend e rules ricontrollano in modo indipendente.
 
 | Permesso | superAdmin | admin | resultManager |
-|---|---|---|---|
-| Inserire/correggere risultati, rinviare/annullare | âœ… | âœ… | âœ… |
-| Creare/eliminare partite e giornate | âœ… | âœ… | âŒ |
-| Modificare direttamente `editionTeams` (import, penalitÃ ) | âœ… | âœ… | âŒ |
-| Creare bozze di notizia Home | âœ… | âœ… | âŒ |
-| Operare su edizioni non attive (concluse/bozza/nascoste) | âœ… | âœ… | âŒ (rifiutato dal backend) |
+|---|---:|---:|---:|
+| Inserire/correggere risultati, rinviare/annullare | sì | sì | sì |
+| Creare/eliminare partite e giornate | sì | sì | no |
+| Gestire campionati, squadre e albo d'oro | sì | sì | no |
+| Gestire PalaPadel News | sì | sì | no |
+| Caricare immagini news/squadre | sì | sì | no |
+| Gestire notifiche, analytics, utenti e password | sì | no | no |
 
-### Struttura baseline della classifica
+Gli account con `disabled: true` non ereditano più i permessi di ruolo nelle regole Firestore e Storage.
 
-`editionTeams`: `baselinePoints`/`baselinePlayed` (situazione importata/iniziale, mai
-toccata dalle partite) + `matchPoints`/`matchPlayed` (solo dalle partite "conclusa",
-ricalcolati da zero ad ogni salvataggio) + `manualPointsAdjustment`/
-`manualPlayedAdjustment` (correzioni manuali, sempre preservate) = `points`/`played`
-(campi finali mostrati ovunque nell'app).
+## Classifiche e import
 
-### Importazione classifica (3 modalitÃ , atomica)
+`editionTeams` usa il modello:
 
-`POST /api/standings/import` (admin/superAdmin, Firebase Admin SDK, scrittura atomica in
-un unico batch â€” se anche una sola riga richiede una scelta esplicita non ancora fatta,
-non viene importato nulla). Il frontend (`src/lib/standingsApi.ts`) fa scegliere
-all'amministratore una modalitÃ  prima di incollare il testo:
+`baselinePoints/baselinePlayed` + `matchPoints/matchPlayed` + `manualPointsAdjustment/manualPlayedAdjustment` = `points/played`
 
-1. **Situazione iniziale** â€” i valori diventano `baselinePoints`/`baselinePlayed`; i
-   punti prodotti dalle partite giÃ  presenti si sommano sopra.
-2. **Classifica attuale completa** â€” i valori rappresentano giÃ  tutti i risultati fino
-   ad oggi. Due scelte: **A** azzera il contributo delle partite esistenti nella baseline
-   (il totale visibile non cambia, non raddoppia in futuro); **B** conserva solo le
-   partite successive a una giornata scelta (l'importato vale fino a lÃ¬ compreso).
-3. **Aggiornamento parziale** â€” aggiorna solo le squadre presenti nel testo, mostra
-   quelle assenti, non le tocca.
+I valori `baseline*` rappresentano la situazione iniziale o importata e non vengono toccati dal ricalcolo partite. I valori `match*` derivano solo dalle partite concluse. Le correzioni manuali restano sempre preservate.
 
-L'ordine originale delle righe viene salvato in `importedOrder` (oltre a `order`, letto
-dalla classifica per i pari punti tramite `compareStandingRows`, condiviso tra classifica
-a squadre e Femminile). `src/lib/teamNameMatch.ts` normalizza i nomi
-(maiuscole/minuscole, spazi, trattini, apostrofi, accenti) per rilevare corrispondenze
-"simili" a squadre esistenti: non le unisce mai automaticamente, mostra invece una
-schermata di conferma (collega / crea comunque / ignora la riga). Righe duplicate nello
-stesso file vengono bloccate prima dell'importazione.
+`POST /api/standings/import` gestisce import atomici per classifiche a squadre e Femminile. Se una riga richiede una scelta esplicita non ancora risolta, non viene importato nulla.
 
-L'import a 3 modalita/endpoint atomico riguarda sia le classifiche a squadre sia il campionato Femminile.
-Per il Femminile l'endpoint aggiorna femaleParticipants in batch all-or-nothing: modalita 1 iniziale, modalita 2 sostituzione completa con policy esplicita per le assenti (keep in fondo, retire, remove), modalita 3 aggiornamento parziale. Valida duplicati, accenti/spazi/maiuscole, punti/tappe, stati importati e nomi molto simili con preview da risolvere.
+Modalità import:
 
-### Operazioni strutturali sulle partite (Fase 9)
+1. Situazione iniziale: i valori diventano baseline.
+2. Classifica attuale completa: i valori rappresentano già tutti i risultati fino ad oggi, con opzioni per evitare doppi conteggi.
+3. Aggiornamento parziale: aggiorna solo le righe presenti nel testo.
 
-`POST /api/matches/create-match`, `POST /api/matches/update-match` e `POST /api/matches/delete-match` (admin/superAdmin,
-Firebase Admin SDK). La creazione valida lato backend: squadre diverse, entrambe iscritte
-all'edizione, nessuna delle due giÃ  impegnata nella stessa giornata, partita non
-duplicata (anche con squadre invertite). Modifica/spostamento ed eliminazione ricalcolano la classifica
-nella stessa transazione. Le regole Firestore negano al client qualunque scrittura
-diretta su `matches` (`allow write: if false`): l'unico percorso Ã¨ questi endpoint.
+Il matching nomi normalizza maiuscole/minuscole, spazi, trattini, apostrofi e accenti. Le corrispondenze simili vengono mostrate all'amministratore e non unite automaticamente.
 
-### Notifiche push, preferenze e analytics interni
+## News e immagini
 
-La pagina `Notifiche` non e piu un placeholder: salva preferenze per installationId,
-richiede esplicitamente il permesso browser, registra il service worker
-`public/firebase-messaging-sw.js` e usa FCM quando sono configurati
-`VITE_FIREBASE_VAPID_KEY` e `FIREBASE_SERVICE_ACCOUNT`.
+Le PalaPadel News sono salvate in `homeNews/{id}`. Campi principali:
 
-Il pannello Super Amministratore gestisce switch globale, modalita per evento
-(`disabled`, `ask`, `automatic`, `draft`), override per edizione, bozze, invio immediato,
-programmazione, history e retry/cancel via endpoint `api/notifications/*`. Gli eventi
-risultato, correzione, ricalcolo classifica, vincitore campionato e PalaPadel News
-passano da `enqueueNotificationEvent`, che rispetta le impostazioni correnti e mantiene
-idempotenza tramite `notificationDispatches`.
+- `title`
+- `body`
+- `date`
+- `category`
+- `status`
+- `imageUrl`
+- `imageStoragePath`
+- `imageAlt`
 
-Gli analytics sono interni: `api/analytics/track` registra eventi anonimi per
-installationId, `api/analytics/summary` restituisce aggregati solo al Super
-Amministratore nella pagina `/analytics`. Non vengono usati Google Analytics, GTM o
-script esterni.
+L'immagine è facoltativa. Il Super Admin/Admin la carica da computer, smartphone o tablet tramite file picker o drag and drop. Il form mostra preview immediata, nome file, dimensione, stato caricamento, errori chiari, sostituzione, eliminazione e anteprima editoriale desktop/mobile.
 
-Le regole Firestore negano scritture dirette client su installazioni/token, history,
-dispatch e analytics raw; le scritture operative passano dagli endpoint con Admin SDK.
+I file vengono salvati in Firebase Storage:
 
-### Condivisione classifica e popup squadra
-
-Gli admin trovano `CONDIVIDI CLASSIFICA` nelle classifiche a squadre e Femminile: genera
-PNG veri 1920x1080 via canvas, con paginazione automatica se le righe non entrano in una
-sola immagine, preview, download e Web Share API quando supportata.
-
-Il popup squadra mostra statistiche dell'edizione corrente calcolate da partite reali
-concluse e risultati validi: PG, vittorie e sconfitte derivano da
-`src/lib/teamStats.ts`, non dai contatori di classifica importati.
-
-Nota storica: le versioni precedenti salvavano solo bozze Home e non inviavano push reali.
-
-
-### Migrazione dati
-
-`scripts/migrateStandingsBaseline.mjs` usa **Firebase Admin SDK** (non l'SDK client: non
-serve allentare le regole Firestore). Idempotente tramite `dataModelVersion`/`migratedAt`
-sui documenti `editionTeams`: rieseguirlo Ã¨ sicuro, salta i documenti giÃ  migrati.
-
-```bash
-npm run migrate:standings:dry     # anteprima, nessuna scrittura (default)
-npm run migrate:standings:apply   # applica davvero
+```text
+home-news/{newsId}/cover/{filename}
 ```
 
-Richiede `FIREBASE_SERVICE_ACCOUNT` in ambiente (stessa chiave di servizio degli
-endpoint) oppure `GOOGLE_APPLICATION_CREDENTIALS` puntata a un file locale.
+Prima dell'upload l'immagine viene validata, compressa/ridimensionata e mantenuta proporzionata. Formati accettati: JPG, JPEG, PNG, WebP. Limite iniziale: 5 MB prima della compressione.
 
-### Configurazione Firebase Admin SDK (obbligatoria per salvare risultati)
+Se il salvataggio Firestore fallisce dopo l'upload, il nuovo file inutilizzato viene eliminato. Quando una foto viene sostituita, la vecchia immagine viene eliminata solo dopo il salvataggio riuscito della news.
 
-Su Vercel, imposta la variabile d'ambiente `FIREBASE_SERVICE_ACCOUNT` con il JSON
-completo di una chiave di servizio (Console Firebase â†’ Impostazioni progetto â†’ Account
-di servizio â†’ Genera nuova chiave privata). Senza questa variabile, `save-result` e
-`save-bulk` rispondono con errore 500 e **nessun risultato puÃ² essere salvato**: non Ã¨
-una funzionalitÃ  opzionale, Ã¨ il solo percorso di scrittura disponibile.
+## Foto squadre
 
-### Test e lint
+Le foto squadra sono opzionali e vengono caricate in Firebase Storage:
 
-```bash
-npm test         # Node test runner nativo (nessuna dipendenza aggiuntiva), 55 test
-npm run lint     # ESLint (TypeScript + React), configurato in eslint.config.js
-npm run build    # tsc -b && vite build
-npm run test:emulator # Firestore/Auth/Storage rules; richiede Java nel PATH
+```text
+teams/{teamId}/team-photo/{filename}
 ```
 
-### Deploy (Vercel)
+Nel documento `teams/{id}` vengono salvati:
 
-Il progetto include giÃ  `vercel.json` (rewrite SPA, esclude `/api/*`) e le funzioni
-serverless in `api/`. Imposta su Vercel le variabili `VITE_FIREBASE_*` (vedi
-`.env.example`), `VITE_FIREBASE_VAPID_KEY` per FCM Web Push e `FIREBASE_SERVICE_ACCOUNT`,
-poi collega il repository: `api/matches/*`, `api/standings/*`, `api/notifications/*`,
-`api/analytics/*` e `api/admin/*` vengono deployate automaticamente come funzioni serverless.
+- `teamPhotoUrl`
+- `teamPhotoStoragePath`
 
-## 1. Crea il progetto Firebase
+Il modulo Super Admin/Admin mostra la foto già salvata, preview prima del salvataggio, sostituzione ed eliminazione con conferma. Anche qui il flusso mantiene Firestore e Storage coerenti in caso di errore.
 
-1. Vai su https://console.firebase.google.com â†’ **Aggiungi progetto** â†’ chiamalo `palapadel` (o come preferisci).
-2. Nel progetto, **Build > Authentication** â†’ Inizia â†’ abilita il provider **Email/Password**.
-3. **Build > Firestore Database** â†’ Crea database â†’ modalitÃ  **produzione** â†’ scegli una region europea (es. `eur3` o `europe-west`).
-4. **Impostazioni progetto (icona ingranaggio) > Generale** â†’ in fondo, sezione "Le tue app" â†’ **Aggiungi app > Web** (icona `</>`) â†’ dai un nome, NON serve Firebase Hosting (usiamo Vercel).
-5. Copia i valori di configurazione mostrati (apiKey, authDomain, ecc.) â€” ti serviranno subito dopo.
+## Firebase Storage
 
-## 2. Configura il progetto in locale
+Le regole in `storage.rules` permettono:
+
+- lettura pubblica delle foto squadra;
+- lettura pubblica delle immagini delle news pubblicate;
+- lettura immagini news in bozza solo ad admin/superAdmin;
+- scrittura immagini solo ad admin/superAdmin abilitati;
+- blocco per resultManager, anonimi e account disabled.
+
+Pubblica le regole con:
+
+```bash
+firebase deploy --only storage
+```
+
+## Notifiche e analytics
+
+La pagina `Notifiche` gestisce:
+
+- preferenze globali;
+- modalità per evento (`disabled`, `ask`, `automatic`, `draft`);
+- override per edizione;
+- bozze, invio immediato, programmazione, history, retry e cancel.
+
+Gli eventi risultato, correzione, ricalcolo classifica, vincitore campionato e news passano da `enqueueNotificationEvent`, che mantiene idempotenza tramite `notificationDispatches`.
+
+Gli analytics sono interni: `api/analytics/track` registra eventi anonimi per `installationId`, mentre `api/analytics/summary` restituisce aggregati solo al Super Admin.
+
+## Configurazione locale
 
 ```bash
 npm install
 cp .env.example .env.local
-```
-
-Apri `.env.local` e incolla i valori copiati dalla console Firebase.
-
-```bash
 npm run dev
 ```
 
-L'app parte su `http://localhost:5173`. Vedrai la Home vuota (nessun dato ancora).
+Apri `.env.local` e inserisci i valori Firebase:
 
-## 3. Pubblica le regole di sicurezza Firestore
+- `VITE_FIREBASE_API_KEY`
+- `VITE_FIREBASE_AUTH_DOMAIN`
+- `VITE_FIREBASE_PROJECT_ID`
+- `VITE_FIREBASE_STORAGE_BUCKET`
+- `VITE_FIREBASE_MESSAGING_SENDER_ID`
+- `VITE_FIREBASE_APP_ID`
+- `VITE_FIREBASE_VAPID_KEY` per le notifiche push web
 
-Le regole in `firestore.rules` sono giÃ  scritte per i tre ruoli (Super Amministratore, Amministratore, Gestore risultati). Per pubblicarle:
+Senza chiavi Firebase valide l'app non monta correttamente in locale.
+
+## Primo Super Amministratore
+
+Il primissimo Super Admin va creato manualmente:
+
+1. Firebase Console > Authentication > Users > Aggiungi utente.
+2. Copia lo User UID generato.
+3. Firestore > crea `users/{uid}` con:
+   - `uid`
+   - `username`
+   - `role: "superadmin"`
+   - `createdAt`
+4. Crea `usernameEmails/{username-normalizzato}` con:
+   - `email`
+
+Da quel momento puoi accedere con nome utente e password e creare gli altri account dall'interfaccia.
+
+## Firebase Admin SDK
+
+Gli endpoint Vercel richiedono `FIREBASE_SERVICE_ACCOUNT`.
+
+Su Firebase Console:
+
+1. Impostazioni progetto > Account di servizio.
+2. Genera nuova chiave privata.
+3. Copia il JSON nella variabile d'ambiente `FIREBASE_SERVICE_ACCOUNT` su Vercel.
+
+La chiave di servizio bypassa le regole Firebase: non va caricata su GitHub, non va condivisa e non va incollata in chat.
+
+## Deploy Vercel
+
+Il progetto include `vercel.json` e funzioni serverless in `api/`.
+
+Per restare compatibile con il piano Hobby di Vercel, `api/` contiene solo router dinamici per area:
+
+- `api/matches/[action].js`
+- `api/standings/[action].js`
+- `api/notifications/[action].js`
+- `api/analytics/[action].js`
+- `api/home-news/[action].js`
+- `api/admin/[action].js`
+
+La logica degli endpoint vive in `server/`. Le URL pubbliche non cambiano: per esempio `/api/matches/save-result` continua a funzionare, ma Vercel conta una sola Serverless Function per tutto il gruppo `matches`.
+
+Su Vercel configura:
+
+- tutte le variabili `VITE_FIREBASE_*`;
+- `VITE_FIREBASE_VAPID_KEY`;
+- `FIREBASE_SERVICE_ACCOUNT`.
+
+Poi collega il repository. Gli endpoint sotto `api/matches/*`, `api/standings/*`, `api/notifications/*`, `api/analytics/*`, `api/home-news/*` e `api/admin/*` vengono deployati come funzioni serverless.
+
+In Firebase Authentication aggiungi il dominio Vercel tra gli Authorized domains.
+
+## Migrazioni
 
 ```bash
-npm install -g firebase-tools
-firebase login
-firebase use --add        # scegli il progetto palapadel appena creato
-firebase deploy --only firestore:rules
+npm run migrate:standings:dry
+npm run migrate:standings:apply
+npm run migrate:teamphoto:dry
+npm run migrate:teamphoto:apply
 ```
 
-## 4. Crea il primo Super Amministratore (a mano, solo la prima volta)
+Le migrazioni usano Firebase Admin SDK. Richiedono `FIREBASE_SERVICE_ACCOUNT` oppure `GOOGLE_APPLICATION_CREDENTIALS`.
 
-Il Super Amministratore normale si crea da dentro l'app con solo nome utente e password (senza email, vedi sezione 8 piÃ¹ sotto), ma il *primissimo* va creato manualmente perchÃ© nessuno Ã¨ ancora loggato:
-
-1. Firebase Console â†’ **Authentication > Users > Aggiungi utente** â†’ inserisci un'email qualsiasi (anche una vera tua, va bene) e una password.
-2. Copia lo **User UID** generato.
-3. Firebase Console â†’ **Firestore Database > Dati** â†’ crea manualmente una collezione `users` â†’ documento con ID = lo UID copiato, campi:
-   - `uid`: lo stesso UID
-   - `username`: il nome utente che vuoi usare per accedere (es. `nico`)
-   - `role`: `superadmin`
-   - `createdAt`: una data ISO qualsiasi, es. `2026-01-01T00:00:00.000Z`
-4. Crea anche una collezione `usernameEmails` â†’ documento con ID = il nome utente in minuscolo senza spazi (es. `nico`), campo:
-   - `email`: l'email che hai usato al punto 1
-
-Il passaggio 4 serve perchÃ© l'app permette il login con solo nome utente: internamente cerca l'email corrispondente in questa mappatura. Gli account creati dopo, dall'interfaccia, la generano da soli automaticamente.
-
-Da qui in poi, accedendo con quel nome utente e password nell'app, avrai i permessi da Super Amministratore e potrai creare Amministratori e Gestori risultati direttamente dall'interfaccia, indicando solo nome utente e password.
-
-## 5. Popola i dati demo (opzionale)
+## Test e qualità
 
 ```bash
-node scripts/seed.mjs
+npm test              # unit test, attualmente 60
+npm run lint          # ESLint
+npm run build         # TypeScript + Vite production build
+npm run test:emulator # Firestore/Auth/Storage rules, richiede Java nel PATH
 ```
 
-Nota: usa l'SDK client, quindi se le regole Firestore sono giÃ  quelle definitive (`isAdminOrAbove()`), lo script fallirÃ  per permessi. Per il primo seed, o allenta temporaneamente le regole (`allow write: if true;`) e ripubblicale subito dopo, oppure autentica lo script â€” per semplicitÃ , in Fase 1 la via piÃ¹ rapida Ã¨ allentare temporaneamente le regole di scrittura, lanciare il seed, ripubblicare quelle vere.
+Nota: `npm run test:emulator` usa Firebase Emulator Suite e fallisce se Java non è installato o non è nel PATH.
 
-## 6. GitHub
+## Note tecniche
 
-```bash
-git init
-git add .
-git commit -m "Fase 1: struttura, Firebase, ruoli, Home pubblica"
-gh repo create palapadel --private --source=. --remote=origin
-git push -u origin main
-```
-
-(`gh` Ã¨ la CLI di GitHub; se non ce l'hai, crea il repo vuoto da github.com e collega con `git remote add origin <url>`.)
-
-## 7. Deploy su Vercel
-
-1. Vai su https://vercel.com â†’ **Add New > Project** â†’ importa il repo GitHub appena creato.
-2. Framework Preset: Vercel lo riconosce come **Vite** automaticamente.
-3. Prima del deploy, aggiungi le **Environment Variables** (stessi valori di `.env.local`):
-   `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`,
-   `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID`.
-4. Deploy. Ogni push su `main` farÃ  un nuovo deploy automatico.
-5. Torna su Firebase Console â†’ **Authentication > Settings > Authorized domains** â†’ aggiungi il dominio `*.vercel.app` (o il tuo dominio custom), altrimenti il login darÃ  errore da produzione.
-
-## 8. Abilita il cambio password (Super Amministratore) e il login con solo nome utente
-
-Da questa versione, gli account non usano piÃ¹ email visibili: si accede con nome utente e password, e il Super Amministratore puÃ² cambiare la password di qualsiasi account. Per far funzionare il cambio password serve una piccola funzione server (giÃ  inclusa in `api/admin/set-password.js`), perchÃ© Firebase lato client permette a un utente di cambiare solo la propria password.
-
-**Genera la chiave di servizio Firebase:**
-1. Firebase Console â†’ icona ingranaggio â†’ **Impostazioni progetto**
-2. Scheda **Account di servizio**
-3. Clicca **Genera nuova chiave privata** â†’ conferma â†’ si scarica un file `.json`
-
-**Aggiungilo come variabile d'ambiente su Vercel:**
-1. Apri il file `.json` scaricato con un editor di testo, seleziona tutto il contenuto e copialo
-2. Vercel â†’ il tuo progetto â†’ **Settings > Environment Variables**
-3. Key: `FIREBASE_SERVICE_ACCOUNT`
-4. Value: incolla l'intero contenuto del file JSON (tutto su una riga va bene, Vercel lo accetta come stringa)
-5. Spunta Production (e Preview/Development se vuoi testare anche lÃ¬)
-6. Salva, poi fai un **Redeploy** dall'ultima voce in Deployments
-
-Da questo momento, nella sezione Gestione, il Super Amministratore vedrÃ  "Cambia password di un account esistente": seleziona l'utente, inserisce la nuova password (con l'occhio per mostrarla o nasconderla) e conferma.
-
-**Attenzione alla sicurezza:** il file `.json` della chiave di servizio dÃ  accesso completo al progetto Firebase (bypassa tutte le regole). Non condividerlo, non caricarlo su GitHub, non incollarlo in chat: va solo nella variabile d'ambiente di Vercel.
-
-## Cosa manca (fasi successive, come da specifica)
-
-- **Fase 2**: creazione squadre/campionati/stagioni da interfaccia (ora solo via seed o console Firebase)
-- **Fase 3**: giornate, partite, calcolo automatico dei punti, interfaccia completa Gestore risultati
-- **Fase 4**: import Excel/Word, ritiro/squalifica con le 4 opzioni, storico dettagliato, Albo d'oro popolato automaticamente
-- **Fase 5**: tabellone finale, notifiche push reali (richiede piano Blaze per le Cloud Functions, oppure un piccolo backend separato es. su Vercel Functions), audit log completo, rifinitura mobile, icone PWA reali (sostituire i placeholder in `public/`)
-
-## Note tecniche importanti
-
-- **Ruoli senza Cloud Functions**: il ruolo vive in `users/{uid}` su Firestore, non nei custom claims di Firebase Auth (che richiederebbero Cloud Functions e quindi il piano Blaze). Le regole Firestore leggono quel documento per decidere i permessi â€” funziona interamente sul piano Spark gratuito.
-- **Creazione di nuovi amministratori** senza perdere la sessione del Super Amministratore: si usa una istanza Firebase secondaria "usa e getta" (vedi `getSecondaryAuth()` in `src/firebase.ts`), un pattern comune per questo esatto problema sul piano Spark.
-- **Notifiche push reali** richiedono un service worker + VAPID keys + un modo per inviare (Cloud Function o backend esterno) â€” il piano Spark non supporta le Cloud Functions in uscita verso servizi esterni, quindi per la Fase 5 valuteremo un piccolo endpoint su Vercel (gratuito) che invia le notifiche invece di usare Cloud Functions.
+- Il progetto resta compatibile con il piano Firebase Spark usando Vercel Functions per il backend.
+- Le regole Firestore e Storage leggono `users/{uid}` per ruolo e flag `disabled`.
+- Il Super Admin crea utenti con una seconda istanza Firebase Auth, così non perde la propria sessione.
+- Il client pubblico non legge token notifiche, history invii o analytics raw.
+- Le immagini non vengono salvate dentro Firestore: Firestore contiene solo URL, Storage path e testo alternativo.

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { normalizeMatchChange } from "../api/_lib/matchStatus.js";
+import { normalizeMatchChange } from "../server/_lib/matchStatus.js";
 
 test("save-bulk accetta il contratto richiesto con status completed e risultato", () => {
   assert.deepEqual(normalizeMatchChange({ result: "2-1", status: "completed" }), {

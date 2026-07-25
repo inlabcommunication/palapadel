@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { addDoc, collection, deleteDoc, doc, updateDoc, where } from "firebase/firestore";
+import { collection, deleteDoc, deleteField, doc, setDoc, updateDoc, where } from "firebase/firestore";
+import { ImageUploadField } from "../components/ImageUploadField";
 import { useCollection } from "../hooks/useCollection";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase";
 import { confirmDelete } from "../lib/confirmDelete";
+import { deleteHomeNewsImage, getNewsExcerpt, getNewsImageAlt, uploadHomeNewsImage } from "../lib/homeNewsImageUpload";
 import { getPublishedNewsForHome, HOME_NEWS_SUBTITLE, HOME_NEWS_TITLE } from "../lib/homePresentation";
 import { notifyNotificationEvent } from "../lib/notificationClient";
 import type { ChampionshipEdition, ChampionshipType, ContentStatus, HomeNews, Matchday } from "../types";
@@ -58,6 +60,7 @@ export function HomePage() {
     if (!confirmDelete(n.title)) return;
     try {
       await deleteDoc(doc(db, "homeNews", n.id));
+      await deleteHomeNewsImage(n.imageStoragePath ?? n.imageUrl);
       showToast("Novita eliminata.");
     } catch (err) {
       console.error(err);
@@ -83,7 +86,7 @@ export function HomePage() {
         </div>
       </div>
 
-      <div className="flex items-end justify-between gap-3 mb-3">
+      <div id="news" className="scroll-mt-24 flex items-end justify-between gap-3 mb-3">
         <div>
           <h2 className="font-display text-[28px] sm:text-[38px] leading-none text-[#FBF3DE]">{HOME_NEWS_TITLE}</h2>
           <p className="text-[13px] sm:text-[14px] text-[rgba(251,243,222,0.62)] mt-2">
@@ -293,7 +296,17 @@ function NewsCard({
 
 function NewsImage({ news, featured }: { news: HomeNews; featured: boolean }) {
   const className = featured ? "w-full aspect-[16/9] object-cover" : "w-full aspect-[16/9] object-cover";
-  if (news.imageUrl) return <img src={news.imageUrl} alt={news.title} className={className} />;
+  if (news.imageUrl) {
+    return (
+      <img
+        src={news.imageUrl}
+        alt={getNewsImageAlt(news.title, news.imageAlt)}
+        className={className}
+        loading={featured ? "eager" : "lazy"}
+        decoding="async"
+      />
+    );
+  }
   return (
     <div className={`${className} bg-[#123008] flex items-center justify-center`}>
       <div className="flex items-center gap-2 text-[rgba(187,255,94,0.45)]">
@@ -334,21 +347,46 @@ function NewsForm({ onDone }: { onDone: (msg: string) => void }) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [category, setCategory] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageAlt, setImageAlt] = useState("");
+  const [imageError, setImageError] = useState<string | null>(null);
   const [status, setStatus] = useState<ContentStatus>("pubblicato");
   const [saving, setSaving] = useState(false);
+  const imagePreviewUrl = useObjectUrl(imageFile);
+  const previewNews = buildPreviewNews({
+    id: "new-preview",
+    title,
+    body,
+    category,
+    status,
+    imageUrl: imagePreviewUrl,
+    imageAlt,
+    date: new Date().toISOString(),
+  });
 
   const submit = async () => {
     if (!title.trim() || !body.trim()) return;
     setSaving(true);
+    setImageError(null);
+    const newsRef = doc(collection(db, "homeNews"));
+    let uploadedImage: Awaited<ReturnType<typeof uploadHomeNewsImage>> | null = null;
     try {
-      const ref = await addDoc(collection(db, "homeNews"), {
+      if (imageFile) {
+        uploadedImage = await uploadHomeNewsImage(newsRef.id, imageFile);
+      }
+      await setDoc(newsRef, {
         title: title.trim(),
         body: body.trim(),
         date: new Date().toISOString(),
         status,
         ...(category.trim() ? { category: category.trim() } : {}),
-        ...(imageUrl.trim() ? { imageUrl: imageUrl.trim() } : {}),
+        ...(uploadedImage
+          ? {
+              imageUrl: uploadedImage.url,
+              imageStoragePath: uploadedImage.storagePath,
+              imageAlt: getNewsImageAlt(title, imageAlt),
+            }
+          : {}),
       });
       if (status === "pubblicato") {
         try {
@@ -359,8 +397,8 @@ function NewsForm({ onDone }: { onDone: (msg: string) => void }) {
               body: body.trim(),
               url: "/",
             },
-            `home-news-${ref.id}`,
-            `homeNews/${ref.id}`
+            `home-news-${newsRef.id}`,
+            `homeNews/${newsRef.id}`
           );
         } catch (err) {
           console.error("Errore notifica news", err);
@@ -368,60 +406,82 @@ function NewsForm({ onDone }: { onDone: (msg: string) => void }) {
       }
       onDone(status === "pubblicato" ? "Novita pubblicata." : "Bozza salvata.");
     } catch (err) {
+      if (uploadedImage) await deleteHomeNewsImage(uploadedImage.storagePath);
       console.error(err);
-      onDone("Errore nella pubblicazione.");
+      const msg = getImageErrorMessage(err, "Errore nella pubblicazione della news.");
+      setImageError(msg);
+      onDone(msg);
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5 mb-3">
-      <input
-        placeholder="Titolo"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
-      />
-      <input
-        placeholder="Categoria (opzionale)"
-        value={category}
-        onChange={(e) => setCategory(e.target.value)}
-        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
-      />
-      <input
-        placeholder="URL immagine (opzionale)"
-        value={imageUrl}
-        onChange={(e) => setImageUrl(e.target.value)}
-        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
-      />
-      <textarea
-        placeholder="Testo della comunicazione"
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2 min-h-[90px]"
-      />
-      <div className="flex gap-2 mb-2">
+    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5 mb-3 xl:p-5">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(340px,0.85fr)]">
+        <div>
+          <input
+            placeholder="Titolo"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
+          />
+          <input
+            placeholder="Categoria (opzionale)"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
+          />
+          <textarea
+            placeholder="Testo della comunicazione"
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2 min-h-[130px]"
+          />
+          <ImageUploadField
+            label="Immagine della news"
+            selectedFile={imageFile}
+            currentAlt={getNewsImageAlt(title, imageAlt)}
+            loading={saving}
+            error={imageError}
+            onFileChange={(file) => {
+              setImageError(null);
+              setImageFile(file);
+            }}
+          />
+          <input
+            placeholder="Descrizione dell'immagine (opzionale)"
+            value={imageAlt}
+            onChange={(e) => setImageAlt(e.target.value)}
+            className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mt-2"
+          />
+        </div>
+        <NewsEditorialPreviews news={previewNews} />
+      </div>
+
+      <div className="sticky bottom-3 mt-3 rounded-xl border border-[rgba(251,243,222,0.10)] bg-[#0A0B08]/95 p-2 backdrop-blur">
+        <div className="flex gap-2 mb-2">
+          <button
+            onClick={() => setStatus("pubblicato")}
+            className={`flex-1 rounded-lg py-2 text-xs font-semibold ${status === "pubblicato" ? "bg-lime text-[#081208]" : "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.85)]"}`}
+          >
+            Pubblica subito
+          </button>
+          <button
+            onClick={() => setStatus("bozza")}
+            className={`flex-1 rounded-lg py-2 text-xs font-semibold ${status === "bozza" ? "bg-lime text-[#081208]" : "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.85)]"}`}
+          >
+            Salva come bozza
+          </button>
+        </div>
         <button
-          onClick={() => setStatus("pubblicato")}
-          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${status === "pubblicato" ? "bg-lime text-[#081208]" : "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.85)]"}`}
+          onClick={submit}
+          disabled={saving || !title.trim() || !body.trim()}
+          className="w-full bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
         >
-          Pubblica subito
-        </button>
-        <button
-          onClick={() => setStatus("bozza")}
-          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${status === "bozza" ? "bg-lime text-[#081208]" : "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.85)]"}`}
-        >
-          Salva come bozza
+          {saving ? "Caricamento e salvataggio..." : "Salva"}
         </button>
       </div>
-      <button
-        onClick={submit}
-        disabled={saving || !title.trim() || !body.trim()}
-        className="w-full bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
-      >
-        {saving ? "In corso..." : "Salva"}
-      </button>
     </div>
   );
 }
@@ -438,21 +498,53 @@ function EditNewsForm({
   const [title, setTitle] = useState(news.title);
   const [body, setBody] = useState(news.body);
   const [category, setCategory] = useState(news.category ?? "");
-  const [imageUrl, setImageUrl] = useState(news.imageUrl ?? "");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageAlt, setImageAlt] = useState(news.imageAlt ?? "");
+  const [imageError, setImageError] = useState<string | null>(null);
   const [status, setStatus] = useState<ContentStatus>(news.status);
   const [saving, setSaving] = useState(false);
+  const [deletingImage, setDeletingImage] = useState(false);
+  const imagePreviewUrl = useObjectUrl(imageFile);
+  const effectiveImageUrl = imageFile ? imagePreviewUrl : news.imageUrl;
+  const previewNews = buildPreviewNews({
+    id: news.id,
+    title,
+    body,
+    category,
+    status,
+    imageUrl: effectiveImageUrl,
+    imageAlt,
+    date: news.date,
+  });
 
   const save = async () => {
     if (!title.trim() || !body.trim()) return;
     setSaving(true);
+    setImageError(null);
+    let uploadedImage: Awaited<ReturnType<typeof uploadHomeNewsImage>> | null = null;
     try {
-      await updateDoc(doc(db, "homeNews", news.id), {
+      const updates: Record<string, unknown> = {
         title: title.trim(),
         body: body.trim(),
         category: category.trim(),
-        imageUrl: imageUrl.trim(),
         status,
-      });
+      };
+      if (imageFile) {
+        uploadedImage = await uploadHomeNewsImage(news.id, imageFile);
+        updates.imageUrl = uploadedImage.url;
+        updates.imageStoragePath = uploadedImage.storagePath;
+        updates.imageAlt = getNewsImageAlt(title, imageAlt);
+      } else if (news.imageUrl) {
+        updates.imageAlt = getNewsImageAlt(title, imageAlt);
+      } else if (imageAlt.trim()) {
+        updates.imageAlt = imageAlt.trim();
+      } else {
+        updates.imageAlt = deleteField();
+      }
+
+      await updateDoc(doc(db, "homeNews", news.id), updates);
+      const previousImage = news.imageStoragePath ?? news.imageUrl;
+      if (uploadedImage && previousImage) await deleteHomeNewsImage(previousImage);
       if (status === "pubblicato" && news.status !== "pubblicato") {
         try {
           await notifyNotificationEvent(
@@ -471,65 +563,198 @@ function EditNewsForm({
       }
       onDone("Novita aggiornata.");
     } catch (err) {
+      if (uploadedImage) await deleteHomeNewsImage(uploadedImage.storagePath);
       console.error(err);
-      onDone("Errore nel salvataggio.");
+      const msg = getImageErrorMessage(err, "Errore nel salvataggio della news.");
+      setImageError(msg);
+      onDone(msg);
     } finally {
       setSaving(false);
     }
   };
 
+  const deleteSavedImage = async () => {
+    if (!news.imageUrl) return;
+    if (!confirmDelete("l'immagine della news")) return;
+    setDeletingImage(true);
+    setImageError(null);
+    try {
+      await updateDoc(doc(db, "homeNews", news.id), {
+        imageUrl: deleteField(),
+        imageStoragePath: deleteField(),
+        imageAlt: deleteField(),
+      });
+      await deleteHomeNewsImage(news.imageStoragePath ?? news.imageUrl);
+      onDone("Immagine eliminata.");
+    } catch (err) {
+      console.error(err);
+      setImageError(getImageErrorMessage(err, "Errore nell'eliminazione dell'immagine."));
+    } finally {
+      setDeletingImage(false);
+    }
+  };
+
   return (
-    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5">
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
-      />
-      <input
-        value={category}
-        onChange={(e) => setCategory(e.target.value)}
-        placeholder="Categoria"
-        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
-      />
-      <input
-        value={imageUrl}
-        onChange={(e) => setImageUrl(e.target.value)}
-        placeholder="URL immagine"
-        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
-      />
-      <textarea
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2 min-h-[90px]"
-      />
-      <div className="flex gap-2 mb-2">
-        <button
-          onClick={() => setStatus("pubblicato")}
-          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${status === "pubblicato" ? "bg-lime text-[#081208]" : "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.85)]"}`}
-        >
-          Pubblicato
-        </button>
-        <button
-          onClick={() => setStatus("bozza")}
-          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${status === "bozza" ? "bg-lime text-[#081208]" : "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.85)]"}`}
-        >
-          Bozza
-        </button>
+    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl p-3.5 xl:p-5">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(340px,0.85fr)]">
+        <div>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
+          />
+          <input
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            placeholder="Categoria"
+            className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
+          />
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2 min-h-[130px]"
+          />
+          <ImageUploadField
+            label="Immagine della news"
+            currentUrl={news.imageUrl}
+            currentAlt={getNewsImageAlt(title, imageAlt)}
+            selectedFile={imageFile}
+            loading={saving || deletingImage}
+            error={imageError}
+            onFileChange={(file) => {
+              setImageError(null);
+              setImageFile(file);
+            }}
+            onRemoveImage={deleteSavedImage}
+          />
+          <input
+            placeholder="Descrizione dell'immagine (opzionale)"
+            value={imageAlt}
+            onChange={(e) => setImageAlt(e.target.value)}
+            className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mt-2"
+          />
+        </div>
+        <NewsEditorialPreviews news={previewNews} />
       </div>
-      <div className="flex gap-2">
-        <button
-          onClick={save}
-          disabled={saving || !title.trim() || !body.trim()}
-          className="flex-1 bg-lime text-[#081208] rounded-lg py-2 text-sm font-bold disabled:opacity-50"
-        >
-          Salva
-        </button>
-        <button onClick={onCancel} className="flex-1 border border-[rgba(251,243,222,0.18)] rounded-lg py-2 text-sm font-semibold">
-          Annulla
-        </button>
+
+      <div className="sticky bottom-3 mt-3 rounded-xl border border-[rgba(251,243,222,0.10)] bg-[#0A0B08]/95 p-2 backdrop-blur">
+        <div className="flex gap-2 mb-2">
+          <button
+            onClick={() => setStatus("pubblicato")}
+            className={`flex-1 rounded-lg py-2 text-xs font-semibold ${status === "pubblicato" ? "bg-lime text-[#081208]" : "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.85)]"}`}
+          >
+            Pubblicato
+          </button>
+          <button
+            onClick={() => setStatus("bozza")}
+            className={`flex-1 rounded-lg py-2 text-xs font-semibold ${status === "bozza" ? "bg-lime text-[#081208]" : "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.85)]"}`}
+          >
+            Bozza
+          </button>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={save}
+            disabled={saving || deletingImage || !title.trim() || !body.trim()}
+            className="flex-1 bg-lime text-[#081208] rounded-lg py-2 text-sm font-bold disabled:opacity-50"
+          >
+            {saving ? "Caricamento e salvataggio..." : "Salva"}
+          </button>
+          <button onClick={onCancel} disabled={saving || deletingImage} className="flex-1 border border-[rgba(251,243,222,0.18)] rounded-lg py-2 text-sm font-semibold disabled:opacity-50">
+            Annulla
+          </button>
+        </div>
       </div>
     </div>
   );
+}
+
+function NewsEditorialPreviews({ news }: { news: HomeNews }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+      <div>
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-[rgba(251,243,222,0.44)]">Anteprima desktop</p>
+        <article className="overflow-hidden rounded-xl border border-[rgba(251,243,222,0.10)] bg-[#0A0B08]">
+          <NewsImage news={news} featured />
+          <div className="p-3.5">
+            <PreviewMeta news={news} />
+            <h3 className="font-display text-[22px] leading-[1.05] text-[#FBF3DE]">{news.title}</h3>
+            <p className="mt-2 text-[13px] leading-relaxed text-[rgba(251,243,222,0.65)]">{getNewsExcerpt(news.body)}</p>
+          </div>
+        </article>
+      </div>
+      <div>
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-[rgba(251,243,222,0.44)]">Anteprima mobile</p>
+        <article className="mx-auto max-w-[220px] overflow-hidden rounded-xl border border-[rgba(251,243,222,0.10)] bg-[#0A0B08]">
+          <NewsImage news={news} featured={false} />
+          <div className="p-3">
+            <PreviewMeta news={news} />
+            <h3 className="text-[14px] font-bold leading-snug text-[#FBF3DE]">{news.title}</h3>
+            <p className="mt-1.5 text-[12px] leading-relaxed text-[rgba(251,243,222,0.60)]">{getNewsExcerpt(news.body, 80)}</p>
+          </div>
+        </article>
+      </div>
+    </div>
+  );
+}
+
+function PreviewMeta({ news }: { news: HomeNews }) {
+  return (
+    <div className="mb-2 flex items-center gap-2 text-[10.5px] font-bold uppercase tracking-wider text-[rgba(251,243,222,0.45)]">
+      <span className="text-[#BBFF5E]">{news.category ?? "Pala Padel"}</span>
+      <span>{formatDate(news.date)}</span>
+    </div>
+  );
+}
+
+function useObjectUrl(file: File | null) {
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    if (!file) {
+      setUrl("");
+      return;
+    }
+    const nextUrl = URL.createObjectURL(file);
+    setUrl(nextUrl);
+    return () => URL.revokeObjectURL(nextUrl);
+  }, [file]);
+  return url;
+}
+
+function buildPreviewNews({
+  id,
+  title,
+  body,
+  category,
+  status,
+  imageUrl,
+  imageAlt,
+  date,
+}: {
+  id: string;
+  title: string;
+  body: string;
+  category: string;
+  status: ContentStatus;
+  imageUrl?: string;
+  imageAlt?: string;
+  date: string;
+}): HomeNews {
+  const previewTitle = title.trim() || "Titolo della news";
+  return {
+    id,
+    title: previewTitle,
+    body: body.trim() || "Estratto della news PalaPadel.",
+    date,
+    status,
+    category: category.trim() || "Pala Padel",
+    ...(imageUrl ? { imageUrl, imageAlt: getNewsImageAlt(previewTitle, imageAlt) } : {}),
+  };
+}
+
+function getImageErrorMessage(err: unknown, fallback: string) {
+  if (err instanceof Error && err.message) return `${fallback} ${err.message}`;
+  return fallback;
 }
 
 function ChampionshipCard({

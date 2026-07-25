@@ -300,7 +300,7 @@ function UserManagement({ onDone }: { onDone: (msg: string) => void }) {
   };
 
   return (
-    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-4">
+    <div id="utenti" className="scroll-mt-24 bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-4">
       <div className="flex items-center gap-2 mb-3">
         <UserPlus size={15} className="text-[#BBFF5E]" />
         <p className="text-[13px] font-bold">Nuovo account amministrativo</p>
@@ -373,7 +373,7 @@ function ChangePasswordManagement({ onDone }: { onDone: (msg: string) => void })
   };
 
   return (
-    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-4">
+    <div id="impostazioni" className="scroll-mt-24 bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-4">
       <div className="flex items-center gap-2 mb-3">
         <KeyRound size={15} className="text-[#BBFF5E]" />
         <p className="text-[13px] font-bold">Cambia password di un account esistente</p>

@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { addDoc, collection, deleteDoc, deleteField, doc, setDoc, updateDoc } from "firebase/firestore";
+import { collection, deleteDoc, deleteField, doc, setDoc, updateDoc } from "firebase/firestore";
 import { useCollection } from "../hooks/useCollection";
 import { db } from "../firebase";
 import { confirmDelete } from "../lib/confirmDelete";
-import { uploadTeamPhoto, deleteTeamPhotoByUrl, TeamPhotoError } from "../lib/teamPhotoUpload";
+import { ImageUploadField } from "./ImageUploadField";
+import { uploadTeamPhotoAsset, deleteTeamPhotoByPath, TeamPhotoError } from "../lib/teamPhotoUpload";
 import type { ChampionshipType, Team } from "../types";
 import { BADGE_COLORS } from "../types";
 
@@ -203,6 +204,7 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
   const [name, setName] = useState("");
   const [rosterText, setRosterText] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -218,19 +220,29 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
       return;
     }
     setCreating(true);
+    setPhotoError(null);
+    let uploadedPhoto: Awaited<ReturnType<typeof uploadTeamPhotoAsset>> | null = null;
     try {
-      const ref = await addDoc(collection(db, "teams"), { name: name.trim(), roster });
+      const ref = doc(collection(db, "teams"));
       if (photoFile) {
-        const teamPhotoUrl = await uploadTeamPhoto(ref.id, photoFile);
-        await updateDoc(doc(db, "teams", ref.id), { teamPhotoUrl });
+        uploadedPhoto = await uploadTeamPhotoAsset(ref.id, photoFile);
       }
+      await setDoc(ref, {
+        name: name.trim(),
+        roster,
+        ...(uploadedPhoto
+          ? { teamPhotoUrl: uploadedPhoto.url, teamPhotoStoragePath: uploadedPhoto.storagePath }
+          : {}),
+      });
       setName("");
       setRosterText("");
       setPhotoFile(null);
       onDone(`Squadra "${name}" creata.`);
     } catch (err) {
+      if (uploadedPhoto) await deleteTeamPhotoByPath(uploadedPhoto.storagePath);
       console.error(err);
       const msg = err instanceof TeamPhotoError ? err.message : "Errore nella creazione della squadra.";
+      setPhotoError(msg);
       onDone(msg);
     } finally {
       setCreating(false);
@@ -241,7 +253,7 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
     if (!confirmDelete(t.name)) return;
     try {
       await deleteDoc(doc(db, "teams", t.id));
-      if (t.teamPhotoUrl) await deleteTeamPhotoByUrl(t.teamPhotoUrl);
+      await deleteTeamPhotoByPath(t.teamPhotoStoragePath ?? t.teamPhotoUrl);
       onDone(`Squadra "${t.name}" eliminata.`);
     } catch (err) {
       console.error(err);
@@ -250,7 +262,7 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
   };
 
   return (
-    <div className="mt-6">
+    <div id="squadre" className="mt-6 scroll-mt-24">
       <p className="text-[13px] font-bold mb-2">Squadre</p>
       <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl overflow-hidden mb-3 max-h-72 overflow-y-auto">
         {teams.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.35)]">Nessuna squadra ancora.</p>}
@@ -259,8 +271,18 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
             <EditTeamRow key={t.id} team={t} onCancel={() => setEditingId(null)} onDone={onDone} />
           ) : (
             <div key={t.id} className="px-3.5 py-2.5 text-[13px] border-b border-[rgba(251,243,222,0.08)] last:border-b-0">
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-semibold truncate flex-1 min-w-0">{t.name}</p>
+              <div className="flex items-center gap-3">
+                {t.teamPhotoUrl ? (
+                  <img src={t.teamPhotoUrl} alt={`Foto di gruppo: ${t.name}`} className="h-12 w-20 shrink-0 rounded-lg object-cover" loading="lazy" />
+                ) : (
+                  <div className="flex h-12 w-20 shrink-0 items-center justify-center rounded-lg bg-[#123008] text-[10px] font-bold text-[rgba(187,255,94,0.48)]">
+                    FOTO
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold truncate">{t.name}</p>
+                  <p className="text-[12px] text-[rgba(251,243,222,0.35)] truncate">{t.roster.join(", ")}</p>
+                </div>
                 <button onClick={() => setEditingId(t.id)} className="text-[#BBFF5E] text-xs font-semibold shrink-0">
                   Modifica
                 </button>
@@ -268,7 +290,6 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
                   Elimina
                 </button>
               </div>
-              <p className="text-[12px] text-[rgba(251,243,222,0.35)]">{t.roster.join(", ")}</p>
             </div>
           )
         )}
@@ -285,15 +306,19 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
         onChange={(e) => setRosterText(e.target.value)}
         className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
       />
-      <label className="block mb-2">
-        <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">Foto di gruppo della squadra (opzionale, JPG/PNG/WebP, max 5 MB)</p>
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          onChange={(e) => setPhotoFile(e.target.files?.[0] ?? null)}
-          className="w-full text-[12.5px] text-[rgba(251,243,222,0.58)]"
+      <div className="mb-2">
+        <ImageUploadField
+          label="Foto di gruppo della squadra"
+          selectedFile={photoFile}
+          loading={creating}
+          error={photoError}
+          currentAlt={`Foto di gruppo: ${name || "squadra"}`}
+          onFileChange={(file) => {
+            setPhotoError(null);
+            setPhotoFile(file);
+          }}
         />
-      </label>
+      </div>
       <button
         onClick={create}
         disabled={creating || !name.trim()}
@@ -318,6 +343,7 @@ function EditTeamRow({
   const [rosterText, setRosterText] = useState(team.roster.join(", "));
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [removePhoto, setRemovePhoto] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
@@ -330,25 +356,33 @@ function EditTeamRow({
       return;
     }
     setSaving(true);
+    setPhotoError(null);
+    let uploadedPhoto: Awaited<ReturnType<typeof uploadTeamPhotoAsset>> | null = null;
     try {
-      let teamPhotoUrl: string | undefined;
       if (photoFile) {
         // Fase 7 — carica prima la nuova foto e ottieni l'URL; elimina quella
         // precedente SOLO dopo che il salvataggio su Firestore è andato a buon fine.
-        teamPhotoUrl = await uploadTeamPhoto(team.id, photoFile);
+        uploadedPhoto = await uploadTeamPhotoAsset(team.id, photoFile);
       }
       await updateDoc(doc(db, "teams", team.id), {
         name: name.trim(),
         roster,
-        ...(teamPhotoUrl ? { teamPhotoUrl } : removePhoto ? { teamPhotoUrl: deleteField() } : {}),
+        ...(uploadedPhoto
+          ? { teamPhotoUrl: uploadedPhoto.url, teamPhotoStoragePath: uploadedPhoto.storagePath }
+          : removePhoto
+            ? { teamPhotoUrl: deleteField(), teamPhotoStoragePath: deleteField() }
+            : {}),
       });
-      if (photoFile && team.teamPhotoUrl) await deleteTeamPhotoByUrl(team.teamPhotoUrl);
-      if (removePhoto && !photoFile && team.teamPhotoUrl) await deleteTeamPhotoByUrl(team.teamPhotoUrl);
+      const previousPhoto = team.teamPhotoStoragePath ?? team.teamPhotoUrl;
+      if (uploadedPhoto && previousPhoto) await deleteTeamPhotoByPath(previousPhoto);
+      if (removePhoto && !uploadedPhoto && previousPhoto) await deleteTeamPhotoByPath(previousPhoto);
       onDone("Squadra aggiornata.");
       onCancel();
     } catch (err) {
+      if (uploadedPhoto) await deleteTeamPhotoByPath(uploadedPhoto.storagePath);
       console.error(err);
       const msg = err instanceof TeamPhotoError ? err.message : "Errore nel salvataggio.";
+      setPhotoError(msg);
       onDone(msg);
     } finally {
       setSaving(false);
@@ -367,28 +401,26 @@ function EditTeamRow({
         onChange={(e) => setRosterText(e.target.value)}
         className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm mb-2"
       />
-      {team.teamPhotoUrl && !removePhoto && (
-        <div className="mb-2">
-          <img src={team.teamPhotoUrl} alt={team.name} className="w-full aspect-video object-cover rounded-lg mb-1.5" />
-          <button onClick={() => setRemovePhoto(true)} className="text-[11px] text-[#FF6B6B] font-semibold">
-            Rimuovi foto di gruppo
-          </button>
-        </div>
-      )}
-      <label className="block mb-2">
-        <p className="text-[11px] text-[rgba(251,243,222,0.35)] mb-1">
-          {team.teamPhotoUrl ? "Sostituisci foto di gruppo" : "Foto di gruppo della squadra"} (JPG/PNG/WebP, max 5 MB)
-        </p>
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          onChange={(e) => {
-            setPhotoFile(e.target.files?.[0] ?? null);
+      <div className="mb-2">
+        <ImageUploadField
+          label="Foto di gruppo della squadra"
+          currentUrl={removePhoto ? null : team.teamPhotoUrl}
+          currentAlt={`Foto di gruppo: ${name}`}
+          selectedFile={photoFile}
+          loading={saving}
+          error={photoError}
+          onFileChange={(file) => {
+            setPhotoError(null);
+            setPhotoFile(file);
             setRemovePhoto(false);
           }}
-          className="w-full text-[12.5px] text-[rgba(251,243,222,0.58)]"
+          onRemoveImage={() => {
+            if (!confirmDelete("la foto di gruppo della squadra")) return;
+            setPhotoFile(null);
+            setRemovePhoto(true);
+          }}
         />
-      </label>
+      </div>
       <div className="flex gap-2">
         <button
           onClick={save}
