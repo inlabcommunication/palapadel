@@ -94,7 +94,6 @@ export function NotifichePage() {
   };
 
   return (
-<<<<<<< HEAD
     <div className="p-4 pb-6">
       <div className="flex items-center gap-2 mb-4">
         <Bell size={16} className="text-[#BBFF5E]" />
@@ -112,19 +111,6 @@ export function NotifichePage() {
             onClick={toggleGlobal}
             className="w-10 h-[22px] rounded-full relative shrink-0"
             style={{ background: enabled ? "#BBFF5E" : "rgba(251,243,222,0.20)" }}
-=======
-    <div className="p-4">
-      <h2 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE] mb-1">Notifiche</h2>
-      <p className="text-[12.5px] text-[rgba(251,243,222,0.35)] mb-4">
-        Le vere notifiche push (service worker + VAPID keys) arrivano in Fase 5. Qui vengono salvate solo le
-        preferenze.
-      </p>
-      <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl overflow-hidden">
-        {Object.entries(LABELS).map(([k, label]) => (
-          <div
-            key={k}
-            className="flex items-center justify-between px-3.5 py-2.5 text-[13px] border-b border-[rgba(251,243,222,0.08)] last:border-b-0"
->>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
           >
             <span
               className="absolute top-0.5 w-[18px] h-[18px] rounded-full bg-[#0A0B08] transition-all"
@@ -138,19 +124,11 @@ export function NotifichePage() {
             <button
               onClick={() => toggleTopic(key)}
               className="w-10 h-[22px] rounded-full relative shrink-0"
-<<<<<<< HEAD
               style={{ background: prefs[key] ? "#BBFF5E" : "rgba(251,243,222,0.20)" }}
             >
               <span
                 className="absolute top-0.5 w-[18px] h-[18px] rounded-full bg-[#0A0B08] transition-all"
                 style={{ left: prefs[key] ? 20 : 2 }}
-=======
-              style={{ background: prefs[k] ? "#BBFF5E" : "rgba(251,243,222,0.20)" }}
-            >
-              <span
-                className="absolute top-0.5 w-[18px] h-[18px] rounded-full bg-[#0A0B08] transition-all"
-                style={{ left: prefs[k] ? 20 : 2 }}
->>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
               />
             </button>
           </div>

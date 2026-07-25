@@ -9,11 +9,7 @@ import type { AppUser, ChampionshipEdition, ChampionshipType, EditionTeam, Femal
 import { ROLE_LABELS, BADGE_COLORS } from "../types";
 import { PasswordInput } from "../components/PasswordInput";
 import { slugifyUsername, usernameToEmail } from "../lib/username";
-<<<<<<< HEAD
 import { BarChart3, Bell, Settings, UserPlus, KeyRound, LayoutDashboard } from "lucide-react";
-=======
-import { Settings, UserPlus, KeyRound, LayoutDashboard } from "lucide-react";
->>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
 
 export function GestionePage() {
   const { appUser } = useAuth();
@@ -92,7 +88,6 @@ function AdminView({ role }: { role: Role }) {
 
       {role === "superadmin" ? (
         <div className="flex flex-col gap-4">
-<<<<<<< HEAD
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => navigate("/notifiche")}
@@ -109,8 +104,6 @@ function AdminView({ role }: { role: Role }) {
               <span className="text-[13px] font-bold">Analytics</span>
             </button>
           </div>
-=======
->>>>>>> 548c33dadf9f8cee71b8ee2e0a31a2d11d373e4d
           <UserManagement onDone={showToast} />
           <ChangePasswordManagement onDone={showToast} />
         </div>
