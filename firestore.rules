@@ -7,20 +7,33 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function myUser() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
     function myRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      return myUser().role;
+    }
+
+    function isEnabledUser() {
+      return isSignedIn() && myUser().disabled != true;
     }
 
     function isSuperAdmin() {
-      return isSignedIn() && myRole() == 'superadmin';
+      return isEnabledUser() && myRole() == 'superadmin';
     }
 
     function isAdminOrAbove() {
-      return isSignedIn() && (myRole() == 'superadmin' || myRole() == 'admin');
+      return isEnabledUser() && (myRole() == 'superadmin' || myRole() == 'admin');
     }
 
     function isGestoreOrAbove() {
-      return isSignedIn() && (myRole() == 'superadmin' || myRole() == 'admin' || myRole() == 'gestore');
+      return isEnabledUser() && (myRole() == 'superadmin' || myRole() == 'admin' || myRole() == 'gestore');
+    }
+
+    // Un'edizione è visibile pubblicamente solo se attiva o conclusa (mai bozza/nascosta).
+    function editionIsPublic(editionId) {
+      return get(/databases/$(database)/documents/championshipEditions/$(editionId)).data.status in ['attiva', 'conclusa'];
     }
 
     // Ognuno legge solo il proprio documento utente. Solo il Super Amministratore scrive.
@@ -29,12 +42,13 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
-    // Mappatura pubblica "nome utente" -> email interna, necessaria per poter
-    // effettuare il login conoscendo solo il nome utente (senza mostrare email).
-    // In lettura è pubblica (serve anche a chi non ha ancora effettuato l'accesso),
-    // in scrittura è riservata al Super Amministratore, che è l'unico a creare account.
+    // Fase 16 — mappatura pubblica "nome utente" -> email interna per il login. Serve
+    // solo poter leggere UN documento preciso e già noto (get), mai elencare l'intera
+    // collezione (list), che esporrebbe tutti gli username registrati. Il frontend
+    // (src/pages/Login.tsx) usa già getDoc su un riferimento preciso, mai una query.
     match /usernameEmails/{slug} {
-      allow read: if true;
+      allow get: if true;
+      allow list: if false;
       allow write: if isSuperAdmin();
     }
 
@@ -44,8 +58,13 @@ service cloud.firestore {
       allow write: if isAdminOrAbove();
     }
 
+    // Le edizioni in bozza o nascoste non sono leggibili pubblicamente, solo da
+    // amministratori/gestori. Le query pubbliche del frontend filtrano già per
+    // status in ["attiva","conclusa"], quindi restano compatibili con questa regola.
     match /championshipEditions/{id} {
-      allow read: if true;
+      allow read: if isGestoreOrAbove() || resource.data.status in ['attiva', 'conclusa'];
+      // lastRecalculatedAt viene scritto dal backend con Admin SDK (bypassa le regole):
+      // qui restano solo le scritture amministrative dirette dal client.
       allow write: if isAdminOrAbove();
     }
 
@@ -54,40 +73,93 @@ service cloud.firestore {
       allow write: if isAdminOrAbove();
     }
 
+    // Fase 2/8 — la classifica squadre è gestita ESCLUSIVAMENTE dal backend con
+    // Firebase Admin SDK (api/standings/manage-entry.js, recalculate.js, set-status.js),
+    // che bypassa queste regole. Nessun ruolo scrive qui direttamente dal client,
+    // nemmeno admin/superAdmin: un solo percorso di scrittura possibile.
     match /editionTeams/{id} {
-      allow read: if true;
-      // Il Gestore risultati aggiorna punti/partite tramite i risultati, non li modifica a mano.
-      allow write: if isAdminOrAbove();
+      allow read: if isGestoreOrAbove() || editionIsPublic(resource.data.editionId);
+      allow write: if false;
     }
 
     match /femaleParticipants/{id} {
-      allow read: if true;
+      allow read: if isGestoreOrAbove() || editionIsPublic(resource.data.editionId);
       allow write: if isAdminOrAbove();
     }
 
+    // Il resultManager non crea/elimina giornate.
     match /matchdays/{id} {
-      allow read: if true;
+      allow read: if isGestoreOrAbove() || editionIsPublic(resource.data.editionId);
       allow write: if isAdminOrAbove();
     }
 
+    // Fase 1/6/8/9 — il frontend usa esclusivamente gli endpoint in api/matches/*.js e
+    // api/home-news/*.js (Firebase Admin SDK, bypassano queste regole) per QUALUNQUE
+    // scrittura su matches: risultato/stato, creazione, eliminazione, e i campi di
+    // notifica (notificationStatus/notificationDraftCreatedAt/notificationNewsId).
+    // Nessun ruolo scrive qui direttamente dal client.
     match /matches/{id} {
-      allow read: if true;
-      // Il Gestore risultati può inserire/correggere risultati, non creare giornate/campionati.
-      allow write: if isGestoreOrAbove();
+      allow read: if isGestoreOrAbove() || editionIsPublic(resource.data.editionId);
+      allow write: if false;
     }
 
+    // Le notizie in bozza non sono pubbliche.
     match /homeNews/{id} {
-      allow read: if true;
+      allow read: if isAdminOrAbove() || resource.data.status == 'pubblicato';
       allow write: if isAdminOrAbove();
+    }
+
+    // Notifiche push: installazioni/token/preferenze vengono scritti solo dagli
+    // endpoint Vercel con Admin SDK. Il client pubblico non deve poter leggere token
+    // o storico invii; il Super Amministratore legge solo configurazione e audit.
+    match /notificationSettings/{id} {
+      allow read, write: if isSuperAdmin();
+    }
+
+    match /notificationDrafts/{id} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    match /notificationHistory/{id} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    match /notificationDispatches/{id} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    match /notificationInstallations/{installationId} {
+      allow read, write: if false;
+      match /{document=**} {
+        allow read, write: if false;
+      }
+    }
+
+    // Analytics interni anonimi: il tracciamento passa dagli endpoint, il client non
+    // scrive direttamente e solo il Super Amministratore legge gli aggregati.
+    match /analyticsDaily/{id} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    match /analyticsEvents/{id} {
+      allow read, write: if false;
+    }
+
+    match /analyticsInstallations/{id} {
+      allow read, write: if false;
     }
 
     match /bracketRounds/{id} {
-      allow read: if true;
+      allow read: if isGestoreOrAbove() || editionIsPublic(resource.data.editionId);
       allow write: if isAdminOrAbove();
     }
 
     match /bracketMatches/{id} {
-      allow read: if true;
+      allow read: if isGestoreOrAbove() || editionIsPublic(resource.data.editionId);
       allow write: if isAdminOrAbove();
     }
 
@@ -99,10 +171,11 @@ service cloud.firestore {
       allow write: if isAdminOrAbove();
     }
 
-    // Log di controllo: scrivibile da chi opera, leggibile solo dagli amministratori.
+    // Log di controllo: creato dal backend con Admin SDK (bypassa le regole) o, in
+    // amministrazione, da un client admin. Mai leggibile pubblicamente. Immutabile.
     match /auditLog/{id} {
       allow read: if isAdminOrAbove();
-      allow create: if isGestoreOrAbove();
+      allow create: if isAdminOrAbove();
       allow update, delete: if false;
     }
   }
