@@ -116,7 +116,10 @@ function NewsCover({ news, eager = false }: { news: HomeNews; eager?: boolean })
         src={news.imageUrl}
         alt={getNewsImageAlt(news.title, news.imageAlt)}
         className="aspect-video w-full object-cover"
-        style={{ objectPosition: `50% ${news.imagePositionY ?? 50}%` }}
+        style={{
+          objectPosition: `50% ${news.imagePositionY ?? 50}%`,
+          transform: `scale(${news.imageScale ?? 1})`,
+        }}
         loading={eager ? "eager" : "lazy"}
         decoding="async"
       />

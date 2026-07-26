@@ -1017,7 +1017,10 @@ function TeamProfileModal({
               src={team.teamPhotoUrl}
               alt={team.name}
               className="w-full h-full object-cover"
-              style={{ objectPosition: `50% ${team.teamPhotoPositionY ?? 50}%` }}
+              style={{
+                objectPosition: `50% ${team.teamPhotoPositionY ?? 50}%`,
+                transform: `scale(${team.teamPhotoScale ?? 1})`,
+              }}
             />
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center gap-1.5">

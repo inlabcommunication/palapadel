@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { X } from "lucide-react";
 import { useCollection } from "../hooks/useCollection";
 import { confirmDelete } from "../lib/confirmDelete";
 import { ImageUploadField } from "./ImageUploadField";
@@ -258,10 +259,12 @@ function EditTypeRow({
 
 export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
   const { data: teams } = useCollection<Team>("teams");
+  const [teamSearch, setTeamSearch] = useState("");
   const [name, setName] = useState("");
   const [rosterText, setRosterText] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPositionY, setPhotoPositionY] = useState(50);
+  const [photoScale, setPhotoScale] = useState(1);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -270,6 +273,14 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+  const filteredTeams = teams.filter((team) => {
+    const query = teamSearch.trim().toLocaleLowerCase("it");
+    if (!query) return true;
+    return (
+      team.name.toLocaleLowerCase("it").includes(query) ||
+      team.roster.some((player) => player.toLocaleLowerCase("it").includes(query))
+    );
+  });
 
   const create = async () => {
     if (!name.trim()) return;
@@ -291,13 +302,19 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
         name: name.trim(),
         roster,
         ...(uploadedPhoto
-          ? { teamPhotoUrl: uploadedPhoto.url, teamPhotoStoragePath: uploadedPhoto.storagePath, teamPhotoPositionY: photoPositionY }
+          ? {
+              teamPhotoUrl: uploadedPhoto.url,
+              teamPhotoStoragePath: uploadedPhoto.storagePath,
+              teamPhotoPositionY: photoPositionY,
+              teamPhotoScale: photoScale,
+            }
           : {}),
       });
       setName("");
       setRosterText("");
       setPhotoFile(null);
       setPhotoPositionY(50);
+      setPhotoScale(1);
       onDone(`Squadra "${name}" creata.`);
     } catch (err) {
       if (uploadedPhoto) await deleteTeamPhotoByPath(uploadedPhoto.storagePath);
@@ -324,22 +341,40 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
   return (
     <div id="squadre" className="mt-6 scroll-mt-24">
       <p className="text-[13px] font-bold mb-2">Squadre</p>
+      <input
+        type="search"
+        placeholder="Cerca squadra o giocatore"
+        value={teamSearch}
+        onChange={(event) => setTeamSearch(event.target.value)}
+        className="mb-2 w-full rounded-lg border border-[rgba(251,243,222,0.18)] px-3 py-2.5 text-sm"
+        aria-label="Cerca nell'elenco delle squadre"
+      />
       <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl overflow-hidden mb-3 max-h-72 overflow-y-auto">
         {teams.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.50)]">Nessuna squadra ancora.</p>}
-        {teams.map((t) =>
+        {teams.length > 0 && filteredTeams.length === 0 && (
+          <p className="px-3.5 py-4 text-[12.5px] text-[rgba(251,243,222,0.50)]">
+            Nessuna squadra corrisponde alla ricerca.
+          </p>
+        )}
+        {filteredTeams.map((t) =>
           editingId === t.id ? (
             <EditTeamRow key={t.id} team={t} onCancel={() => setEditingId(null)} onDone={onDone} />
           ) : (
             <div key={t.id} className="px-3.5 py-2.5 text-[13px] border-b border-[rgba(251,243,222,0.08)] last:border-b-0">
               <div className="flex items-center gap-3">
                 {t.teamPhotoUrl ? (
-                  <img
-                    src={t.teamPhotoUrl}
-                    alt={`Foto di gruppo: ${t.name}`}
-                    className="h-12 w-20 shrink-0 rounded-lg object-cover"
-                    style={{ objectPosition: `50% ${t.teamPhotoPositionY ?? 50}%` }}
-                    loading="lazy"
-                  />
+                  <div className="h-12 w-20 shrink-0 overflow-hidden rounded-lg">
+                    <img
+                      src={t.teamPhotoUrl}
+                      alt={`Foto di gruppo: ${t.name}`}
+                      className="h-full w-full object-cover"
+                      style={{
+                        objectPosition: `50% ${t.teamPhotoPositionY ?? 50}%`,
+                        transform: `scale(${t.teamPhotoScale ?? 1})`,
+                      }}
+                      loading="lazy"
+                    />
+                  </div>
                 ) : (
                   <div className="flex h-12 w-20 shrink-0 items-center justify-center rounded-lg bg-[#123008] text-[10px] font-bold text-[rgba(187,255,94,0.48)]">
                     FOTO
@@ -379,8 +414,11 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
           loading={creating}
           error={photoError}
           currentAlt={`Foto di gruppo: ${name || "squadra"}`}
+          aspectClass="h-28 sm:h-32"
           positionY={photoPositionY}
           onPositionYChange={setPhotoPositionY}
+          scale={photoScale}
+          onScaleChange={setPhotoScale}
           onFileChange={(file) => {
             setPhotoError(null);
             setPhotoFile(file);
@@ -411,9 +449,23 @@ function EditTeamRow({
   const [rosterText, setRosterText] = useState(team.roster.join(", "));
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPositionY, setPhotoPositionY] = useState(team.teamPhotoPositionY ?? 50);
+  const [photoScale, setPhotoScale] = useState(team.teamPhotoScale ?? 1);
   const [removePhoto, setRemovePhoto] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !saving) onCancel();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [onCancel, saving]);
 
   const save = async () => {
     const roster = rosterText
@@ -439,6 +491,7 @@ function EditTeamRow({
         name: name.trim(),
         roster,
         teamPhotoPositionY: photoPositionY,
+        teamPhotoScale: photoScale,
         ...(uploadedPhoto
           ? { teamPhotoUrl: uploadedPhoto.url, teamPhotoStoragePath: uploadedPhoto.storagePath }
           : removePhoto
@@ -462,50 +515,85 @@ function EditTeamRow({
   };
 
   return (
-    <div className="px-3.5 py-3 border-b border-[rgba(251,243,222,0.08)] last:border-b-0 bg-[#123008]">
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm mb-2"
-      />
-      <input
-        value={rosterText}
-        onChange={(e) => setRosterText(e.target.value)}
-        className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm mb-2"
-      />
-      <div className="mb-2">
-        <ImageUploadField
-          label="Foto di gruppo della squadra"
-          currentUrl={removePhoto ? null : team.teamPhotoUrl}
-          currentAlt={`Foto di gruppo: ${name}`}
-          selectedFile={photoFile}
-          loading={saving}
-          error={photoError}
-          positionY={photoPositionY}
-          onPositionYChange={setPhotoPositionY}
-          onFileChange={(file) => {
-            setPhotoError(null);
-            setPhotoFile(file);
-            setRemovePhoto(false);
-          }}
-          onRemoveImage={() => {
-            if (!confirmDelete("la foto di gruppo della squadra")) return;
-            setPhotoFile(null);
-            setRemovePhoto(true);
-          }}
+    <div
+      className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/75 p-3 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] sm:items-center sm:p-6"
+      onClick={() => {
+        if (!saving) onCancel();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={`edit-team-${team.id}`}
+        className="my-auto w-full max-w-2xl overflow-y-auto rounded-lg border border-[rgba(251,243,222,0.14)] bg-[#0A0B08] p-4 shadow-2xl max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] sm:p-6"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase text-[rgba(251,243,222,0.50)]">Modifica squadra</p>
+            <h3 id={`edit-team-${team.id}`} className="text-lg font-extrabold text-[#FBF3DE]">{team.name}</h3>
+          </div>
+          <button
+            type="button"
+            aria-label="Chiudi modifica squadra"
+            onClick={onCancel}
+            disabled={saving}
+            className="rounded-full bg-[rgba(251,243,222,0.08)] p-2 disabled:opacity-50"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <label className="mb-1 block text-xs font-bold" htmlFor={`team-name-${team.id}`}>Nome squadra</label>
+        <input
+          id={`team-name-${team.id}`}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-3"
         />
-      </div>
-      <div className="flex gap-2">
-        <button
-          onClick={save}
-          disabled={saving}
-          className="flex-1 bg-lime text-[#081208] rounded-lg py-2 text-sm font-bold disabled:opacity-50"
-        >
-          {saving ? "Salvataggio..." : "Salva"}
-        </button>
-        <button onClick={onCancel} className="flex-1 border border-[rgba(251,243,222,0.18)] rounded-lg py-2 text-sm font-semibold">
-          Annulla
-        </button>
+        <label className="mb-1 block text-xs font-bold" htmlFor={`team-roster-${team.id}`}>Rosa</label>
+        <input
+          id={`team-roster-${team.id}`}
+          value={rosterText}
+          onChange={(e) => setRosterText(e.target.value)}
+          className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-3"
+        />
+        <div className="mb-4">
+          <ImageUploadField
+            label="Foto di gruppo della squadra"
+            currentUrl={removePhoto ? null : team.teamPhotoUrl}
+            currentAlt={`Foto di gruppo: ${name}`}
+            selectedFile={photoFile}
+            loading={saving}
+            error={photoError}
+            aspectClass="h-32 sm:h-40"
+            positionY={photoPositionY}
+            onPositionYChange={setPhotoPositionY}
+            scale={photoScale}
+            onScaleChange={setPhotoScale}
+            onFileChange={(file) => {
+              setPhotoError(null);
+              setPhotoFile(file);
+              setRemovePhoto(false);
+            }}
+            onRemoveImage={() => {
+              if (!confirmDelete("la foto di gruppo della squadra")) return;
+              setPhotoFile(null);
+              setRemovePhoto(true);
+            }}
+          />
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={save}
+            disabled={saving}
+            className="flex-1 bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
+          >
+            {saving ? "Salvataggio..." : "Salva"}
+          </button>
+          <button onClick={onCancel} disabled={saving} className="flex-1 border border-[rgba(251,243,222,0.18)] rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50">
+            Annulla
+          </button>
+        </div>
       </div>
     </div>
   );

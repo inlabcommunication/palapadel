@@ -8,6 +8,7 @@ export function saveTeam(input: {
   teamPhotoUrl?: string;
   teamPhotoStoragePath?: string | null;
   teamPhotoPositionY?: number;
+  teamPhotoScale?: number;
 }) {
   return postToBackend<{ ok: true }>("/api/admin/team", input);
 }

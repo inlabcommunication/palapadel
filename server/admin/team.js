@@ -8,6 +8,7 @@ const teamFields = {
   teamPhotoUrl: z.string().url().max(2000).optional(),
   teamPhotoStoragePath: z.union([z.string().trim().max(1000), z.null()]).optional(),
   teamPhotoPositionY: z.number().min(0).max(100).optional(),
+  teamPhotoScale: z.number().min(1).max(2).optional(),
 };
 const schema = z.discriminatedUnion("operation", [
   z.object({ operation: z.literal("create"), teamId: documentId, ...teamFields }).strict(),
@@ -46,6 +47,7 @@ export default async function handler(req, res) {
               ? { teamPhotoStoragePath: admin.firestore.FieldValue.delete() }
               : {}),
           ...(input.teamPhotoPositionY !== undefined ? { teamPhotoPositionY: input.teamPhotoPositionY } : {}),
+          ...(input.teamPhotoScale !== undefined ? { teamPhotoScale: input.teamPhotoScale } : {}),
           updatedAt: timestamp,
           updatedBy: caller.uid,
         };

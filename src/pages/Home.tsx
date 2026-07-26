@@ -317,7 +317,10 @@ function NewsImage({ news, featured }: { news: HomeNews; featured: boolean }) {
         src={news.imageUrl}
         alt={getNewsImageAlt(news.title, news.imageAlt)}
         className={className}
-        style={{ objectPosition: `50% ${news.imagePositionY ?? 50}%` }}
+        style={{
+          objectPosition: `50% ${news.imagePositionY ?? 50}%`,
+          transform: `scale(${news.imageScale ?? 1})`,
+        }}
         loading={featured ? "eager" : "lazy"}
         decoding="async"
       />
@@ -382,6 +385,7 @@ function NewsForm({ onDone }: { onDone: (msg: string) => void }) {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageAlt, setImageAlt] = useState("");
   const [imagePositionY, setImagePositionY] = useState(50);
+  const [imageScale, setImageScale] = useState(1);
   const [imageError, setImageError] = useState<string | null>(null);
   const [status, setStatus] = useState<ContentStatus>("pubblicato");
   const [saving, setSaving] = useState(false);
@@ -395,6 +399,7 @@ function NewsForm({ onDone }: { onDone: (msg: string) => void }) {
     imageUrl: imagePreviewUrl,
     imageAlt,
     imagePositionY,
+    imageScale,
     date: new Date().toISOString(),
   });
 
@@ -422,6 +427,7 @@ function NewsForm({ onDone }: { onDone: (msg: string) => void }) {
               imageStoragePath: uploadedImage.storagePath,
               imageAlt: getNewsImageAlt(title, imageAlt),
               imagePositionY,
+              imageScale,
             }
           : {}),
       });
@@ -483,6 +489,8 @@ function NewsForm({ onDone }: { onDone: (msg: string) => void }) {
             error={imageError}
             positionY={imagePositionY}
             onPositionYChange={setImagePositionY}
+            scale={imageScale}
+            onScaleChange={setImageScale}
             onFileChange={(file) => {
               setImageError(null);
               setImageFile(file);
@@ -540,6 +548,7 @@ function EditNewsForm({
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageAlt, setImageAlt] = useState(news.imageAlt ?? "");
   const [imagePositionY, setImagePositionY] = useState(news.imagePositionY ?? 50);
+  const [imageScale, setImageScale] = useState(news.imageScale ?? 1);
   const [imageError, setImageError] = useState<string | null>(null);
   const [status, setStatus] = useState<ContentStatus>(news.status);
   const [saving, setSaving] = useState(false);
@@ -555,6 +564,7 @@ function EditNewsForm({
     imageUrl: effectiveImageUrl,
     imageAlt,
     imagePositionY,
+    imageScale,
     date: news.date,
   });
 
@@ -575,6 +585,7 @@ function EditNewsForm({
         imageUrl: undefined as string | undefined,
         imageStoragePath: undefined as string | undefined,
         imagePositionY,
+        imageScale,
       };
       if (imageFile) {
         uploadedImage = await uploadHomeNewsImage(news.id, imageFile);
@@ -659,6 +670,8 @@ function EditNewsForm({
             error={imageError}
             positionY={imagePositionY}
             onPositionYChange={setImagePositionY}
+            scale={imageScale}
+            onScaleChange={setImageScale}
             onFileChange={(file) => {
               setImageError(null);
               setImageFile(file);
@@ -768,6 +781,7 @@ function buildPreviewNews({
   imageUrl,
   imageAlt,
   imagePositionY,
+  imageScale,
   date,
 }: {
   id: string;
@@ -778,6 +792,7 @@ function buildPreviewNews({
   imageUrl?: string;
   imageAlt?: string;
   imagePositionY?: number;
+  imageScale?: number;
   date: string;
 }): HomeNews {
   const previewTitle = title.trim() || "Titolo della news";
@@ -788,7 +803,7 @@ function buildPreviewNews({
     date,
     status,
     category: category.trim() || "Pala Padel",
-    ...(imageUrl ? { imageUrl, imageAlt: getNewsImageAlt(previewTitle, imageAlt), imagePositionY } : {}),
+    ...(imageUrl ? { imageUrl, imageAlt: getNewsImageAlt(previewTitle, imageAlt), imagePositionY, imageScale } : {}),
   };
 }
 

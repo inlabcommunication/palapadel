@@ -15,6 +15,8 @@ interface ImageUploadFieldProps {
   aspectClass?: string;
   positionY?: number;
   onPositionYChange?: (value: number) => void;
+  scale?: number;
+  onScaleChange?: (value: number) => void;
   onFileChange: (file: File | null) => void;
   onRemoveImage?: () => void;
 }
@@ -32,6 +34,8 @@ export function ImageUploadField({
   aspectClass = "aspect-video",
   positionY = 50,
   onPositionYChange,
+  scale = 1,
+  onScaleChange,
   onFileChange,
   onRemoveImage,
 }: ImageUploadFieldProps) {
@@ -120,7 +124,7 @@ export function ImageUploadField({
               src={previewUrl}
               alt={currentAlt}
               className={`w-full ${aspectClass} object-cover`}
-              style={{ objectPosition: `50% ${positionY}%` }}
+              style={{ objectPosition: `50% ${positionY}%`, transform: `scale(${scale})` }}
             />
             <span className="absolute right-2 top-2 rounded-full bg-black/55 p-1.5 text-[#FBF3DE] opacity-0 transition group-hover:opacity-100">
               <Maximize2 size={14} />
@@ -152,6 +156,22 @@ export function ImageUploadField({
             disabled={loading}
             className="mt-2 w-full accent-[#BBFF5E]"
             aria-label="Regola la posizione verticale dell'immagine"
+          />
+        </label>
+      )}
+      {hasImage && onScaleChange && (
+        <label className="mt-3 block text-[11px] font-semibold text-[rgba(251,243,222,0.68)]">
+          Dimensione immagine: {Math.round(scale * 100)}%
+          <input
+            type="range"
+            min={1}
+            max={2}
+            step={0.01}
+            value={scale}
+            onChange={(event) => onScaleChange(Number(event.target.value))}
+            disabled={loading}
+            className="mt-2 w-full accent-[#BBFF5E]"
+            aria-label="Ingrandisci o riduci l'immagine"
           />
         </label>
       )}

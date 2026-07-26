@@ -15,6 +15,7 @@ export interface SaveHomeNewsInput {
   imageUrl?: string;
   imageStoragePath?: string;
   imagePositionY?: number;
+  imageScale?: number;
   imageAlt?: string | null;
 }
 
