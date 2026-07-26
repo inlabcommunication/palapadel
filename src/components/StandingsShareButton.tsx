@@ -109,9 +109,9 @@ export function StandingsShareButton({ input, showToast }: StandingsShareButtonP
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-black/70 p-4" onClick={() => setOpen(false)}>
+        <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-2 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[max(0.5rem,env(safe-area-inset-top))] sm:items-center sm:p-4" onClick={() => setOpen(false)}>
           <div
-            className="w-full max-w-lg bg-[#0A0B08] border border-[rgba(251,243,222,0.12)] rounded-2xl overflow-hidden"
+            className="w-full max-w-lg bg-[#0A0B08] border border-[rgba(251,243,222,0.12)] rounded-2xl overflow-y-auto max-h-[calc(100dvh-1rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] sm:max-h-[92dvh]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-[rgba(251,243,222,0.08)]">
@@ -133,7 +133,7 @@ export function StandingsShareButton({ input, showToast }: StandingsShareButtonP
                   <img
                     src={selected.dataUrl}
                     alt={`Classifica ${input.categoryName} ${input.season}`}
-                    className="mx-auto aspect-[9/16] max-h-[62dvh] w-auto max-w-full object-contain rounded-lg border border-[rgba(251,243,222,0.10)] bg-[#06140B]"
+                    className="mx-auto aspect-[9/16] max-h-[48dvh] w-auto max-w-full object-contain rounded-lg border border-[rgba(251,243,222,0.10)] bg-[#06140B] sm:max-h-[62dvh]"
                   />
 
                   {images.length > 1 && (

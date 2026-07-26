@@ -24,7 +24,7 @@ import { setActiveMatchday } from "../lib/championshipAdminApi";
 import { OperationalStandings } from "../components/OperationalStandings";
 import { resolveActiveMatchdayId } from "../lib/activeMatchday";
 import type { ChampionshipEdition, ChampionshipType, EditionTeam, Team, Matchday, Match, MatchStatus } from "../types";
-import { ArrowLeft, Plus, Clock, Ban, Trash2, X, Pencil } from "lucide-react";
+import { ArrowLeft, Plus, Clock, Ban, Trash2, X, Pencil, ChevronDown } from "lucide-react";
 
 const RESULT_OPTIONS: NonNullable<Match["result"]>[] = ["2-0", "2-1", "1-2", "0-2"];
 
@@ -201,18 +201,22 @@ export function GiornatePage() {
       )}
 
       {sortedMatchdays.length > 0 && (
-        <div className="mb-4 flex gap-2 overflow-x-auto pb-2" role="tablist" aria-label="Seleziona giornata">
-          {sortedMatchdays.map((day) => (
-            <button key={day.id} role="tab" aria-selected={selectedMatchdayId === day.id}
-              onClick={() => setSelectedMatchdayId(day.id)}
-              className={`shrink-0 rounded-lg px-3 py-2 text-xs font-bold ${
-                selectedMatchdayId === day.id
-                  ? "bg-[#BBFF5E] text-[#081208]"
-                  : "border border-[rgba(251,243,222,0.16)] text-[rgba(251,243,222,0.72)]"
-              }`}>
-              Giornata {day.number}
-            </button>
-          ))}
+        <div className="relative mb-4">
+          <label htmlFor="matchday-selector" className="mb-1.5 block text-[11px] font-bold uppercase text-[rgba(251,243,222,0.50)]">
+            Giornata visualizzata
+          </label>
+          <select
+            id="matchday-selector"
+            value={selectedMatchdayId ?? ""}
+            onChange={(event) => setSelectedMatchdayId(event.target.value)}
+            className="w-full appearance-none rounded-lg border border-[rgba(251,243,222,0.16)] bg-[#0A0B08] px-4 py-3 pr-12 text-sm font-bold text-[#FBF3DE]"
+          >
+            <option value="" disabled>Seleziona una giornata</option>
+            {sortedMatchdays.map((day) => (
+              <option key={day.id} value={day.id}>Giornata {day.number}</option>
+            ))}
+          </select>
+          <ChevronDown size={17} className="pointer-events-none absolute bottom-3.5 right-4 text-[#BBFF5E]" />
         </div>
       )}
 

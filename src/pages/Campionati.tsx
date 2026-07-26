@@ -604,8 +604,6 @@ function TeamStandings({
   isAdmin: boolean;
   showToast: (msg: string) => void;
 }) {
-  const { appUser } = useAuth();
-  const canShareAsResultManager = appUser?.role === "resultManager";
   const editionId = edition.id;
   const { data: editionTeams } = useCollection<EditionTeam>(
     "editionTeams",
@@ -723,7 +721,7 @@ function TeamStandings({
             <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.50)]">Nessuna squadra iscritta.</p>
           )}
         </div>
-        {canShareAsResultManager && (
+        {!isAdmin && (
           <div className="mt-3">
             <StandingsShareButton
               input={{ categoryName: championshipName, championshipLogoUrl, season: edition.season, kind: "team", rows: frozenShareRows }}
@@ -813,7 +811,7 @@ function TeamStandings({
         {rows.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.50)]">Nessuna squadra iscritta.</p>}
       </div>
 
-      {canShareAsResultManager && (
+      {!isAdmin && (
         <div className="mt-3">
           <StandingsShareButton
             input={{
@@ -1881,8 +1879,6 @@ function FemaleStandings({
   isAdmin: boolean;
   showToast: (msg: string) => void;
 }) {
-  const { appUser } = useAuth();
-  const canShareAsResultManager = appUser?.role === "resultManager";
   const editionId = edition.id;
   const { data: participants } = useCollection<FemaleParticipant>(
     "femaleParticipants",
@@ -1978,7 +1974,7 @@ function FemaleStandings({
             <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.50)]">Nessuna giocatrice ancora.</p>
           )}
         </div>
-        {canShareAsResultManager && (
+        {!isAdmin && (
           <div className="mt-3">
             <StandingsShareButton
               input={{ categoryName: championshipName, championshipLogoUrl, season: edition.season, kind: "female", rows: frozenShareRows }}
@@ -2053,7 +2049,7 @@ function FemaleStandings({
         {rows.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.50)]">Nessuna giocatrice ancora.</p>}
       </div>
 
-      {canShareAsResultManager && (
+      {!isAdmin && (
         <div className="mt-3">
           <StandingsShareButton
             input={{

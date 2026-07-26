@@ -105,15 +105,32 @@ function statusLabel(status: string): string {
   return "";
 }
 
-function loadCanvasImage(url?: string): Promise<HTMLImageElement | null> {
-  if (!url) return Promise.resolve(null);
+function loadImageElement(url: string, crossOrigin = false): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
     const image = new Image();
-    image.crossOrigin = "anonymous";
+    if (crossOrigin) image.crossOrigin = "anonymous";
     image.onload = () => resolve(image);
     image.onerror = () => resolve(null);
     image.src = url;
   });
+}
+
+async function loadCanvasImage(url?: string): Promise<HTMLImageElement | null> {
+  if (!url) return null;
+  if (url.startsWith("/") || url.startsWith(window.location.origin)) {
+    return loadImageElement(url);
+  }
+
+  try {
+    const response = await fetch(url, { mode: "cors", cache: "force-cache" });
+    if (!response.ok) return loadImageElement(url, true);
+    const objectUrl = URL.createObjectURL(await response.blob());
+    const image = await loadImageElement(objectUrl);
+    URL.revokeObjectURL(objectUrl);
+    return image;
+  } catch {
+    return loadImageElement(url, true);
+  }
 }
 
 function drawImageContain(
@@ -195,8 +212,8 @@ async function drawImagePage(input: StandingsShareInput, rows: StandingShareRow[
   if (pageCount > 1) {
     ctx.textAlign = "right";
     ctx.fillStyle = "rgba(251,243,222,0.62)";
-    ctx.font = `700 25px ${font}`;
-    ctx.fillText(`CLASSIFICA - ${page} DI ${pageCount}`, width - 100, 210);
+    ctx.font = `700 20px ${font}`;
+    ctx.fillText(`PAGINA ${page} DI ${pageCount}`, width - 100, 414);
     ctx.textAlign = "left";
   }
 
