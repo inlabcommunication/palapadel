@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   buildStandingsShareFilename,
+  buildStandingsShareCacheKey,
   paginateStandingRows,
   sanitizeFilenamePart,
   STANDINGS_SHARE_MAX_ROWS_PER_IMAGE,
@@ -38,4 +39,22 @@ test("buildStandingsShareFilename normalizza categoria, stagione e suffisso pagi
   assert.equal(sanitizeFilenamePart("Femminile elite"), "femminile-elite");
   assert.equal(buildStandingsShareFilename(input), "palapadel-classifica-serie-c-principianti-2025-2026.png");
   assert.equal(buildStandingsShareFilename(input, 2, 3), "palapadel-classifica-serie-c-principianti-2025-2026-pagina-2.png");
+});
+
+test("la cache della classifica cambia con campionato, logo e righe", () => {
+  const base = {
+    categoryName: "Serie B",
+    season: "2026",
+    kind: "team" as const,
+    championshipLogoUrl: "https://example.test/serie-b.png",
+    rows: [{ position: 1, name: "Team A", points: 10, played: 4, status: "normale" }],
+  };
+  assert.notEqual(
+    buildStandingsShareCacheKey(base),
+    buildStandingsShareCacheKey({ ...base, categoryName: "Serie C", championshipLogoUrl: "https://example.test/serie-c.png" })
+  );
+  assert.notEqual(
+    buildStandingsShareCacheKey(base),
+    buildStandingsShareCacheKey({ ...base, rows: [{ ...base.rows[0], points: 12 }] })
+  );
 });

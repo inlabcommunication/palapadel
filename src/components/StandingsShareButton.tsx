@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Download, Images, Share2, X } from "lucide-react";
 import {
   generateStandingsShareImages,
+  buildStandingsShareCacheKey,
   type GeneratedStandingsShareImage,
   type StandingsShareInput,
 } from "../lib/standingsShareImage";
@@ -29,6 +30,13 @@ export function StandingsShareButton({ input, showToast }: StandingsShareButtonP
   const [images, setImages] = useState<GeneratedStandingsShareImage[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const selected = images[selectedIndex];
+  const inputCacheKey = useMemo(() => buildStandingsShareCacheKey(input), [input]);
+
+  useEffect(() => {
+    setOpen(false);
+    setImages([]);
+    setSelectedIndex(0);
+  }, [inputCacheKey]);
 
   const openPreview = async () => {
     setOpen(true);

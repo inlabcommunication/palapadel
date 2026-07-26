@@ -14,6 +14,13 @@ const schema = z.discriminatedUnion("operation", [
   z.object({ operation: z.literal("create"), teamId: documentId, ...teamFields }).strict(),
   z.object({ operation: z.literal("update"), teamId: documentId, ...teamFields }).strict(),
   z.object({ operation: z.literal("delete"), teamId: documentId }).strict(),
+  z.object({
+    operation: z.literal("import"),
+    teams: z.array(z.object({
+      name: z.string().trim().min(1).max(150),
+      roster: z.array(z.string().trim().min(1).max(150)).min(2).max(6),
+    }).strict()).min(1).max(200),
+  }).strict(),
 ]);
 
 export default async function handler(req, res) {
@@ -23,8 +30,45 @@ export default async function handler(req, res) {
     const caller = await verifyCaller(app, req, ["superAdmin"]);
     const input = parseBody(schema, req.body);
     const db = admin.firestore(app);
-    const ref = db.doc(`teams/${input.teamId}`);
     const timestamp = new Date().toISOString();
+
+    if (input.operation === "import") {
+      await db.runTransaction(async (transaction) => {
+        const existingSnap = await transaction.get(db.collection("teams"));
+        const existingNames = new Set(existingSnap.docs.map((doc) => normalizeTeamName(doc.data().name)));
+        const importedNames = new Set();
+        for (const team of input.teams) {
+          const key = normalizeTeamName(team.name);
+          if (existingNames.has(key)) throw new HttpError(409, `La squadra "${team.name}" esiste gia`);
+          if (importedNames.has(key)) throw new HttpError(409, `La squadra "${team.name}" e duplicata nel file`);
+          importedNames.add(key);
+        }
+
+        for (const team of input.teams) {
+          const ref = db.collection("teams").doc();
+          transaction.set(ref, {
+            id: ref.id,
+            name: team.name,
+            roster: team.roster,
+            updatedAt: timestamp,
+            updatedBy: caller.uid,
+          });
+        }
+        transaction.set(db.collection("auditLog").doc(), {
+          actor: caller.uid,
+          action: "teams_imported",
+          entity: "teams",
+          detail: JSON.stringify({ role: caller.role, count: input.teams.length }),
+          before: null,
+          after: { count: input.teams.length, names: input.teams.map((team) => team.name) },
+          timestamp,
+        });
+      });
+      res.status(200).json({ ok: true, imported: input.teams.length });
+      return;
+    }
+
+    const ref = db.doc(`teams/${input.teamId}`);
     let deletedPhoto = null;
 
     await db.runTransaction(async (transaction) => {
@@ -84,6 +128,15 @@ export default async function handler(req, res) {
   } catch (err) {
     sendError(res, err, "Errore durante la gestione della squadra");
   }
+}
+
+function normalizeTeamName(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
 function storagePathFromUrl(value) {

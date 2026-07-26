@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { FileSpreadsheet, Upload, X } from "lucide-react";
 import { useCollection } from "../hooks/useCollection";
 import { confirmDelete } from "../lib/confirmDelete";
 import { ImageUploadField } from "./ImageUploadField";
 import { uploadTeamPhotoAsset, deleteTeamPhotoByPath, TeamPhotoError } from "../lib/teamPhotoUpload";
 import type { ChampionshipType, Team } from "../types";
 import { BADGE_COLORS } from "../types";
-import { deleteTeam, saveTeam } from "../lib/teamAdminApi";
+import { deleteTeam, importTeams, saveTeam } from "../lib/teamAdminApi";
 import { BackendApiError } from "../lib/backendClient";
+import { parseTeamImportFile, type ImportedTeamRow } from "../lib/teamImportParser";
 import {
   createChampionshipType,
   deleteChampionshipType,
@@ -269,6 +270,7 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [showImport, setShowImport] = useState(false);
 
   const roster = rosterText
     .split(",")
@@ -399,6 +401,22 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
           )
         )}
       </div>
+      <button
+        type="button"
+        onClick={() => setShowImport(true)}
+        className="mb-3 inline-flex items-center gap-2 rounded-lg border border-[rgba(251,243,222,0.18)] px-3 py-2.5 text-sm font-bold text-[#BBFF5E]"
+      >
+        <FileSpreadsheet size={16} /> Importa squadre da Excel
+      </button>
+      {showImport && (
+        <TeamExcelImportDialog
+          onClose={() => setShowImport(false)}
+          onDone={(message) => {
+            setShowImport(false);
+            onDone(message);
+          }}
+        />
+      )}
       <input
         placeholder="Nome squadra"
         value={name}
@@ -436,6 +454,152 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
       >
         {creating ? "Creazione in corso..." : "Crea squadra"}
       </button>
+    </div>
+  );
+}
+
+function TeamExcelImportDialog({
+  onClose,
+  onDone,
+}: {
+  onClose: () => void;
+  onDone: (message: string) => void;
+}) {
+  const [fileName, setFileName] = useState("");
+  const [rows, setRows] = useState<ImportedTeamRow[]>([]);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [reading, setReading] = useState(false);
+  const [importing, setImporting] = useState(false);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !reading && !importing) onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [importing, onClose, reading]);
+
+  const readFile = async (file: File | null) => {
+    if (!file) return;
+    setReading(true);
+    setFileName(file.name);
+    try {
+      const result = await parseTeamImportFile(file);
+      setRows(result.teams);
+      setErrors(result.errors);
+    } catch (error) {
+      console.error(error);
+      setRows([]);
+      setErrors(["Impossibile leggere il file Excel. Verifica che non sia danneggiato."]);
+    } finally {
+      setReading(false);
+    }
+  };
+
+  const confirmImport = async () => {
+    if (rows.length === 0 || errors.length > 0) return;
+    setImporting(true);
+    try {
+      const result = await importTeams(rows.map(({ name, roster }) => ({ name, roster })));
+      onDone(`${result.imported} squadre importate correttamente.`);
+    } catch (error) {
+      console.error(error);
+      const message = error instanceof Error ? error.message : "Importazione squadre non riuscita.";
+      setErrors([message]);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/75 p-3 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] sm:items-center sm:p-6"
+      onClick={() => {
+        if (!reading && !importing) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="team-import-title"
+        className="my-auto w-full max-w-3xl overflow-y-auto rounded-lg border border-[rgba(251,243,222,0.14)] bg-[#0A0B08] p-4 max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] sm:p-6"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h3 id="team-import-title" className="text-lg font-extrabold">Importa squadre da Excel</h3>
+            <p className="mt-1 text-xs text-[rgba(251,243,222,0.58)]">
+              Colonna A: Nome squadra. Colonne B-G: Giocatori 1-6. Ogni squadra deve avere almeno 2 giocatori.
+            </p>
+          </div>
+          <button type="button" onClick={onClose} disabled={reading || importing} aria-label="Chiudi importazione" className="rounded-full bg-[rgba(251,243,222,0.08)] p-2 disabled:opacity-50">
+            <X size={18} />
+          </button>
+        </div>
+
+        <label className="flex min-h-24 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-[rgba(251,243,222,0.22)] bg-[#123008] px-4 py-4 text-center">
+          <Upload size={22} className="text-[#BBFF5E]" />
+          <span className="text-sm font-bold">{reading ? "Lettura in corso..." : "Seleziona file Excel"}</span>
+          <span className="text-xs text-[rgba(251,243,222,0.55)]">{fileName || ".xlsx oppure .xls"}</span>
+          <input
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            disabled={reading || importing}
+            onChange={(event) => {
+              void readFile(event.target.files?.[0] ?? null);
+              event.currentTarget.value = "";
+            }}
+          />
+        </label>
+
+        {errors.length > 0 && (
+          <div className="mt-4 rounded-lg border border-[rgba(255,107,107,0.35)] bg-[rgba(255,107,107,0.08)] p-3">
+            {errors.map((error) => <p key={error} className="text-xs font-semibold text-[#FF8B8B]">{error}</p>)}
+          </div>
+        )}
+
+        {rows.length > 0 && (
+          <div className="mt-4">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-sm font-bold">Anteprima</p>
+              <span className="text-xs text-[rgba(251,243,222,0.58)]">{rows.length} squadre</span>
+            </div>
+            <div className="max-h-72 overflow-y-auto rounded-lg border border-[rgba(251,243,222,0.12)]">
+              {rows.map((row) => (
+                <div key={`${row.rowNumber}-${row.name}`} className="border-b border-[rgba(251,243,222,0.08)] px-3 py-3 last:border-b-0">
+                  <div className="flex items-start gap-3">
+                    <span className="w-8 shrink-0 text-[11px] text-[rgba(251,243,222,0.45)]">R{row.rowNumber}</span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold">{row.name}</p>
+                      <p className="mt-1 text-xs text-[rgba(251,243,222,0.62)]">{row.roster.join(", ")}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-4 flex gap-2">
+          <button
+            type="button"
+            onClick={confirmImport}
+            disabled={reading || importing || rows.length === 0 || errors.length > 0}
+            className="flex-1 rounded-lg bg-lime py-2.5 text-sm font-bold text-[#081208] disabled:opacity-40"
+          >
+            {importing ? "Importazione..." : `Importa ${rows.length || ""} squadre`}
+          </button>
+          <button type="button" onClick={onClose} disabled={reading || importing} className="flex-1 rounded-lg border border-[rgba(251,243,222,0.18)] py-2.5 text-sm font-semibold disabled:opacity-50">
+            Annulla
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

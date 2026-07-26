@@ -16,3 +16,7 @@ export function saveTeam(input: {
 export function deleteTeam(teamId: string) {
   return postToBackend<{ ok: true }>("/api/admin/team", { operation: "delete", teamId });
 }
+
+export function importTeams(teams: { name: string; roster: string[] }[]) {
+  return postToBackend<{ ok: true; imported: number }>("/api/admin/team", { operation: "import", teams });
+}

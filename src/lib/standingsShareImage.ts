@@ -29,6 +29,23 @@ export const STANDINGS_SHARE_WIDTH = 1080;
 export const STANDINGS_SHARE_HEIGHT = 1920;
 export const STANDINGS_SHARE_MAX_ROWS_PER_IMAGE = 14;
 
+export function buildStandingsShareCacheKey(input: StandingsShareInput): string {
+  return JSON.stringify({
+    categoryName: input.categoryName,
+    season: input.season,
+    kind: input.kind,
+    championshipLogoUrl: input.championshipLogoUrl ?? "",
+    rows: input.rows.map((row) => ({
+      position: row.position,
+      name: row.name,
+      points: row.points,
+      played: row.played ?? null,
+      stages: row.stages ?? null,
+      status: row.status,
+    })),
+  });
+}
+
 export function paginateStandingRows<T>(rows: T[], maxRows = STANDINGS_SHARE_MAX_ROWS_PER_IMAGE): T[][] {
   if (maxRows < 1) throw new Error("maxRows must be greater than zero");
   if (rows.length === 0) return [[]];
