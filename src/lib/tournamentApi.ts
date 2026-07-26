@@ -7,6 +7,10 @@ export const createTournament = (input: Pick<Tournament, "name" | "season" | "st
 export const updateTournament = (tournamentId: string, input: Pick<Tournament, "name" | "season" | "status" | "bracketMode" | "isPubliclyVisible">) =>
   call({ operation: "updateTournament", tournamentId, ...input });
 export const deleteTournament = (tournamentId: string) => call({ operation: "deleteTournament", tournamentId });
+export const setTournamentLogo = (tournamentId: string, logoUrl: string, logoStoragePath: string, logoAlt: string) =>
+  call({ operation: "setTournamentLogo", tournamentId, logoUrl, logoStoragePath, logoAlt });
+export const removeTournamentLogo = (tournamentId: string) =>
+  call({ operation: "removeTournamentLogo", tournamentId });
 export const createTournamentGroup = (tournamentId: string, name: string, order: number) =>
   call<{ ok: true; id: string }>({ operation: "createGroup", tournamentId, name, order });
 export const updateTournamentGroup = (tournamentId: string, groupId: string, name: string, order: number) =>

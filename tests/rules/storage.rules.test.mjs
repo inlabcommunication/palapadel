@@ -143,6 +143,16 @@ test("i loghi campionato sono pubblici ma li carica solo il superAdmin", async (
   await assertSucceeds(anon.storage().ref(editionPath).getDownloadURL());
 });
 
+test("i loghi torneo sono pubblici ma li gestisce solo il superAdmin", async () => {
+  const admin = testEnv.authenticatedContext("admin-uid");
+  const superAdmin = testEnv.authenticatedContext("superadmin-uid");
+  const anon = testEnv.unauthenticatedContext();
+  const path = "tournaments/open-2026/logo/logo.webp";
+  await assertFails(admin.storage().ref(path).put(TINY_JPEG, { contentType: "image/webp" }));
+  await assertSucceeds(superAdmin.storage().ref(path).put(TINY_JPEG, { contentType: "image/webp" }));
+  await assertSucceeds(anon.storage().ref(path).getDownloadURL());
+});
+
 test("resultManager, anonimo e admin disabled NON possono caricare immagini news", async () => {
   const gestore = testEnv.authenticatedContext("gestore-uid");
   const anon = testEnv.unauthenticatedContext();

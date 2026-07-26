@@ -1,5 +1,6 @@
 export const TOURNAMENT_STRUCTURE_OPERATIONS = Object.freeze(new Set([
   "createTournament", "updateTournament", "deleteTournament",
+  "setTournamentLogo", "removeTournamentLogo",
   "createGroup", "updateGroup", "deleteGroup", "addGroupTeam", "removeGroupTeam",
   "createRound", "updateRound", "deleteRound", "createMatch", "deleteMatch",
 ]));

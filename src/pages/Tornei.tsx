@@ -23,6 +23,8 @@ import {
   deleteTournamentMatch,
   deleteTournamentRound,
   removeTournamentGroupTeam,
+  removeTournamentLogo,
+  setTournamentLogo,
   tournamentBracketModeOptions,
   tournamentStatusOptions,
   updateTournament,
@@ -32,6 +34,8 @@ import {
 } from "../lib/tournamentApi";
 import { confirmDelete } from "../lib/confirmDelete";
 import { compareTournamentGroupEntries, filterTournamentTeamsInGroups, getTournamentBracketKeys } from "../../shared/tournamentModel.js";
+import { ImageUploadField } from "../components/ImageUploadField";
+import { deleteTournamentLogo, uploadTournamentLogo } from "../lib/tournamentLogoUpload";
 
 export function TorneiPage() {
   const { appUser } = useAuth();
@@ -78,9 +82,14 @@ export function TorneiPage() {
         {tournaments.map((tournament) => (
           <button key={tournament.id} onClick={() => setSelectedId(tournament.id)} className="border-l-4 border-[#BBFF5E] bg-[#0A0B08] p-4 text-left">
             <div className="flex items-start justify-between gap-3">
-              <div>
+              <div className="flex min-w-0 items-center gap-3">
+                {tournament.logoUrl && (
+                  <img src={tournament.logoUrl} alt={tournament.logoAlt ?? `Logo ${tournament.name}`} className="h-12 w-12 shrink-0 rounded-lg border border-[rgba(251,243,222,0.12)] bg-[#FBF3DE] object-contain p-1" />
+                )}
+                <div className="min-w-0">
                 <p className="font-display text-2xl text-[#FBF3DE]">{tournament.name}</p>
                 <p className="text-sm text-[rgba(251,243,222,0.62)]">{tournament.season}</p>
+                </div>
               </div>
               <StatusBadge value={tournament.status} />
             </div>
@@ -138,6 +147,11 @@ function TournamentDetail({ tournament, isSuperAdmin, isOperator, onBack, notify
             </div>
           )}
         </div>
+        {tournament.logoUrl && (
+          <div className="mt-5 flex justify-center">
+            <img src={tournament.logoUrl} alt={tournament.logoAlt ?? `Logo ${tournament.name}`} className="h-40 w-40 rounded-2xl border border-[rgba(251,243,222,0.14)] bg-[#FBF3DE] object-contain p-3 shadow-lg sm:h-48 sm:w-48" />
+          </div>
+        )}
       </div>
       {editing && <TournamentForm tournament={tournament} onCancel={() => setEditing(false)} onDone={() => { setEditing(false); notify("Torneo aggiornato."); }} />}
       <div className="mb-5 grid grid-cols-2 bg-[#0A0B08] p-1">
@@ -404,13 +418,45 @@ function TournamentForm({ tournament, onCancel, onDone }: { tournament?: Tournam
   const [bracketMode, setBracketMode] = useState<Tournament["bracketMode"]>(tournament?.bracketMode ?? "unico");
   const [visible, setVisible] = useState(tournament?.isPubliclyVisible ?? false);
   const [error, setError] = useState("");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [removeLogo, setRemoveLogo] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const [createdTournamentId, setCreatedTournamentId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const save = async () => {
+    setSaving(true);
+    setError("");
+    setLogoError(null);
+    let uploadedLogo: Awaited<ReturnType<typeof uploadTournamentLogo>> | null = null;
     try {
       const payload = { name: name.trim(), season: season.trim(), status, bracketMode, isPubliclyVisible: visible };
-      if (tournament) { await updateTournament(tournament.id, payload); onDone(); } else { const response = await createTournament(payload); onDone(response.id); }
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Salvataggio non riuscito."); }
+      let targetId = tournament?.id ?? createdTournamentId;
+      if (targetId) {
+        await updateTournament(targetId, payload);
+      } else {
+        const response = await createTournament(payload);
+        targetId = response.id;
+        setCreatedTournamentId(targetId);
+      }
+      if (logoFile) {
+        uploadedLogo = await uploadTournamentLogo(targetId, logoFile);
+        await setTournamentLogo(targetId, uploadedLogo.url, uploadedLogo.storagePath, `Logo ${name.trim()}`);
+      } else if (removeLogo && tournament?.logoUrl) {
+        await removeTournamentLogo(targetId);
+      }
+      const previousLogo = tournament?.logoStoragePath ?? tournament?.logoUrl;
+      if ((uploadedLogo || removeLogo) && previousLogo) await deleteTournamentLogo(previousLogo);
+      onDone(targetId);
+    } catch (caught) {
+      if (uploadedLogo) await deleteTournamentLogo(uploadedLogo.storagePath);
+      const message = caught instanceof Error ? caught.message : "Salvataggio non riuscito.";
+      setError(message);
+      setLogoError(message);
+    } finally {
+      setSaving(false);
+    }
   };
-  return <div className="mb-5 border border-[#BBFF5E] bg-[#0A0B08] p-4"><div className="mb-3 flex items-center justify-between"><h3 className="font-display text-2xl">{tournament ? "Modifica torneo" : "Nuovo torneo"}</h3><button onClick={onCancel}><X size={18} /></button></div><div className="grid gap-2 md:grid-cols-2"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome torneo" className="rounded-lg border border-[rgba(251,243,222,0.16)] px-3 py-2.5" /><input value={season} onChange={(e) => setSeason(e.target.value)} placeholder="Stagione o data" className="rounded-lg border border-[rgba(251,243,222,0.16)] px-3 py-2.5" /><select value={bracketMode} onChange={(e) => setBracketMode(e.target.value as Tournament["bracketMode"])} className="rounded-lg border border-[rgba(251,243,222,0.16)] bg-[#081208] px-3 py-2.5">{tournamentBracketModeOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select><select value={status} onChange={(e) => setStatus(e.target.value as Tournament["status"])} className="rounded-lg border border-[rgba(251,243,222,0.16)] bg-[#081208] px-3 py-2.5">{tournamentStatusOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div><label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={visible} onChange={(e) => setVisible(e.target.checked)} /> Visibile agli utenti</label>{error && <p className="mt-3 text-sm font-bold text-[#FF6B6B]">{error}</p>}<button onClick={save} disabled={!name.trim() || !season.trim()} className="mt-4 w-full rounded-lg bg-[#BBFF5E] py-2.5 font-bold text-[#081208] disabled:opacity-40">Salva torneo</button></div>;
+  return <div className="mb-5 border border-[#BBFF5E] bg-[#0A0B08] p-4"><div className="mb-3 flex items-center justify-between"><h3 className="font-display text-2xl">{tournament ? "Modifica torneo" : "Nuovo torneo"}</h3><button onClick={onCancel}><X size={18} /></button></div><div className="grid gap-2 md:grid-cols-2"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome torneo" className="rounded-lg border border-[rgba(251,243,222,0.16)] px-3 py-2.5" /><input value={season} onChange={(e) => setSeason(e.target.value)} placeholder="Stagione o data" className="rounded-lg border border-[rgba(251,243,222,0.16)] px-3 py-2.5" /><select value={bracketMode} onChange={(e) => setBracketMode(e.target.value as Tournament["bracketMode"])} className="rounded-lg border border-[rgba(251,243,222,0.16)] bg-[#081208] px-3 py-2.5">{tournamentBracketModeOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select><select value={status} onChange={(e) => setStatus(e.target.value as Tournament["status"])} className="rounded-lg border border-[rgba(251,243,222,0.16)] bg-[#081208] px-3 py-2.5">{tournamentStatusOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div><label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={visible} onChange={(e) => setVisible(e.target.checked)} /> Visibile agli utenti</label><div className="mt-4"><ImageUploadField label="Logo del torneo" currentUrl={removeLogo ? null : tournament?.logoUrl} currentAlt={tournament?.logoAlt ?? `Logo ${name}`} selectedFile={logoFile} loading={saving} error={logoError} uploadLabel="Aggiungi logo" replaceLabel="Sostituisci logo" removeLabel="Elimina logo" aspectClass="aspect-square" onFileChange={(file) => { setLogoFile(file); setRemoveLogo(false); setLogoError(null); }} onRemoveImage={() => { if (tournament?.logoUrl && !confirmDelete(`il logo di ${tournament.name}`)) return; setLogoFile(null); setRemoveLogo(true); }} /></div>{error && <p className="mt-3 text-sm font-bold text-[#FF6B6B]">{error}</p>}<button onClick={save} disabled={saving || !name.trim() || !season.trim()} className="mt-4 w-full rounded-lg bg-[#BBFF5E] py-2.5 font-bold text-[#081208] disabled:opacity-40">{saving ? "Salvataggio..." : "Salva torneo"}</button></div>;
 }
 
 function StatusBadge({ value }: { value: Tournament["status"] }) {

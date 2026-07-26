@@ -249,6 +249,9 @@ export interface Tournament {
   bracketMode: TournamentBracketMode;
   isPubliclyVisible: boolean;
   createdAt: string;
+  logoUrl?: string;
+  logoStoragePath?: string;
+  logoAlt?: string;
 }
 
 export interface TournamentGroup {

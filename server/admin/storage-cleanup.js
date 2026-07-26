@@ -3,7 +3,7 @@ import { HttpError, requirePost, sendError, verifyCaller } from "../_lib/auth.js
 import { parseBody, z } from "../_lib/validation.js";
 
 const storagePath = z.string().trim().min(3).max(1000).refine(
-  (path) => path.startsWith("home-news/") || path.startsWith("teams/") || path.startsWith("championship-types/"),
+  (path) => path.startsWith("home-news/") || path.startsWith("teams/") || path.startsWith("championship-types/") || path.startsWith("tournaments/"),
   "Percorso Storage non consentito"
 );
 const schema = z.discriminatedUnion("operation", [
@@ -29,23 +29,26 @@ export default async function handler(req, res) {
     }
 
     if (input.operation === "scan") {
-      const [newsSnap, teamsSnap, typesSnap, filesResult] = await Promise.all([
+      const [newsSnap, teamsSnap, typesSnap, tournamentsSnap, filesResult] = await Promise.all([
         db.collection("homeNews").get(),
         db.collection("teams").get(),
         db.collection("championshipTypes").get(),
+        db.collection("tournaments").get(),
         bucket.getFiles(),
       ]);
       const referenced = new Set([
         ...newsSnap.docs.map((doc) => doc.data().imageStoragePath).filter(Boolean),
         ...teamsSnap.docs.map((doc) => doc.data().teamPhotoStoragePath).filter(Boolean),
         ...typesSnap.docs.map((doc) => doc.data().logoStoragePath).filter(Boolean),
+        ...tournamentsSnap.docs.map((doc) => doc.data().logoStoragePath).filter(Boolean),
       ]);
       const orphanPaths = filesResult[0]
         .map((file) => file.name)
         .filter((path) => (
           path.startsWith("home-news/") ||
           path.startsWith("teams/") ||
-          path.startsWith("championship-types/")
+          path.startsWith("championship-types/") ||
+          path.startsWith("tournaments/")
         ) && !referenced.has(path));
       for (const path of orphanPaths.slice(0, 400)) {
         await enqueue(db, path, "File orfano rilevato dalla scansione periodica", caller.uid, timestamp);

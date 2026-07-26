@@ -20,6 +20,8 @@ const schema = z.discriminatedUnion("operation", [
   z.object({ operation: z.literal("createTournament"), name: z.string().trim().min(1).max(120), season: z.string().trim().min(1).max(40), bracketMode: z.enum(["unico", "gold_silver"]), status, isPubliclyVisible: z.boolean() }).strict(),
   z.object({ operation: z.literal("updateTournament"), tournamentId: documentId, name: z.string().trim().min(1).max(120), season: z.string().trim().min(1).max(40), bracketMode: z.enum(["unico", "gold_silver"]), status, isPubliclyVisible: z.boolean() }).strict(),
   z.object({ operation: z.literal("deleteTournament"), tournamentId: documentId }).strict(),
+  z.object({ operation: z.literal("setTournamentLogo"), tournamentId: documentId, logoUrl: z.string().url().max(2000), logoStoragePath: z.string().trim().min(3).max(1000), logoAlt: z.string().trim().min(1).max(200) }).strict(),
+  z.object({ operation: z.literal("removeTournamentLogo"), tournamentId: documentId }).strict(),
   z.object({ operation: z.literal("createGroup"), tournamentId: documentId, name: z.string().trim().min(1).max(80), order: z.number().int().min(0) }).strict(),
   z.object({ operation: z.literal("updateGroup"), tournamentId: documentId, groupId: documentId, name: z.string().trim().min(1).max(80), order: z.number().int().min(0) }).strict(),
   z.object({ operation: z.literal("deleteGroup"), tournamentId: documentId, groupId: documentId }).strict(),
@@ -101,11 +103,36 @@ export default async function handler(req, res) {
         before = tournamentSnap.data();
         after = { ...before, name: input.name, season: input.season, bracketMode: input.bracketMode, status: input.status, isPubliclyVisible: input.isPubliclyVisible };
         transaction.update(tournamentRef, after);
+      } else if (input.operation === "setTournamentLogo" || input.operation === "removeTournamentLogo") {
+        before = tournamentSnap.data();
+        if (input.operation === "setTournamentLogo") {
+          const expectedPrefix = `tournaments/${input.tournamentId}/logo/`;
+          if (!input.logoStoragePath.startsWith(expectedPrefix)) throw new HttpError(400, "Percorso del logo non valido");
+          after = { ...before, logoUrl: input.logoUrl, logoStoragePath: input.logoStoragePath, logoAlt: input.logoAlt };
+          transaction.update(tournamentRef, { logoUrl: input.logoUrl, logoStoragePath: input.logoStoragePath, logoAlt: input.logoAlt });
+        } else {
+          after = { ...before, logoUrl: null, logoStoragePath: null, logoAlt: null };
+          transaction.update(tournamentRef, {
+            logoUrl: admin.firestore.FieldValue.delete(),
+            logoStoragePath: admin.firestore.FieldValue.delete(),
+            logoAlt: admin.firestore.FieldValue.delete(),
+          });
+        }
       } else if (input.operation === "deleteTournament") {
         before = tournamentSnap.data();
         const collections = ["tournamentGroups", "tournamentTeams", "tournamentGroupTeams", "tournamentBracketRounds", "tournamentBracketMatches"];
         const snapshots = await Promise.all(collections.map((name) => transaction.get(db.collection(name).where("tournamentId", "==", input.tournamentId))));
         snapshots.forEach((snapshot) => snapshot.docs.forEach((doc) => transaction.delete(doc.ref)));
+        if (before.logoStoragePath) {
+          transaction.set(db.collection("storageCleanupQueue").doc(), {
+            storagePath: before.logoStoragePath,
+            reason: "Logo di un torneo eliminato",
+            status: "pending",
+            attempts: 0,
+            createdAt: new Date().toISOString(),
+            createdBy: caller.uid,
+          });
+        }
         transaction.delete(tournamentRef);
       } else if (input.operation === "createGroup") {
         const ref = db.collection("tournamentGroups").doc();

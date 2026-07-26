@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { canPerformTournamentOperation } from "../shared/tournamentPermissions.js";
 
 test("il Super Admin gestisce tutta la struttura del torneo", () => {
-  for (const operation of ["createTournament", "createGroup", "addGroupTeam", "createRound", "createMatch", "updateMatch", "deleteTournament"]) {
+  for (const operation of ["createTournament", "setTournamentLogo", "removeTournamentLogo", "createGroup", "addGroupTeam", "createRound", "createMatch", "updateMatch", "deleteTournament"]) {
     assert.equal(canPerformTournamentOperation("superAdmin", operation), true);
   }
 });
@@ -11,7 +11,7 @@ test("il Super Admin gestisce tutta la struttura del torneo", () => {
 test("l'Admin aggiorna gironi e incontri ma non crea la struttura", () => {
   assert.equal(canPerformTournamentOperation("admin", "updateGroupTeam"), true);
   assert.equal(canPerformTournamentOperation("admin", "updateMatch"), true);
-  for (const operation of ["createTournament", "updateTournament", "createGroup", "addGroupTeam", "createRound", "createMatch", "deleteMatch"]) {
+  for (const operation of ["createTournament", "updateTournament", "setTournamentLogo", "removeTournamentLogo", "createGroup", "addGroupTeam", "createRound", "createMatch", "deleteMatch"]) {
     assert.equal(canPerformTournamentOperation("admin", operation), false);
   }
 });

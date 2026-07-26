@@ -65,6 +65,12 @@ service firebase.storage {
       allow delete: if isSuperAdmin();
     }
 
+    match /tournaments/{tournamentId}/logo/{fileName} {
+      allow read: if true;
+      allow create, update: if isSuperAdmin() && isValidImage() && isUnderSizeLimit();
+      allow delete: if isSuperAdmin();
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }
