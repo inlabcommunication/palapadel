@@ -14,6 +14,7 @@ export interface SaveHomeNewsInput {
   date?: string;
   imageUrl?: string;
   imageStoragePath?: string;
+  imagePositionY?: number;
   imageAlt?: string | null;
 }
 

@@ -32,6 +32,7 @@ export interface ChampionshipType {
   logoUrl?: string;
   logoStoragePath?: string;
   logoAlt?: string;
+  displayOrder?: number;
 }
 
 /** championshipEditions/{id} */
@@ -92,6 +93,7 @@ export interface Team {
   teamPhotoUrl?: string;
   /** Percorso Firebase Storage della foto, usato per sostituzione/eliminazione coerente. */
   teamPhotoStoragePath?: string;
+  teamPhotoPositionY?: number;
   roster: string[]; // 2-6 nomi
   /** Se presente, limita la squadra alle tipologie indicate; assente significa compatibile con tutte. */
   compatibleTypeIds?: string[];
@@ -222,6 +224,7 @@ export interface HomeNews {
   imageUrl?: string;
   imageStoragePath?: string;
   imageAlt?: string;
+  imagePositionY?: number;
   category?: string;
   status: ContentStatus;
   isActive?: boolean;

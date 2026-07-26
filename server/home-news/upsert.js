@@ -10,6 +10,7 @@ const content = {
   imageUrl: z.string().url().max(2000).optional(),
   imageStoragePath: z.string().trim().max(1000).optional(),
   imageAlt: z.union([z.string().trim().max(300), z.null()]).optional(),
+  imagePositionY: z.number().min(0).max(100).optional(),
 };
 const schema = z.discriminatedUnion("operation", [
   z.object({ operation: z.literal("create"), newsId: documentId, date: z.string().datetime().optional(), ...content }).strict(),
@@ -59,6 +60,7 @@ export default async function handler(req, res) {
               : before?.imageAlt
                 ? { imageAlt: before.imageAlt }
                 : {}),
+          ...(input.imagePositionY !== undefined ? { imagePositionY: input.imagePositionY } : {}),
           updatedAt: timestamp,
           updatedBy: caller.uid,
         };

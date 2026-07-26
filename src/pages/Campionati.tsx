@@ -34,9 +34,10 @@ import { BracketSection } from "../components/BracketSection";
 import { StandingsShareButton } from "../components/StandingsShareButton";
 import { parsePastedTable } from "../lib/parsePastedTable";
 import { resolveActiveMatchdayId } from "../lib/activeMatchday";
-import { closeEdition, reorderChampionships, setChampionshipVisibility } from "../lib/championshipAdminApi";
+import { closeEdition, reorderChampionshipTypes, setChampionshipVisibility } from "../lib/championshipAdminApi";
 import { createChampionshipEdition, deleteChampionshipEdition, updateChampionshipEdition } from "../lib/championshipApi";
 import { createFemaleParticipant, deleteFemaleParticipant, recalculateFemaleParticipants, updateFemaleParticipant } from "../lib/femaleParticipantApi";
+import { sortChampionshipTypes } from "../lib/championshipOrder";
 
 
 function statusLabel(status: EditionStatus) {
@@ -107,7 +108,8 @@ export function CampionatiPage() {
   // L'edizione corrente dall'URL determina la tipologia selezionata, a meno che
   // l'utente non abbia appena cliccato un altro chip di tipologia (manualTypeId).
   const editionFromUrl = editionId ? editions.find((e) => e.id === editionId) : undefined;
-  const activeTypeId = manualTypeId ?? editionFromUrl?.typeId ?? types[0]?.id;
+  const orderedTypes = sortChampionshipTypes(types);
+  const activeTypeId = manualTypeId ?? editionFromUrl?.typeId ?? orderedTypes[0]?.id;
   const activeType = types.find((t) => t.id === activeTypeId);
 
   const editionsOfActiveType = activeTypeId ? editions.filter((e) => e.typeId === activeTypeId) : [];
@@ -141,15 +143,15 @@ export function CampionatiPage() {
     (a, b) => (a.displayOrder ?? Number.MAX_SAFE_INTEGER) - (b.displayOrder ?? Number.MAX_SAFE_INTEGER) || a.season.localeCompare(b.season)
   );
 
-  const moveEdition = async (id: string, direction: -1 | 1) => {
-    const index = orderedEditions.findIndex((item) => item.id === id);
+  const moveType = async (id: string, direction: -1 | 1) => {
+    const index = orderedTypes.findIndex((item) => item.id === id);
     const target = index + direction;
-    if (index < 0 || target < 0 || target >= orderedEditions.length) return;
-    const next = [...orderedEditions];
+    if (index < 0 || target < 0 || target >= orderedTypes.length) return;
+    const next = [...orderedTypes];
     [next[index], next[target]] = [next[target], next[index]];
     setOrdering(true);
     try {
-      await reorderChampionships(next.map((item) => item.id));
+      await reorderChampionshipTypes(next.map((item) => item.id));
       showToast("Ordine dei campionati aggiornato.");
     } catch (err) {
       console.error(err);
@@ -234,19 +236,29 @@ export function CampionatiPage() {
         <section className="mb-4 rounded-lg border border-[rgba(251,243,222,0.10)] bg-[#0A0B08] p-3">
           <h3 className="mb-2 text-xs font-extrabold uppercase text-[#FBF3DE]">Ordine e visibilità</h3>
           <div className="space-y-1">
-            {orderedEditions.map((item, index) => {
-              const type = types.find((candidate) => candidate.id === item.typeId);
+            {orderedTypes.map((item, index) => {
               return (
                 <div key={item.id} className="flex items-center gap-2 rounded-lg bg-[rgba(251,243,222,0.05)] px-2 py-2">
-                  <span className="min-w-0 flex-1 truncate text-xs font-semibold">{type?.name ?? "Campionato"} {item.season}</span>
-                  <button aria-label="Sposta campionato in alto" disabled={ordering || index === 0} onClick={() => moveEdition(item.id, -1)}
+                  <span className="min-w-0 flex-1 truncate text-xs font-semibold">{item.name}</span>
+                  <button aria-label="Sposta campionato in alto" disabled={ordering || index === 0} onClick={() => moveType(item.id, -1)}
                     className="rounded-md p-1.5 hover:bg-[rgba(251,243,222,0.08)] disabled:opacity-25"><ChevronUp size={15} /></button>
-                  <button aria-label="Sposta campionato in basso" disabled={ordering || index === orderedEditions.length - 1} onClick={() => moveEdition(item.id, 1)}
+                  <button aria-label="Sposta campionato in basso" disabled={ordering || index === orderedTypes.length - 1} onClick={() => moveType(item.id, 1)}
                     className="rounded-md p-1.5 hover:bg-[rgba(251,243,222,0.08)] disabled:opacity-25"><ChevronDown size={15} /></button>
-                  <button aria-label={item.isPubliclyVisible === false ? "Rendi visibile il campionato" : "Nascondi il campionato"}
-                    disabled={ordering} onClick={() => toggleVisibility(item)}
-                    className={`rounded-md p-1.5 ${item.isPubliclyVisible === false ? "text-[#FF9B6B]" : "text-[#BBFF5E]"}`}>
-                    {item.isPubliclyVisible === false ? <EyeOff size={15} /> : <Eye size={15} />}
+                </div>
+              );
+            })}
+          </div>
+          <h3 className="mb-2 mt-4 text-xs font-extrabold uppercase text-[#FBF3DE]">Visibilita delle edizioni</h3>
+          <div className="space-y-1">
+            {orderedEditions.map((editionItem) => {
+              const editionType = types.find((candidate) => candidate.id === editionItem.typeId);
+              return (
+                <div key={editionItem.id} className="flex items-center gap-2 rounded-lg bg-[rgba(251,243,222,0.05)] px-2 py-2">
+                  <span className="min-w-0 flex-1 truncate text-xs font-semibold">{editionType?.name ?? "Campionato"} {editionItem.season}</span>
+                  <button aria-label={editionItem.isPubliclyVisible === false ? "Rendi visibile il campionato" : "Nascondi il campionato"}
+                    disabled={ordering} onClick={() => toggleVisibility(editionItem)}
+                    className={`rounded-md p-1.5 ${editionItem.isPubliclyVisible === false ? "text-[#FF9B6B]" : "text-[#BBFF5E]"}`}>
+                    {editionItem.isPubliclyVisible === false ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
               );
@@ -257,7 +269,7 @@ export function CampionatiPage() {
 
       {/* Riga 1: una scheda per ogni tipologia di campionato (Serie B, Serie C, Principianti, Femminile...) */}
       <div className="flex gap-2 overflow-x-auto pb-2 mb-2">
-        {types.map((t) => {
+        {orderedTypes.map((t) => {
           const isSel = t.id === activeTypeId;
           return (
             <button
@@ -842,7 +854,6 @@ function TeamStandings({
               availableTeams={availableTeams}
               onDone={(msg) => {
                 showToast(msg);
-                setShowAdd(false);
               }}
               onCancel={() => setShowAdd(false)}
             />
@@ -1002,7 +1013,12 @@ function TeamProfileModal({
             Se manca, un placeholder sportivo con le iniziali (mai un logo/avatar quadrato). */}
         <div className="relative w-full aspect-video bg-[#123008]">
           {team?.teamPhotoUrl ? (
-            <img src={team.teamPhotoUrl} alt={team.name} className="w-full h-full object-cover" />
+            <img
+              src={team.teamPhotoUrl}
+              alt={team.name}
+              className="w-full h-full object-cover"
+              style={{ objectPosition: `50% ${team.teamPhotoPositionY ?? 50}%` }}
+            />
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center gap-1.5">
               <Trophy size={28} className="text-[rgba(187,255,94,0.35)]" />
@@ -1019,6 +1035,25 @@ function TeamProfileModal({
 
         <div className="p-4">
           <h3 className="text-[18px] font-extrabold leading-tight text-[#FBF3DE] mb-1">{team?.name ?? "Squadra"}</h3>
+
+          <p className="text-[11px] uppercase tracking-wider text-[rgba(251,243,222,0.58)] font-bold mb-1.5">Rosa</p>
+          {roster.length > 0 ? (
+            <div className="mb-4 flex flex-wrap gap-x-3 gap-y-1.5">
+              {roster.map((player, index) => (
+                <span
+                  key={`${player}-${index}`}
+                  className="text-[12px] font-semibold italic uppercase text-[#FBF3DE]"
+                >
+                  {player}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="mb-4 text-[12.5px] italic text-[rgba(251,243,222,0.58)]">
+              Nessun giocatore registrato.
+            </p>
+          )}
+
           <p className="text-[11px] uppercase tracking-wider text-[rgba(251,243,222,0.50)] font-bold mb-2">
             Statistiche {currentType?.name ?? "campionato"} {edition.season}
           </p>
@@ -1034,11 +1069,6 @@ function TeamProfileModal({
               </div>
             ))}
           </div>
-
-          <p className="text-[11px] uppercase tracking-wider text-[rgba(251,243,222,0.50)] font-bold mb-1">Rosa</p>
-          <p className="text-[13px] text-[rgba(251,243,222,0.85)] leading-snug mb-4">
-            {roster.length > 0 ? roster.join(", ") : "Nessun giocatore registrato."}
-          </p>
 
           <p className="text-[11px] uppercase tracking-wider text-[rgba(251,243,222,0.50)] font-bold mb-2">Titoli vinti</p>
           {wins.length === 0 ? (
@@ -1521,9 +1551,13 @@ function AddTeamToEdition({
 }) {
   const [mode, setMode] = useState<"existing" | "new">(availableTeams.length > 0 ? "existing" : "new");
   const [teamId, setTeamId] = useState(availableTeams[0]?.id ?? "");
+  const [teamSearch, setTeamSearch] = useState("");
   const [name, setName] = useState("");
   const [rosterText, setRosterText] = useState("");
   const [saving, setSaving] = useState(false);
+  const filteredTeams = availableTeams.filter((team) =>
+    team.name.toLocaleLowerCase("it").includes(teamSearch.trim().toLocaleLowerCase("it"))
+  );
 
   // Fase 2 — l'aggiunta di una squadra alla classifica passa dal backend
   // (api/standings/manage-entry.js), mai più un setDoc diretto su editionTeams.
@@ -1533,6 +1567,7 @@ function AddTeamToEdition({
       if (mode === "existing") {
         if (!teamId) return;
         await addEntryToStandings({ editionId, teamId });
+        setTeamId("");
         onDone("Squadra aggiunta alla classifica.");
       } else {
         const roster = rosterText.split(",").map((s) => s.trim()).filter(Boolean);
@@ -1554,7 +1589,7 @@ function AddTeamToEdition({
   };
 
   return (
-    <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
+    <div className="w-full bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-4 sm:p-5">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Aggiungi squadra</p>
         <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.50)]" /></button>
@@ -1577,15 +1612,32 @@ function AddTeamToEdition({
         availableTeams.length === 0 ? (
           <p className="text-[12.5px] text-[rgba(251,243,222,0.50)] mb-2">Tutte le squadre esistenti sono già iscritte. Creane una nuova.</p>
         ) : (
-          <select
-            value={teamId}
-            onChange={(e) => setTeamId(e.target.value)}
-            className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2"
-          >
-            {availableTeams.map((t) => (
-              <option key={t.id} value={t.id}>{t.name}</option>
-            ))}
-          </select>
+          <>
+            <input
+              type="search"
+              value={teamSearch}
+              onChange={(event) => setTeamSearch(event.target.value)}
+              placeholder="Cerca squadra per nome"
+              className="mb-3 w-full rounded-lg border border-[rgba(251,243,222,0.18)] px-3 py-2.5 text-sm"
+            />
+            <div className="mb-3 max-h-72 overflow-y-auto rounded-lg border border-[rgba(251,243,222,0.12)]">
+              {filteredTeams.map((team) => (
+                <button
+                  key={team.id}
+                  type="button"
+                  onClick={() => setTeamId(team.id)}
+                  className={`block w-full border-b border-[rgba(251,243,222,0.08)] px-3 py-3 text-left text-sm last:border-b-0 ${
+                    teamId === team.id ? "bg-[rgba(187,255,94,0.14)] text-[#BBFF5E]" : "hover:bg-[rgba(251,243,222,0.05)]"
+                  }`}
+                >
+                  {team.name}
+                </button>
+              ))}
+              {filteredTeams.length === 0 && (
+                <p className="p-4 text-sm text-[rgba(251,243,222,0.50)]">Nessuna squadra corrisponde alla ricerca.</p>
+              )}
+            </div>
+          </>
         )
       ) : (
         <>

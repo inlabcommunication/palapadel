@@ -6,6 +6,7 @@ import { useCollection } from "../hooks/useCollection";
 import type { ChampionshipEdition, ChampionshipType, Match, Matchday, Role } from "../types";
 import { BADGE_COLORS, ROLE_LABELS } from "../types";
 import { HomePage } from "./Home";
+import { sortEditionsByTypeOrder } from "../lib/championshipOrder";
 
 export function GestionePage() {
   const { appUser } = useAuth();
@@ -29,10 +30,9 @@ export function OperationalChampionshipsPage() {
     return <div className="p-4"><h2 className="font-bold">Campionati non disponibili</h2><p className="my-2 text-sm">{error.message}</p><button onClick={retry} className="text-sm font-bold text-[#BBFF5E]">Riprova</button></div>;
   }
 
-  const visible = [...editions]
+  const visible = sortEditionsByTypeOrder(editions, types)
     .filter((edition) => edition.isPubliclyVisible !== false)
-    .filter((edition) => types.find((type) => type.id === edition.typeId)?.hasTeams)
-    .sort((a, b) => (a.displayOrder ?? 9999) - (b.displayOrder ?? 9999));
+    .filter((edition) => types.find((type) => type.id === edition.typeId)?.hasTeams);
 
   return (
     <div className="p-4 pb-6">

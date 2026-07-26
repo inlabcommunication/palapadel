@@ -8,6 +8,10 @@ const schema = z.discriminatedUnion("operation", [
     orderedIds: z.array(documentId).min(1).max(200).refine((ids) => new Set(ids).size === ids.length, "ID duplicati"),
   }).strict(),
   z.object({
+    operation: z.literal("reorderTypes"),
+    orderedIds: z.array(documentId).min(1).max(100).refine((ids) => new Set(ids).size === ids.length, "ID duplicati"),
+  }).strict(),
+  z.object({
     operation: z.literal("visibility"),
     editionId: documentId,
     isPubliclyVisible: z.boolean(),
@@ -24,8 +28,9 @@ export default async function handler(req, res) {
     const timestamp = new Date().toISOString();
 
     await db.runTransaction(async (transaction) => {
-      if (input.operation === "reorder") {
-        const refs = input.orderedIds.map((id) => db.doc(`championshipEditions/${id}`));
+      if (input.operation === "reorder" || input.operation === "reorderTypes") {
+        const collectionName = input.operation === "reorderTypes" ? "championshipTypes" : "championshipEditions";
+        const refs = input.orderedIds.map((id) => db.doc(`${collectionName}/${id}`));
         const snapshots = await transaction.getAll(...refs);
         if (snapshots.some((snapshot) => !snapshot.exists)) throw new HttpError(404, "Uno o più campionati non esistono");
 
@@ -36,8 +41,8 @@ export default async function handler(req, res) {
         refs.forEach((ref, index) => transaction.update(ref, { displayOrder: index }));
         transaction.set(db.collection("auditLog").doc(), {
           actor: caller.uid,
-          action: "championships_reordered",
-          entity: "championshipEditions",
+          action: input.operation === "reorderTypes" ? "championship_types_reordered" : "championships_reordered",
+          entity: collectionName,
           detail: JSON.stringify({ role: caller.role }),
           before,
           after: input.orderedIds.map((id, displayOrder) => ({ id, displayOrder })),

@@ -136,7 +136,7 @@ export function GiornatePage() {
       showToast(`${nextNumber}ª giornata creata.`);
     } catch (err) {
       console.error(err);
-      showToast("Errore nella creazione della giornata.");
+      showToast(err instanceof Error ? err.message : "Errore nella creazione della giornata.");
     }
   };
 
@@ -180,12 +180,19 @@ export function GiornatePage() {
         <>
       <div className="mb-4 flex items-center justify-between gap-3">
         <p className="text-[12.5px] text-[rgba(251,243,222,0.58)]">Giornate e risultati</p>
-        {perms.isSuperAdmin && (
-          <button onClick={() => setShowScheduleImport((value) => !value)}
-            className="rounded-lg border border-[rgba(251,243,222,0.16)] px-2.5 py-1.5 text-xs font-bold text-[#BBFF5E]">
-            Importa calendario
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {canManageMatchdays && (
+            <button onClick={createMatchday} className="inline-flex items-center gap-1 rounded-lg bg-[#BBFF5E] px-2.5 py-1.5 text-xs font-bold text-[#081208]">
+              <Plus size={14} /> Nuova giornata
+            </button>
+          )}
+          {perms.isSuperAdmin && (
+            <button onClick={() => setShowScheduleImport((value) => !value)}
+              className="rounded-lg border border-[rgba(251,243,222,0.16)] px-2.5 py-1.5 text-xs font-bold text-[#BBFF5E]">
+              Importa calendario
+            </button>
+          )}
+        </div>
       </div>
 
       {showScheduleImport && perms.isSuperAdmin && (
@@ -232,11 +239,6 @@ export function GiornatePage() {
               );
             })}
           </div>
-          {canManageMatchdays && (
-            <button onClick={createMatchday} className="flex items-center gap-1.5 text-[13px] font-semibold text-[#BBFF5E]">
-              <Plus size={15} /> Nuova giornata
-            </button>
-          )}
         </div>
       ) : (
         <MatchdayDetail

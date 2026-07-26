@@ -7,6 +7,7 @@ export function saveTeam(input: {
   roster: string[];
   teamPhotoUrl?: string;
   teamPhotoStoragePath?: string | null;
+  teamPhotoPositionY?: number;
 }) {
   return postToBackend<{ ok: true }>("/api/admin/team", input);
 }

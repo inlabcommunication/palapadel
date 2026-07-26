@@ -87,7 +87,13 @@ export default async function handler(req, res) {
         const snap = await transaction.get(ref);
         before = snap.exists ? snap.data() : null;
         if (input.operation === "createType" && snap.exists) throw new HttpError(409, "Tipologia gia esistente");
-        after = { id: input.id, name: input.name, hasTeams: input.hasTeams, badgeColor: input.badgeColor };
+        after = {
+          id: input.id,
+          name: input.name,
+          hasTeams: input.hasTeams,
+          badgeColor: input.badgeColor,
+          ...(input.operation === "createType" ? { displayOrder: Date.now() } : {}),
+        };
         transaction.set(ref, after, { merge: input.operation === "updateType" });
         entity = `championshipTypes/${input.id}`;
       } else if (input.operation === "deleteType") {

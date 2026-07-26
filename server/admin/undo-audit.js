@@ -52,16 +52,17 @@ export default async function handler(req, res) {
         if (!snapshot.exists) throw new HttpError(404, "Campionato non trovato");
         assertCurrentMatches(snapshot.data(), audit.after, ["isPubliclyVisible"]);
         transaction.update(ref, { isPubliclyVisible: audit.before.isPubliclyVisible });
-      } else if (audit.action === "championships_reordered") {
+      } else if (audit.action === "championships_reordered" || audit.action === "championship_types_reordered") {
         if (!Array.isArray(audit.before) || !Array.isArray(audit.after)) throw new HttpError(400, "Audit ordine non valido");
-        const refs = audit.after.map((item) => db.doc(`championshipEditions/${item.id}`));
+        const collectionName = audit.action === "championship_types_reordered" ? "championshipTypes" : "championshipEditions";
+        const refs = audit.after.map((item) => db.doc(`${collectionName}/${item.id}`));
         const snapshots = await Promise.all(refs.map((ref) => transaction.get(ref)));
         snapshots.forEach((snapshot, index) => {
           if (!snapshot.exists) throw new HttpError(404, "Un campionato non esiste più");
           assertCurrentMatches(snapshot.data(), audit.after[index], ["displayOrder"]);
         });
         audit.before.forEach((item) => {
-          const ref = db.doc(`championshipEditions/${item.id}`);
+          const ref = db.doc(`${collectionName}/${item.id}`);
           transaction.update(ref, {
             displayOrder: item.displayOrder === null ? admin.firestore.FieldValue.delete() : item.displayOrder,
           });

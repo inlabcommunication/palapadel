@@ -441,7 +441,7 @@ function AddWinForm({
       onDone("Vittoria aggiunta all'Albo d'oro.");
     } catch (err) {
       console.error(err);
-      onDone("Errore nell'aggiunta.");
+      onDone(err instanceof Error ? err.message : "Errore nell'aggiunta.");
     } finally {
       setSaving(false);
     }
@@ -528,7 +528,7 @@ function EditWinForm({
       onDone("Vittoria aggiornata.");
     } catch (err) {
       console.error(err);
-      onDone("Errore nel salvataggio.");
+      onDone(err instanceof Error ? err.message : "Errore nel salvataggio.");
     } finally {
       setSaving(false);
     }

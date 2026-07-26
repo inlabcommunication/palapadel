@@ -34,6 +34,7 @@ export function OperationalStandings({
   const [editing, setEditing] = useState<EditionTeam | null>(null);
   const [enrolling, setEnrolling] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState("");
+  const [teamSearch, setTeamSearch] = useState("");
   const [busy, setBusy] = useState(false);
 
   const teamName = (teamId: string) => teams.find((team) => team.id === teamId)?.name ?? "Squadra eliminata";
@@ -45,6 +46,9 @@ export function OperationalStandings({
     .filter((team) => !entries.some((entry) => entry.teamId === team.id))
     .filter((team) => !team.compatibleTypeIds || team.compatibleTypeIds.includes(typeId))
     .sort((a, b) => a.name.localeCompare(b.name, "it"));
+  const filteredAvailableTeams = availableTeams.filter((team) =>
+    team.name.toLocaleLowerCase("it").includes(teamSearch.trim().toLocaleLowerCase("it"))
+  );
 
   const stats = (teamId: string) => {
     let won = 0;
@@ -66,7 +70,6 @@ export function OperationalStandings({
     try {
       await addEntryToStandings({ editionId, teamId: selectedTeamId });
       setSelectedTeamId("");
-      setEnrolling(false);
       showToast("Squadra iscritta al campionato.");
     } catch (error) {
       console.error(error);
@@ -149,19 +152,41 @@ export function OperationalStandings({
               <Plus size={15} /> Aggiungi squadra
             </button>
           ) : (
-            <div className="rounded-lg border border-[rgba(251,243,222,0.14)] bg-[#0A0B08] p-3">
-              <label className="mb-1 block text-xs font-bold" htmlFor="enroll-team">Squadra esistente</label>
+            <div className="w-full rounded-lg border border-[rgba(251,243,222,0.14)] bg-[#0A0B08] p-4 sm:p-5">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <label className="block text-sm font-bold" htmlFor="enroll-team-search">Scegli le squadre da iscrivere</label>
+                <button aria-label="Chiudi iscrizione" onClick={() => setEnrolling(false)} className="rounded-lg p-2"><X size={16} /></button>
+              </div>
+              <input
+                id="enroll-team-search"
+                type="search"
+                value={teamSearch}
+                onChange={(event) => setTeamSearch(event.target.value)}
+                placeholder="Cerca squadra per nome"
+                className="mb-3 w-full rounded-lg border border-[rgba(251,243,222,0.18)] px-3 py-2.5 text-sm"
+              />
+              <div className="mb-3 max-h-72 overflow-y-auto rounded-lg border border-[rgba(251,243,222,0.12)]">
+                {filteredAvailableTeams.map((team) => (
+                  <button
+                    key={team.id}
+                    type="button"
+                    onClick={() => setSelectedTeamId(team.id)}
+                    className={`block w-full border-b border-[rgba(251,243,222,0.08)] px-3 py-3 text-left text-sm last:border-b-0 ${
+                      selectedTeamId === team.id ? "bg-[rgba(187,255,94,0.14)] text-[#BBFF5E]" : "hover:bg-[rgba(251,243,222,0.05)]"
+                    }`}
+                  >
+                    {team.name}
+                  </button>
+                ))}
+                {availableTeams.length > 0 && filteredAvailableTeams.length === 0 && (
+                  <p className="p-4 text-sm text-[rgba(251,243,222,0.58)]">Nessuna squadra corrisponde alla ricerca.</p>
+                )}
+              </div>
               <div className="flex gap-2">
-                <select id="enroll-team" value={selectedTeamId} onChange={(event) => setSelectedTeamId(event.target.value)}
-                  className="min-w-0 flex-1 rounded-lg border border-[rgba(251,243,222,0.18)] px-2 py-2 text-sm">
-                  <option value="">Seleziona squadra</option>
-                  {availableTeams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
-                </select>
                 <button onClick={enroll} disabled={busy || !selectedTeamId}
-                  className="rounded-lg bg-[#BBFF5E] px-3 text-xs font-bold text-[#081208] disabled:opacity-40">
+                  className="min-h-11 flex-1 rounded-lg bg-[#BBFF5E] px-4 text-sm font-bold text-[#081208] disabled:opacity-40">
                   {busy ? "Iscrizione..." : "Iscrivi"}
                 </button>
-                <button aria-label="Chiudi iscrizione" onClick={() => setEnrolling(false)} className="rounded-lg p-2"><X size={16} /></button>
               </div>
               {availableTeams.length === 0 && <p className="mt-2 text-xs text-[rgba(251,243,222,0.58)]">Non ci sono altre squadre disponibili.</p>}
             </div>

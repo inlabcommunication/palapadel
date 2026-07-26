@@ -107,7 +107,7 @@ export function AdminSettingsPage() {
                 <div className="flex justify-between gap-3 text-xs"><strong>{entry.action}</strong><time>{entry.timestamp}</time></div>
                 <p className="mt-1 text-xs text-[rgba(251,243,222,0.58)]">{entry.actor}</p>
                 <details className="mt-2 text-xs"><summary>Differenze</summary><pre className="mt-2 overflow-auto whitespace-pre-wrap">{JSON.stringify({ before: entry.before, after: entry.after }, null, 2)}</pre></details>
-                {["result_created", "result_corrected", "match_postponed", "match_cancelled", "match_reopened", "championship_visibility_changed", "championships_reordered", "home_news_updated", "team_updated"].includes(entry.action) && !entry.undoneAt && (
+                {["result_created", "result_corrected", "match_postponed", "match_cancelled", "match_reopened", "championship_visibility_changed", "championships_reordered", "championship_types_reordered", "home_news_updated", "team_updated"].includes(entry.action) && !entry.undoneAt && (
                   <button onClick={() => undo(entry)} disabled={actionId === entry.id}
                     className="mt-2 rounded-lg border border-[#FFB38B] px-2 py-1 text-xs font-bold text-[#FFB38B] disabled:opacity-50">
                     {actionId === entry.id ? "Annullamento..." : "Annulla operazione"}

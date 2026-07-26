@@ -14,6 +14,7 @@ import type { PublicSettings } from "../lib/publicSettingsApi";
 import type { ChampionshipEdition, ChampionshipType, ContentStatus, HomeNews, Matchday } from "../types";
 import { BADGE_COLORS } from "../types";
 import { ChevronRight, AlertCircle, Plus, X, Pencil, Trash2, Trophy, Megaphone, CalendarDays, Newspaper } from "lucide-react";
+import { sortEditionsByTypeOrder } from "../lib/championshipOrder";
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -44,9 +45,9 @@ export function HomePage() {
   };
 
   const visibleEditions = editions
-    .filter((edition) => isAdmin || edition.isPubliclyVisible !== false)
-    .sort((a, b) => (a.displayOrder ?? Number.MAX_SAFE_INTEGER) - (b.displayOrder ?? Number.MAX_SAFE_INTEGER));
-  const active = visibleEditions.filter((e) => e.status === "attiva");
+    .filter((edition) => isAdmin || edition.isPubliclyVisible !== false);
+  const orderedVisibleEditions = sortEditionsByTypeOrder(visibleEditions, types);
+  const active = orderedVisibleEditions.filter((e) => e.status === "attiva");
   const concluded = editions
     .filter((e) => e.status === "conclusa" && (isAdmin || e.isPubliclyVisible !== false))
     .sort((a, b) => (a.season < b.season ? 1 : -1))
@@ -316,6 +317,7 @@ function NewsImage({ news, featured }: { news: HomeNews; featured: boolean }) {
         src={news.imageUrl}
         alt={getNewsImageAlt(news.title, news.imageAlt)}
         className={className}
+        style={{ objectPosition: `50% ${news.imagePositionY ?? 50}%` }}
         loading={featured ? "eager" : "lazy"}
         decoding="async"
       />
@@ -332,10 +334,26 @@ function NewsImage({ news, featured }: { news: HomeNews; featured: boolean }) {
 }
 
 function NewsModal({ news, onClose }: { news: HomeNews; onClose: () => void }) {
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
+
   return (
-    <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center bg-black/65 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 px-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] sm:items-center sm:py-6" onClick={onClose}>
       <article
-        className="w-full max-w-2xl bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl overflow-hidden max-h-[88vh] overflow-y-auto"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="home-news-modal-title"
+        className="w-full max-w-2xl overflow-y-auto rounded-2xl border border-[rgba(251,243,222,0.10)] bg-[#0A0B08] shadow-2xl max-h-[calc(100dvh-8rem-env(safe-area-inset-bottom))] sm:max-h-[88vh]"
         onClick={(e) => e.stopPropagation()}
       >
         <NewsImage news={news} featured />
@@ -345,11 +363,11 @@ function NewsModal({ news, onClose }: { news: HomeNews; onClose: () => void }) {
               <span className="text-[#BBFF5E]">{news.category ?? "Pala Padel"}</span>
               <span> · {formatDate(news.date)}</span>
             </div>
-            <button onClick={onClose} className="bg-[rgba(251,243,222,0.08)] rounded-full p-1.5 shrink-0">
+            <button onClick={onClose} aria-label="Chiudi notizia" className="sticky top-2 bg-[rgba(251,243,222,0.08)] rounded-full p-1.5 shrink-0">
               <X size={16} className="text-[#FBF3DE]" />
             </button>
           </div>
-          <h3 className="font-display text-[26px] sm:text-[38px] leading-[1.05] text-[#FBF3DE]">{news.title}</h3>
+          <h3 id="home-news-modal-title" className="font-display text-[26px] sm:text-[38px] leading-[1.05] text-[#FBF3DE]">{news.title}</h3>
           <p className="whitespace-pre-line text-[14px] sm:text-[15px] text-[rgba(251,243,222,0.72)] mt-4 leading-relaxed">{news.body}</p>
         </div>
       </article>
@@ -363,6 +381,7 @@ function NewsForm({ onDone }: { onDone: (msg: string) => void }) {
   const [category, setCategory] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageAlt, setImageAlt] = useState("");
+  const [imagePositionY, setImagePositionY] = useState(50);
   const [imageError, setImageError] = useState<string | null>(null);
   const [status, setStatus] = useState<ContentStatus>("pubblicato");
   const [saving, setSaving] = useState(false);
@@ -375,6 +394,7 @@ function NewsForm({ onDone }: { onDone: (msg: string) => void }) {
     status,
     imageUrl: imagePreviewUrl,
     imageAlt,
+    imagePositionY,
     date: new Date().toISOString(),
   });
 
@@ -401,6 +421,7 @@ function NewsForm({ onDone }: { onDone: (msg: string) => void }) {
               imageUrl: uploadedImage.url,
               imageStoragePath: uploadedImage.storagePath,
               imageAlt: getNewsImageAlt(title, imageAlt),
+              imagePositionY,
             }
           : {}),
       });
@@ -460,6 +481,8 @@ function NewsForm({ onDone }: { onDone: (msg: string) => void }) {
             currentAlt={getNewsImageAlt(title, imageAlt)}
             loading={saving}
             error={imageError}
+            positionY={imagePositionY}
+            onPositionYChange={setImagePositionY}
             onFileChange={(file) => {
               setImageError(null);
               setImageFile(file);
@@ -516,6 +539,7 @@ function EditNewsForm({
   const [category, setCategory] = useState(news.category ?? "");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageAlt, setImageAlt] = useState(news.imageAlt ?? "");
+  const [imagePositionY, setImagePositionY] = useState(news.imagePositionY ?? 50);
   const [imageError, setImageError] = useState<string | null>(null);
   const [status, setStatus] = useState<ContentStatus>(news.status);
   const [saving, setSaving] = useState(false);
@@ -530,6 +554,7 @@ function EditNewsForm({
     status,
     imageUrl: effectiveImageUrl,
     imageAlt,
+    imagePositionY,
     date: news.date,
   });
 
@@ -549,6 +574,7 @@ function EditNewsForm({
         imageAlt: news.imageUrl ? getNewsImageAlt(title, imageAlt) : imageAlt.trim() || null,
         imageUrl: undefined as string | undefined,
         imageStoragePath: undefined as string | undefined,
+        imagePositionY,
       };
       if (imageFile) {
         uploadedImage = await uploadHomeNewsImage(news.id, imageFile);
@@ -631,6 +657,8 @@ function EditNewsForm({
             selectedFile={imageFile}
             loading={saving || deletingImage}
             error={imageError}
+            positionY={imagePositionY}
+            onPositionYChange={setImagePositionY}
             onFileChange={(file) => {
               setImageError(null);
               setImageFile(file);
@@ -739,6 +767,7 @@ function buildPreviewNews({
   status,
   imageUrl,
   imageAlt,
+  imagePositionY,
   date,
 }: {
   id: string;
@@ -748,6 +777,7 @@ function buildPreviewNews({
   status: ContentStatus;
   imageUrl?: string;
   imageAlt?: string;
+  imagePositionY?: number;
   date: string;
 }): HomeNews {
   const previewTitle = title.trim() || "Titolo della news";
@@ -758,7 +788,7 @@ function buildPreviewNews({
     date,
     status,
     category: category.trim() || "Pala Padel",
-    ...(imageUrl ? { imageUrl, imageAlt: getNewsImageAlt(previewTitle, imageAlt) } : {}),
+    ...(imageUrl ? { imageUrl, imageAlt: getNewsImageAlt(previewTitle, imageAlt), imagePositionY } : {}),
   };
 }
 

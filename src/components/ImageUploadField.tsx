@@ -13,6 +13,8 @@ interface ImageUploadFieldProps {
   replaceLabel?: string;
   removeLabel?: string;
   aspectClass?: string;
+  positionY?: number;
+  onPositionYChange?: (value: number) => void;
   onFileChange: (file: File | null) => void;
   onRemoveImage?: () => void;
 }
@@ -28,6 +30,8 @@ export function ImageUploadField({
   replaceLabel = "Sostituisci immagine",
   removeLabel = "Elimina immagine",
   aspectClass = "aspect-video",
+  positionY = 50,
+  onPositionYChange,
   onFileChange,
   onRemoveImage,
 }: ImageUploadFieldProps) {
@@ -112,7 +116,12 @@ export function ImageUploadField({
             disabled={loading}
             aria-label="Apri anteprima immagine"
           >
-            <img src={previewUrl} alt={currentAlt} className={`w-full ${aspectClass} object-cover`} />
+            <img
+              src={previewUrl}
+              alt={currentAlt}
+              className={`w-full ${aspectClass} object-cover`}
+              style={{ objectPosition: `50% ${positionY}%` }}
+            />
             <span className="absolute right-2 top-2 rounded-full bg-black/55 p-1.5 text-[#FBF3DE] opacity-0 transition group-hover:opacity-100">
               <Maximize2 size={14} />
             </span>
@@ -129,6 +138,23 @@ export function ImageUploadField({
           </button>
         )}
       </div>
+
+      {hasImage && onPositionYChange && (
+        <label className="mt-3 block text-[11px] font-semibold text-[rgba(251,243,222,0.68)]">
+          Posizione verticale: {positionY < 34 ? "piu in alto" : positionY > 66 ? "piu in basso" : "centrata"}
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={positionY}
+            onChange={(event) => onPositionYChange(Number(event.target.value))}
+            disabled={loading}
+            className="mt-2 w-full accent-[#BBFF5E]"
+            aria-label="Regola la posizione verticale dell'immagine"
+          />
+        </label>
+      )}
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <button

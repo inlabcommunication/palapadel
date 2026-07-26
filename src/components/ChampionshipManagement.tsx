@@ -261,6 +261,7 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
   const [name, setName] = useState("");
   const [rosterText, setRosterText] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPositionY, setPhotoPositionY] = useState(50);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -290,12 +291,13 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
         name: name.trim(),
         roster,
         ...(uploadedPhoto
-          ? { teamPhotoUrl: uploadedPhoto.url, teamPhotoStoragePath: uploadedPhoto.storagePath }
+          ? { teamPhotoUrl: uploadedPhoto.url, teamPhotoStoragePath: uploadedPhoto.storagePath, teamPhotoPositionY: photoPositionY }
           : {}),
       });
       setName("");
       setRosterText("");
       setPhotoFile(null);
+      setPhotoPositionY(50);
       onDone(`Squadra "${name}" creata.`);
     } catch (err) {
       if (uploadedPhoto) await deleteTeamPhotoByPath(uploadedPhoto.storagePath);
@@ -331,7 +333,13 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
             <div key={t.id} className="px-3.5 py-2.5 text-[13px] border-b border-[rgba(251,243,222,0.08)] last:border-b-0">
               <div className="flex items-center gap-3">
                 {t.teamPhotoUrl ? (
-                  <img src={t.teamPhotoUrl} alt={`Foto di gruppo: ${t.name}`} className="h-12 w-20 shrink-0 rounded-lg object-cover" loading="lazy" />
+                  <img
+                    src={t.teamPhotoUrl}
+                    alt={`Foto di gruppo: ${t.name}`}
+                    className="h-12 w-20 shrink-0 rounded-lg object-cover"
+                    style={{ objectPosition: `50% ${t.teamPhotoPositionY ?? 50}%` }}
+                    loading="lazy"
+                  />
                 ) : (
                   <div className="flex h-12 w-20 shrink-0 items-center justify-center rounded-lg bg-[#123008] text-[10px] font-bold text-[rgba(187,255,94,0.48)]">
                     FOTO
@@ -371,6 +379,8 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
           loading={creating}
           error={photoError}
           currentAlt={`Foto di gruppo: ${name || "squadra"}`}
+          positionY={photoPositionY}
+          onPositionYChange={setPhotoPositionY}
           onFileChange={(file) => {
             setPhotoError(null);
             setPhotoFile(file);
@@ -400,6 +410,7 @@ function EditTeamRow({
   const [name, setName] = useState(team.name);
   const [rosterText, setRosterText] = useState(team.roster.join(", "));
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPositionY, setPhotoPositionY] = useState(team.teamPhotoPositionY ?? 50);
   const [removePhoto, setRemovePhoto] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -427,6 +438,7 @@ function EditTeamRow({
         teamId: team.id,
         name: name.trim(),
         roster,
+        teamPhotoPositionY: photoPositionY,
         ...(uploadedPhoto
           ? { teamPhotoUrl: uploadedPhoto.url, teamPhotoStoragePath: uploadedPhoto.storagePath }
           : removePhoto
@@ -469,6 +481,8 @@ function EditTeamRow({
           selectedFile={photoFile}
           loading={saving}
           error={photoError}
+          positionY={photoPositionY}
+          onPositionYChange={setPhotoPositionY}
           onFileChange={(file) => {
             setPhotoError(null);
             setPhotoFile(file);

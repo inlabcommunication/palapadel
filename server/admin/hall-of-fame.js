@@ -3,7 +3,7 @@ import { HttpError, requirePost, sendError, verifyCaller } from "../_lib/auth.js
 import { documentId, parseBody, z } from "../_lib/validation.js";
 
 const optionalText = z.string().trim().max(500).optional();
-const schema = z.discriminatedUnion("operation", [
+const schema = z.union([
   z.object({
     operation: z.literal("create"), typeId: documentId, teamId: documentId,
     season: z.string().trim().min(1).max(50), note: optionalText,

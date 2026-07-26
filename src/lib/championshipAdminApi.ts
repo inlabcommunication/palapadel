@@ -4,6 +4,10 @@ export function reorderChampionships(orderedIds: string[]) {
   return postToBackend<{ ok: true }>("/api/admin/championship-order", { operation: "reorder", orderedIds });
 }
 
+export function reorderChampionshipTypes(orderedIds: string[]) {
+  return postToBackend<{ ok: true }>("/api/admin/championship-order", { operation: "reorderTypes", orderedIds });
+}
+
 export function setChampionshipVisibility(editionId: string, isPubliclyVisible: boolean) {
   return postToBackend<{ ok: true }>("/api/admin/championship-order", {
     operation: "visibility",
