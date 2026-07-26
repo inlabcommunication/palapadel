@@ -10,10 +10,18 @@ export function TopBar() {
   return (
     <header className="sticky top-0 z-10 bg-[#123008] border-b border-[rgba(251,243,222,0.10)] relative">
       <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#BBFF5E]/40 to-transparent pointer-events-none" aria-hidden="true" />
-      <div className="flex items-center justify-between gap-2 px-4 py-3 max-w-[480px] mx-auto">
-        <div className="bg-[#FBF3DE] rounded-xl px-2.5 py-1.5">
-          <img src="/logo.png" alt="PalaPadel Club" className="h-6 w-auto" />
-        </div>
+      <div
+        className={`relative flex items-center gap-2 px-4 py-2 max-w-[480px] mx-auto ${
+          authenticatedAppUser ? "min-h-[104px] justify-center pt-14" : "min-h-14 justify-end"
+        }`}
+      >
+        <img
+          src="/palapadel-club-transparent.png"
+          alt="PalaPadel Club"
+          className={`pointer-events-none absolute left-1/2 h-10 w-[150px] -translate-x-1/2 object-contain ${
+            authenticatedAppUser ? "top-2" : "top-1/2 -translate-y-1/2"
+          }`}
+        />
         {authenticatedAppUser ? (
           <div className="flex min-w-0 items-center gap-1.5">
             <div className="grid grid-cols-2 rounded-lg border border-[rgba(251,243,222,0.14)] bg-[#0A0B08] p-1">

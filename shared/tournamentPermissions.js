@@ -6,8 +6,10 @@ export const TOURNAMENT_STRUCTURE_OPERATIONS = Object.freeze(new Set([
 ]));
 
 export const TOURNAMENT_ADMIN_OPERATIONS = Object.freeze(new Set([
-  "updateGroupTeam",
-  "updateMatch",
+  "createGroup", "updateGroup", "deleteGroup",
+  "addGroupTeam", "updateGroupTeam", "removeGroupTeam",
+  "createRound", "updateRound", "deleteRound",
+  "createMatch", "updateMatch", "deleteMatch",
 ]));
 
 export function canPerformTournamentOperation(role, operation) {

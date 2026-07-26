@@ -83,7 +83,10 @@ export function HomePage() {
         </div>
       )}
       <div className="relative overflow-hidden rounded-2xl mb-8 px-5 py-6 bg-gradient-to-br from-[#1F4A15] via-[#123008] to-[#0A0B08]">
-        <img src="/logo.png" alt="" className="absolute -right-8 -top-8 w-40 h-40 object-contain opacity-20 pointer-events-none" />
+        <div className="hero-padel-ball" aria-hidden="true">
+          <span />
+          <span />
+        </div>
         <div className="relative">
           <span className="inline-flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-wider text-[#123008] bg-[#BBFF5E] rounded-full px-2.5 py-1 mb-3">
             <Trophy size={11} /> Stagione in corso

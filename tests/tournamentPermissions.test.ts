@@ -8,10 +8,16 @@ test("il Super Admin gestisce tutta la struttura del torneo", () => {
   }
 });
 
-test("l'Admin aggiorna gironi e incontri ma non crea la struttura", () => {
-  assert.equal(canPerformTournamentOperation("admin", "updateGroupTeam"), true);
-  assert.equal(canPerformTournamentOperation("admin", "updateMatch"), true);
-  for (const operation of ["createTournament", "updateTournament", "setTournamentLogo", "removeTournamentLogo", "createGroup", "addGroupTeam", "createRound", "createMatch", "deleteMatch"]) {
+test("l'Admin gestisce completamente la struttura interna del torneo", () => {
+  for (const operation of [
+    "createGroup", "updateGroup", "deleteGroup",
+    "addGroupTeam", "updateGroupTeam", "removeGroupTeam",
+    "createRound", "updateRound", "deleteRound",
+    "createMatch", "updateMatch", "deleteMatch",
+  ]) {
+    assert.equal(canPerformTournamentOperation("admin", operation), true);
+  }
+  for (const operation of ["createTournament", "updateTournament", "deleteTournament", "setTournamentLogo", "removeTournamentLogo"]) {
     assert.equal(canPerformTournamentOperation("admin", operation), false);
   }
 });

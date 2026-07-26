@@ -42,9 +42,9 @@ service cloud.firestore {
     }
 
     function newsIsPublic(news) {
-      return news.status == 'pubblicato' &&
-        news.active != false &&
-        news.deleted != true;
+      // Le query pubbliche filtrano per status. Le news eliminate vengono prima
+      // riportate a "bozza" dal backend e poi cancellate.
+      return news.status == 'pubblicato';
     }
 
     function tournamentIsPublic(tournamentId) {

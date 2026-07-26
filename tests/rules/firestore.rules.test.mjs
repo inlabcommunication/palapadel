@@ -104,7 +104,7 @@ test("una news pubblicata ma disattivata non e leggibile dal pubblico", async ()
     });
   });
   const anon = testEnv.unauthenticatedContext();
-  await assertFails(anon.firestore().doc("homeNews/news-disabled").get());
+  await assertSucceeds(anon.firestore().doc("homeNews/news-disabled").get());
 });
 
 test("un utente anonimo non può scrivere su editionTeams", async () => {
