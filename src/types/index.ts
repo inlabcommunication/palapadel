@@ -258,11 +258,21 @@ export interface TournamentGroup {
   order: number;
 }
 
+export interface TournamentTeam {
+  id: string;
+  tournamentId: string;
+  groupId: string;
+  member1: string;
+  member2: string;
+  displayName: string;
+  memberKey: string;
+}
+
 export interface TournamentGroupTeam {
   id: string;
   tournamentId: string;
   groupId: string;
-  teamId: string;
+  teamId: string; // ID di tournamentTeams, non della raccolta globale teams
   played: number;
   won: number;
   lost: number;

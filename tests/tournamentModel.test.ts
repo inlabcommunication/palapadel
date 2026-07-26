@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { compareTournamentGroupEntries, getTournamentBracketKeys, isPublicTournament } from "../shared/tournamentModel.js";
+import { compareTournamentGroupEntries, filterTournamentTeamsInGroups, getTournamentBracketKeys, isPublicTournament } from "../shared/tournamentModel.js";
 
 test("un torneo puo avere un tabellone unico oppure Gold e Silver distinti", () => {
   assert.deepEqual(getTournamentBracketKeys("unico"), ["main"]);
@@ -21,4 +21,10 @@ test("bozze e tornei nascosti non sono pubblici", () => {
   assert.equal(isPublicTournament({ status: "in_corso", isPubliclyVisible: false }), false);
   assert.equal(isPublicTournament({ status: "in_corso", isPubliclyVisible: true }), true);
   assert.equal(isPublicTournament({ status: "concluso", isPubliclyVisible: true }), true);
+});
+
+test("nei tabelloni sono proposte solo le coppie effettivamente presenti nei gironi", () => {
+  const teams = [{ id: "girone-a" }, { id: "non-iscritta" }, { id: "girone-b" }];
+  const entries = [{ teamId: "girone-a" }, { teamId: "girone-b" }];
+  assert.deepEqual(filterTournamentTeamsInGroups(teams, entries).map((team) => team.id), ["girone-a", "girone-b"]);
 });

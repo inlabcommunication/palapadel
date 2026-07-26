@@ -19,6 +19,7 @@ const BACKUP_COLLECTIONS = Object.freeze({
   auditLog: "audit",
   tournaments: "tornei",
   tournamentGroups: "gironiTornei",
+  tournamentTeams: "coppieTornei",
   tournamentGroupTeams: "squadreGironiTornei",
   tournamentBracketRounds: "turniTabelloniTornei",
   tournamentBracketMatches: "partiteTabelloniTornei",

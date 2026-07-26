@@ -17,6 +17,7 @@ const PUBLIC_OFFLINE_COLLECTIONS = new Set([
   "publicSettings",
   "tournaments",
   "tournamentGroups",
+  "tournamentTeams",
   "tournamentGroupTeams",
   "tournamentBracketRounds",
   "tournamentBracketMatches",

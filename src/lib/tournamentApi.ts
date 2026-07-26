@@ -13,8 +13,8 @@ export const updateTournamentGroup = (tournamentId: string, groupId: string, nam
   call({ operation: "updateGroup", tournamentId, groupId, name, order });
 export const deleteTournamentGroup = (tournamentId: string, groupId: string) =>
   call({ operation: "deleteGroup", tournamentId, groupId });
-export const addTournamentGroupTeam = (tournamentId: string, groupId: string, teamId: string, order: number) =>
-  call({ operation: "addGroupTeam", tournamentId, groupId, teamId, order });
+export const addTournamentGroupTeam = (tournamentId: string, groupId: string, member1: string, member2: string, order: number) =>
+  call({ operation: "addGroupTeam", tournamentId, groupId, member1, member2, order });
 export const updateTournamentGroupTeam = (tournamentId: string, entryId: string, fields: { played: number; won: number; lost: number; points: number; order: number; qualified: boolean }) =>
   call({ operation: "updateGroupTeam", tournamentId, entryId, ...fields });
 export const removeTournamentGroupTeam = (tournamentId: string, entryId: string) =>

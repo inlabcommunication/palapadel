@@ -227,6 +227,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /tournamentTeams/{id} {
+      allow read: if isAdminOrAbove() || tournamentIsPublic(resource.data.tournamentId);
+      allow write: if false;
+    }
+
     match /tournamentGroupTeams/{id} {
       allow read: if isAdminOrAbove() || tournamentIsPublic(resource.data.tournamentId);
       allow write: if false;

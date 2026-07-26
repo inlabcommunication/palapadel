@@ -10,3 +10,7 @@ export function isPublicTournament(tournament: {
   status?: string;
   isPubliclyVisible?: boolean;
 } | null | undefined): boolean;
+export function filterTournamentTeamsInGroups<T extends { id: string }>(
+  teams: T[],
+  groupEntries: { teamId: string }[]
+): T[];

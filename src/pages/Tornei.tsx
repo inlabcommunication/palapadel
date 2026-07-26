@@ -4,13 +4,13 @@ import { ChevronLeft, Pencil, Plus, ShieldCheck, Trash2, Trophy, Users, X } from
 import { useAuth } from "../contexts/AuthContext";
 import { useCollection } from "../hooks/useCollection";
 import type {
-  Team,
   Tournament,
   TournamentBracketKey,
   TournamentBracketMatch,
   TournamentBracketRound,
   TournamentGroup,
   TournamentGroupTeam,
+  TournamentTeam,
 } from "../types";
 import {
   addTournamentGroupTeam,
@@ -31,7 +31,7 @@ import {
   type TournamentMatchFields,
 } from "../lib/tournamentApi";
 import { confirmDelete } from "../lib/confirmDelete";
-import { compareTournamentGroupEntries, getTournamentBracketKeys } from "../../shared/tournamentModel.js";
+import { compareTournamentGroupEntries, filterTournamentTeamsInGroups, getTournamentBracketKeys } from "../../shared/tournamentModel.js";
 
 export function TorneiPage() {
   const { appUser } = useAuth();
@@ -109,7 +109,7 @@ function TournamentDetail({ tournament, isSuperAdmin, isOperator, onBack, notify
   const entries = useCollection<TournamentGroupTeam>("tournamentGroupTeams", [where("tournamentId", "==", tournament.id)], [tournament.id]);
   const rounds = useCollection<TournamentBracketRound>("tournamentBracketRounds", [where("tournamentId", "==", tournament.id)], [tournament.id]);
   const matches = useCollection<TournamentBracketMatch>("tournamentBracketMatches", [where("tournamentId", "==", tournament.id)], [tournament.id]);
-  const teams = useCollection<Team>("teams");
+  const teams = useCollection<TournamentTeam>("tournamentTeams", [where("tournamentId", "==", tournament.id)], [tournament.id]);
 
   const removeTournament = async () => {
     if (!confirmDelete(tournament.name)) return;
@@ -147,19 +147,27 @@ function TournamentDetail({ tournament, isSuperAdmin, isOperator, onBack, notify
       {tab === "groups" ? (
         <GroupsPanel tournament={tournament} groups={groups.data} entries={entries.data} teams={teams.data} isSuperAdmin={isSuperAdmin} isOperator={isOperator} notify={notify} />
       ) : (
-        <BracketsPanel tournament={tournament} rounds={rounds.data} matches={matches.data} teams={teams.data} isSuperAdmin={isSuperAdmin} isOperator={isOperator} notify={notify} />
+        <BracketsPanel
+          tournament={tournament}
+          rounds={rounds.data}
+          matches={matches.data}
+          teams={filterTournamentTeamsInGroups(teams.data, entries.data)}
+          isSuperAdmin={isSuperAdmin}
+          isOperator={isOperator}
+          notify={notify}
+        />
       )}
     </div>
   );
 }
 
 function GroupsPanel({ tournament, groups, entries, teams, isSuperAdmin, isOperator, notify }: {
-  tournament: Tournament; groups: TournamentGroup[]; entries: TournamentGroupTeam[]; teams: Team[];
+  tournament: Tournament; groups: TournamentGroup[]; entries: TournamentGroupTeam[]; teams: TournamentTeam[];
   isSuperAdmin: boolean; isOperator: boolean; notify: (message: string) => void;
 }) {
   const [newGroup, setNewGroup] = useState("");
   const sortedGroups = [...groups].sort((a, b) => a.order - b.order);
-  const teamName = (id: string) => teams.find((team) => team.id === id)?.name ?? "Squadra rimossa";
+  const teamName = (id: string) => teams.find((team) => team.id === id)?.displayName ?? "Coppia rimossa";
   const addGroup = async () => {
     if (!newGroup.trim()) return;
     try {
@@ -178,25 +186,26 @@ function GroupsPanel({ tournament, groups, entries, teams, isSuperAdmin, isOpera
       )}
       {sortedGroups.length === 0 && <Empty text="Nessun girone creato." />}
       {sortedGroups.map((group) => (
-        <GroupCard key={group.id} tournament={tournament} group={group} entries={entries.filter((entry) => entry.groupId === group.id)} teams={teams} teamName={teamName} isSuperAdmin={isSuperAdmin} isOperator={isOperator} notify={notify} />
+        <GroupCard key={group.id} tournament={tournament} group={group} entries={entries.filter((entry) => entry.groupId === group.id)} teamName={teamName} isSuperAdmin={isSuperAdmin} isOperator={isOperator} notify={notify} />
       ))}
     </div>
   );
 }
 
-function GroupCard({ tournament, group, entries, teams, teamName, isSuperAdmin, isOperator, notify }: {
-  tournament: Tournament; group: TournamentGroup; entries: TournamentGroupTeam[]; teams: Team[];
+function GroupCard({ tournament, group, entries, teamName, isSuperAdmin, isOperator, notify }: {
+  tournament: Tournament; group: TournamentGroup; entries: TournamentGroupTeam[];
   teamName: (id: string) => string; isSuperAdmin: boolean; isOperator: boolean; notify: (message: string) => void;
 }) {
-  const [teamId, setTeamId] = useState("");
+  const [member1, setMember1] = useState("");
+  const [member2, setMember2] = useState("");
   const sorted = [...entries].sort(compareTournamentGroupEntries);
-  const used = new Set(entries.map((entry) => entry.teamId));
   const addTeam = async () => {
-    if (!teamId) return;
+    if (!member1.trim() || !member2.trim()) return;
     try {
-      await addTournamentGroupTeam(tournament.id, group.id, teamId, entries.length);
-      setTeamId("");
-      notify("Squadra aggiunta.");
+      await addTournamentGroupTeam(tournament.id, group.id, member1.trim(), member2.trim(), entries.length);
+      setMember1("");
+      setMember2("");
+      notify("Coppia aggiunta.");
     } catch (error) { notify(error instanceof Error ? error.message : "Errore."); }
   };
   return (
@@ -205,29 +214,36 @@ function GroupCard({ tournament, group, entries, teams, teamName, isSuperAdmin, 
         <h3 className="font-display text-2xl">{group.name}</h3>
         {isSuperAdmin && <button title="Elimina girone" onClick={async () => { if (confirmDelete(group.name)) await deleteTournamentGroup(tournament.id, group.id); }} className="text-[#FF6B6B]"><Trash2 size={16} /></button>}
       </header>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[620px] text-sm">
-          <thead className="text-[10px] uppercase text-[rgba(251,243,222,0.48)]"><tr><th className="px-3 py-2 text-left">Squadra</th><th>PG</th><th>V</th><th>S</th><th>PT</th><th>Passata</th>{isSuperAdmin && <th />}</tr></thead>
+      <div className={isOperator ? "overflow-x-auto" : ""}>
+        <table className={`w-full text-sm ${isOperator ? "min-w-[620px]" : "table-fixed"}`}>
+          <thead className="text-[10px] uppercase text-[rgba(251,243,222,0.48)]">
+            <tr>
+              <th className="px-3 py-2 text-left">Coppia</th>
+              <th className="w-14">PG</th>
+              {isOperator && <><th>V</th><th>S</th></>}
+              <th className="w-14">PT</th>
+              {isOperator && <th>Passata</th>}
+              {isSuperAdmin && <th />}
+            </tr>
+          </thead>
           <tbody>
-            {sorted.map((entry) => <GroupTeamRow key={entry.id} tournamentId={tournament.id} entry={entry} name={teamName(entry.teamId)} canEdit={isOperator} canRemove={isSuperAdmin} notify={notify} />)}
+            {sorted.map((entry) => <GroupTeamRow key={entry.id} tournamentId={tournament.id} entry={entry} name={teamName(entry.teamId)} canEdit={isOperator} showOperational={isOperator} canRemove={isSuperAdmin} notify={notify} />)}
           </tbody>
         </table>
       </div>
       {isSuperAdmin && (
-        <div className="flex gap-2 border-t border-[rgba(251,243,222,0.10)] p-3">
-          <select value={teamId} onChange={(e) => setTeamId(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-[rgba(251,243,222,0.16)] bg-[#081208] px-3 py-2">
-            <option value="">Seleziona una squadra</option>
-            {teams.filter((team) => !used.has(team.id)).sort((a, b) => a.name.localeCompare(b.name)).map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
-          </select>
-          <button onClick={addTeam} className="rounded-lg bg-[#BBFF5E] px-4 text-sm font-bold text-[#081208]">Aggiungi</button>
+        <div className="grid gap-2 border-t border-[rgba(251,243,222,0.10)] p-3 sm:grid-cols-[1fr_1fr_auto]">
+          <input value={member1} onChange={(e) => setMember1(e.target.value)} placeholder="Membro 1" className="min-w-0 rounded-lg border border-[rgba(251,243,222,0.16)] px-3 py-2" />
+          <input value={member2} onChange={(e) => setMember2(e.target.value)} placeholder="Membro 2" className="min-w-0 rounded-lg border border-[rgba(251,243,222,0.16)] px-3 py-2" />
+          <button onClick={addTeam} disabled={!member1.trim() || !member2.trim()} className="rounded-lg bg-[#BBFF5E] px-4 py-2 text-sm font-bold text-[#081208] disabled:opacity-40">Aggiungi coppia</button>
         </div>
       )}
     </section>
   );
 }
 
-function GroupTeamRow({ tournamentId, entry, name, canEdit, canRemove, notify }: {
-  tournamentId: string; entry: TournamentGroupTeam; name: string; canEdit: boolean; canRemove: boolean; notify: (message: string) => void;
+function GroupTeamRow({ tournamentId, entry, name, canEdit, showOperational, canRemove, notify }: {
+  tournamentId: string; entry: TournamentGroupTeam; name: string; canEdit: boolean; showOperational: boolean; canRemove: boolean; notify: (message: string) => void;
 }) {
   const [draft, setDraft] = useState(entry);
   const save = async () => {
@@ -241,15 +257,18 @@ function GroupTeamRow({ tournamentId, entry, name, canEdit, canRemove, notify }:
   );
   return (
     <tr className={`border-t border-[rgba(251,243,222,0.08)] ${entry.qualified ? "bg-[rgba(187,255,94,0.06)]" : ""}`}>
-      <td className="px-3 py-3 font-bold">{name}</td><td className="text-center">{number("played")}</td><td className="text-center">{number("won")}</td><td className="text-center">{number("lost")}</td><td className="text-center font-bold text-[#BBFF5E]">{number("points")}</td>
-      <td className="text-center">{canEdit ? <input aria-label={`Qualificata ${name}`} type="checkbox" checked={draft.qualified} onChange={async (e) => { const next = { ...draft, qualified: e.target.checked }; setDraft(next); await updateTournamentGroupTeam(tournamentId, entry.id, { played: next.played, won: next.won, lost: next.lost, points: next.points, order: next.order, qualified: next.qualified }); }} /> : entry.qualified ? <ShieldCheck className="mx-auto text-[#BBFF5E]" size={17} /> : "—"}</td>
+      <td className="break-words px-3 py-3 font-bold">{name}</td>
+      <td className="text-center">{number("played")}</td>
+      {showOperational && <><td className="text-center">{number("won")}</td><td className="text-center">{number("lost")}</td></>}
+      <td className="text-center font-bold text-[#BBFF5E]">{number("points")}</td>
+      {showOperational && <td className="text-center">{canEdit ? <input aria-label={`Qualificata ${name}`} type="checkbox" checked={draft.qualified} onChange={async (e) => { const next = { ...draft, qualified: e.target.checked }; setDraft(next); await updateTournamentGroupTeam(tournamentId, entry.id, { played: next.played, won: next.won, lost: next.lost, points: next.points, order: next.order, qualified: next.qualified }); }} /> : entry.qualified ? <ShieldCheck className="mx-auto text-[#BBFF5E]" size={17} /> : "—"}</td>}
       {canRemove && <td className="px-3 text-right"><button title="Rimuovi squadra" onClick={() => removeTournamentGroupTeam(tournamentId, entry.id)} className="text-[#FF6B6B]"><X size={15} /></button></td>}
     </tr>
   );
 }
 
 function BracketsPanel({ tournament, rounds, matches, teams, isSuperAdmin, isOperator, notify }: {
-  tournament: Tournament; rounds: TournamentBracketRound[]; matches: TournamentBracketMatch[]; teams: Team[];
+  tournament: Tournament; rounds: TournamentBracketRound[]; matches: TournamentBracketMatch[]; teams: TournamentTeam[];
   isSuperAdmin: boolean; isOperator: boolean; notify: (message: string) => void;
 }) {
   const keys = getTournamentBracketKeys(tournament.bracketMode) as TournamentBracketKey[];
@@ -263,7 +282,7 @@ function BracketsPanel({ tournament, rounds, matches, teams, isSuperAdmin, isOpe
 }
 
 function BracketBoard({ tournament, bracketKey, rounds, matches, teams, isSuperAdmin, isOperator, notify }: {
-  tournament: Tournament; bracketKey: TournamentBracketKey; rounds: TournamentBracketRound[]; matches: TournamentBracketMatch[]; teams: Team[];
+  tournament: Tournament; bracketKey: TournamentBracketKey; rounds: TournamentBracketRound[]; matches: TournamentBracketMatch[]; teams: TournamentTeam[];
   isSuperAdmin: boolean; isOperator: boolean; notify: (message: string) => void;
 }) {
   const sortedRounds = [...rounds].sort((a, b) => a.order - b.order);
@@ -273,7 +292,7 @@ function BracketBoard({ tournament, bracketKey, rounds, matches, teams, isSuperA
   const previousRound = activeRoundIndex > 0 ? sortedRounds[activeRoundIndex - 1] : undefined;
   const [newRound, setNewRound] = useState("");
   const [showMatch, setShowMatch] = useState(false);
-  const teamName = (id?: string) => id ? teams.find((team) => team.id === id)?.name ?? "Squadra rimossa" : "— slot in attesa —";
+  const teamName = (id?: string) => id ? teams.find((team) => team.id === id)?.displayName ?? "Coppia rimossa" : "— slot in attesa —";
   const sourceOptions = useMemo(() => sortedRounds.flatMap((round) => matches.filter((match) => match.roundId === round.id).sort((a, b) => a.order - b.order).map((match, index) => ({ id: match.id, label: `Vincente ${round.name} ${index + 1}`, roundOrder: round.order }))), [matches, sortedRounds]);
   const activeMatches = matches.filter((match) => match.roundId === activeRound?.id).sort((a, b) => a.order - b.order);
   const champion = activeRound?.name.toLowerCase() === "finale" ? activeMatches.find((match) => match.winnerTeamId)?.winnerTeamId : undefined;
@@ -324,7 +343,7 @@ function BracketBoard({ tournament, bracketKey, rounds, matches, teams, isSuperA
 }
 
 function TournamentMatchCard({ tournament, match, teams, sourceOptions, teamName, isSuperAdmin, isOperator, notify }: {
-  tournament: Tournament; match: TournamentBracketMatch; teams: Team[]; sourceOptions: { id: string; label: string }[];
+  tournament: Tournament; match: TournamentBracketMatch; teams: TournamentTeam[]; sourceOptions: { id: string; label: string }[];
   teamName: (id?: string) => string; isSuperAdmin: boolean; isOperator: boolean; notify: (message: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -344,7 +363,7 @@ function TournamentMatchCard({ tournament, match, teams, sourceOptions, teamName
 }
 
 function MatchEditor({ tournament, match, teams, sourceOptions, onClose, notify, isSuperAdmin }: {
-  tournament: Tournament; match: TournamentBracketMatch; teams: Team[]; sourceOptions: { id: string; label: string }[];
+  tournament: Tournament; match: TournamentBracketMatch; teams: TournamentTeam[]; sourceOptions: { id: string; label: string }[];
   onClose: () => void; notify: (message: string) => void; isSuperAdmin: boolean;
 }) {
   const initial = (teamId?: string, sourceId?: string) => isSuperAdmin && sourceId ? `source:${sourceId}` : teamId ? `team:${teamId}` : "";
@@ -363,19 +382,19 @@ function MatchEditor({ tournament, match, teams, sourceOptions, onClose, notify,
     if (isSuperAdmin) Object.assign(fields, { team1SourceMatchId: source(slot1) || null, team2SourceMatchId: source(slot2) || null });
     try { await updateTournamentMatch(tournament.id, match.id, fields); notify("Incontro aggiornato."); onClose(); } catch (error) { notify(error instanceof Error ? error.message : "Errore."); }
   };
-  return <div className="border border-[#BBFF5E] bg-[#0A0B08] p-4"><SlotSelect value={slot1} onChange={(value) => { setSlot1(value); setWinner(""); }} teams={teams} sources={sourceOptions} allowSources={isSuperAdmin} /><SlotSelect value={slot2} onChange={(value) => { setSlot2(value); setWinner(""); }} teams={teams} sources={sourceOptions} allowSources={isSuperAdmin} /><input value={score} onChange={(e) => setScore(e.target.value)} placeholder="Risultato" className="mb-2 w-full rounded-lg border border-[rgba(251,243,222,0.16)] px-3 py-2" /><select value={winner} onChange={(e) => setWinner(e.target.value)} className="mb-3 w-full rounded-lg border border-[rgba(251,243,222,0.16)] bg-[#081208] px-3 py-2"><option value="">Vincitore non deciso</option>{resolved1 && <option value={resolved1}>{teams.find((team) => team.id === resolved1)?.name}</option>}{resolved2 && <option value={resolved2}>{teams.find((team) => team.id === resolved2)?.name}</option>}</select><div className="flex gap-2"><button onClick={save} className="flex-1 rounded-lg bg-[#BBFF5E] py-2 font-bold text-[#081208]">Salva</button><button onClick={onClose} className="flex-1 rounded-lg border border-[rgba(251,243,222,0.16)] py-2">Annulla</button></div></div>;
+  return <div className="border border-[#BBFF5E] bg-[#0A0B08] p-4"><SlotSelect value={slot1} onChange={(value) => { setSlot1(value); setWinner(""); }} teams={teams} sources={sourceOptions} allowSources={isSuperAdmin} /><SlotSelect value={slot2} onChange={(value) => { setSlot2(value); setWinner(""); }} teams={teams} sources={sourceOptions} allowSources={isSuperAdmin} /><input value={score} onChange={(e) => setScore(e.target.value)} placeholder="Risultato" className="mb-2 w-full rounded-lg border border-[rgba(251,243,222,0.16)] px-3 py-2" /><select value={winner} onChange={(e) => setWinner(e.target.value)} className="mb-3 w-full rounded-lg border border-[rgba(251,243,222,0.16)] bg-[#081208] px-3 py-2"><option value="">Vincitore non deciso</option>{resolved1 && <option value={resolved1}>{teams.find((team) => team.id === resolved1)?.displayName}</option>}{resolved2 && <option value={resolved2}>{teams.find((team) => team.id === resolved2)?.displayName}</option>}</select><div className="flex gap-2"><button onClick={save} className="flex-1 rounded-lg bg-[#BBFF5E] py-2 font-bold text-[#081208]">Salva</button><button onClick={onClose} className="flex-1 rounded-lg border border-[rgba(251,243,222,0.16)] py-2">Annulla</button></div></div>;
 }
 
 function NewTournamentMatch({ tournament, bracketKey, round, order, teams, sourceOptions, onClose, notify }: {
-  tournament: Tournament; bracketKey: TournamentBracketKey; round: TournamentBracketRound; order: number; teams: Team[]; sourceOptions: { id: string; label: string }[]; onClose: () => void; notify: (message: string) => void;
+  tournament: Tournament; bracketKey: TournamentBracketKey; round: TournamentBracketRound; order: number; teams: TournamentTeam[]; sourceOptions: { id: string; label: string }[]; onClose: () => void; notify: (message: string) => void;
 }) {
   const [slot1, setSlot1] = useState(""); const [slot2, setSlot2] = useState("");
   const fields = (value: string, side: 1 | 2): TournamentMatchFields => value.startsWith("source:") ? { [side === 1 ? "team1SourceMatchId" : "team2SourceMatchId"]: value.slice(7) } : { [side === 1 ? "team1Id" : "team2Id"]: value.replace("team:", "") || null };
   return <div className="border border-[rgba(251,243,222,0.12)] bg-[#0A0B08] p-4"><SlotSelect value={slot1} onChange={setSlot1} teams={teams} sources={sourceOptions} allowSources /><SlotSelect value={slot2} onChange={setSlot2} teams={teams} sources={sourceOptions} allowSources /><div className="flex gap-2"><button onClick={async () => { try { await createTournamentMatch(tournament.id, bracketKey, round.id, order, { ...fields(slot1, 1), ...fields(slot2, 2) }); notify("Incontro creato."); onClose(); } catch (error) { notify(error instanceof Error ? error.message : "Errore."); } }} className="flex-1 rounded-lg bg-[#BBFF5E] py-2 font-bold text-[#081208]">Crea</button><button onClick={onClose} className="flex-1 rounded-lg border border-[rgba(251,243,222,0.16)]">Annulla</button></div></div>;
 }
 
-function SlotSelect({ value, onChange, teams, sources, allowSources }: { value: string; onChange: (value: string) => void; teams: Team[]; sources: { id: string; label: string }[]; allowSources: boolean }) {
-  return <select value={value} onChange={(e) => onChange(e.target.value)} className="mb-2 w-full rounded-lg border border-[rgba(251,243,222,0.16)] bg-[#081208] px-3 py-2"><option value="">Slot vuoto</option>{[...teams].sort((a, b) => a.name.localeCompare(b.name)).map((team) => <option key={team.id} value={`team:${team.id}`}>{team.name}</option>)}{allowSources && sources.map((item) => <option key={item.id} value={`source:${item.id}`}>{item.label}</option>)}</select>;
+function SlotSelect({ value, onChange, teams, sources, allowSources }: { value: string; onChange: (value: string) => void; teams: TournamentTeam[]; sources: { id: string; label: string }[]; allowSources: boolean }) {
+  return <select value={value} onChange={(e) => onChange(e.target.value)} className="mb-2 w-full rounded-lg border border-[rgba(251,243,222,0.16)] bg-[#081208] px-3 py-2"><option value="">Slot vuoto</option>{[...teams].sort((a, b) => a.displayName.localeCompare(b.displayName)).map((team) => <option key={team.id} value={`team:${team.id}`}>{team.displayName}</option>)}{allowSources && sources.map((item) => <option key={item.id} value={`source:${item.id}`}>{item.label}</option>)}</select>;
 }
 
 function TournamentForm({ tournament, onCancel, onDone }: { tournament?: Tournament; onCancel: () => void; onDone: (id?: string) => void }) {

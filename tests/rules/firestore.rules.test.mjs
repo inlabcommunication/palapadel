@@ -285,10 +285,12 @@ test("il pubblico legge solo tornei visibili in corso o conclusi e i relativi gi
     await db.doc("tournaments/nascosto").set({ name: "Privato", status: "in_corso", isPubliclyVisible: false });
     await db.doc("tournamentGroups/g1").set({ tournamentId: "pubblico", name: "Girone A", order: 0 });
     await db.doc("tournamentGroups/g2").set({ tournamentId: "nascosto", name: "Girone B", order: 0 });
+    await db.doc("tournamentTeams/c1").set({ tournamentId: "pubblico", member1: "Mario", member2: "Luca", displayName: "Mario / Luca" });
   });
   const anon = testEnv.unauthenticatedContext().firestore();
   await assertSucceeds(anon.doc("tournaments/pubblico").get());
   await assertSucceeds(anon.doc("tournamentGroups/g1").get());
+  await assertSucceeds(anon.doc("tournamentTeams/c1").get());
   await assertFails(anon.doc("tournaments/bozza").get());
   await assertFails(anon.doc("tournaments/nascosto").get());
   await assertFails(anon.doc("tournamentGroups/g2").get());

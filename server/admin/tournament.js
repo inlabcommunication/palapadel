@@ -3,6 +3,7 @@ import { HttpError, requirePost, sendError, verifyCaller } from "../_lib/auth.js
 import { documentId, parseBody, z } from "../_lib/validation.js";
 import { propagateBracketWinner, validateBracketSources } from "../../shared/bracketProgression.js";
 import { canPerformTournamentOperation } from "../../shared/tournamentPermissions.js";
+import { buildTournamentDisplayName, buildTournamentMemberKey, normalizeTournamentMember } from "../../shared/tournamentTeams.js";
 
 const optionalId = z.union([documentId, z.literal(""), z.null()]).optional();
 const bracketKey = z.enum(["main", "gold", "silver"]);
@@ -22,7 +23,7 @@ const schema = z.discriminatedUnion("operation", [
   z.object({ operation: z.literal("createGroup"), tournamentId: documentId, name: z.string().trim().min(1).max(80), order: z.number().int().min(0) }).strict(),
   z.object({ operation: z.literal("updateGroup"), tournamentId: documentId, groupId: documentId, name: z.string().trim().min(1).max(80), order: z.number().int().min(0) }).strict(),
   z.object({ operation: z.literal("deleteGroup"), tournamentId: documentId, groupId: documentId }).strict(),
-  z.object({ operation: z.literal("addGroupTeam"), tournamentId: documentId, groupId: documentId, teamId: documentId, order: z.number().int().min(0) }).strict(),
+  z.object({ operation: z.literal("addGroupTeam"), tournamentId: documentId, groupId: documentId, member1: z.string().trim().min(1).max(80), member2: z.string().trim().min(1).max(80), order: z.number().int().min(0) }).strict(),
   z.object({ operation: z.literal("updateGroupTeam"), tournamentId: documentId, entryId: documentId, played: z.number().int().min(0).max(999), won: z.number().int().min(0).max(999), lost: z.number().int().min(0).max(999), points: z.number().int().min(-999).max(9999), order: z.number().int().min(0), qualified: z.boolean() }).strict(),
   z.object({ operation: z.literal("removeGroupTeam"), tournamentId: documentId, entryId: documentId }).strict(),
   z.object({ operation: z.literal("createRound"), tournamentId: documentId, bracketKey, name: z.string().trim().min(1).max(80), order: z.number().int().min(0) }).strict(),
@@ -102,7 +103,7 @@ export default async function handler(req, res) {
         transaction.update(tournamentRef, after);
       } else if (input.operation === "deleteTournament") {
         before = tournamentSnap.data();
-        const collections = ["tournamentGroups", "tournamentGroupTeams", "tournamentBracketRounds", "tournamentBracketMatches"];
+        const collections = ["tournamentGroups", "tournamentTeams", "tournamentGroupTeams", "tournamentBracketRounds", "tournamentBracketMatches"];
         const snapshots = await Promise.all(collections.map((name) => transaction.get(db.collection(name).where("tournamentId", "==", input.tournamentId))));
         snapshots.forEach((snapshot) => snapshot.docs.forEach((doc) => transaction.delete(doc.ref)));
         transaction.delete(tournamentRef);
@@ -121,28 +122,41 @@ export default async function handler(req, res) {
         if (input.operation === "updateGroup") transaction.update(ref, { name: input.name, order: input.order });
         else {
           const entries = await transaction.get(db.collection("tournamentGroupTeams").where("groupId", "==", input.groupId));
-          entries.docs.forEach((doc) => transaction.delete(doc.ref));
+          entries.docs.forEach((doc) => {
+            transaction.delete(doc.ref);
+            if (doc.data().teamId) transaction.delete(db.doc(`tournamentTeams/${doc.data().teamId}`));
+          });
           transaction.delete(ref);
         }
       } else if (input.operation === "addGroupTeam") {
+        const key = buildTournamentMemberKey(input.member1, input.member2);
+        if (normalizeTournamentMember(input.member1) === normalizeTournamentMember(input.member2)) {
+          throw new HttpError(400, "I due membri della coppia devono essere persone diverse");
+        }
         const [group, duplicate] = await Promise.all([
           transaction.get(db.doc(`tournamentGroups/${input.groupId}`)),
-          transaction.get(db.collection("tournamentGroupTeams").where("tournamentId", "==", input.tournamentId).where("teamId", "==", input.teamId)),
+          transaction.get(db.collection("tournamentTeams").where("tournamentId", "==", input.tournamentId).where("memberKey", "==", key)),
         ]);
         if (!group.exists || group.data().tournamentId !== input.tournamentId) throw new HttpError(404, "Girone non trovato");
         if (!duplicate.empty) throw new HttpError(409, "La squadra e gia inserita in un girone del torneo");
-        const ref = db.collection("tournamentGroupTeams").doc();
-        createdId = ref.id;
-        after = { id: ref.id, tournamentId: input.tournamentId, groupId: input.groupId, teamId: input.teamId, played: 0, won: 0, lost: 0, points: 0, qualified: false, order: input.order };
-        transaction.set(ref, after);
-        entity = `tournamentGroupTeams/${ref.id}`;
+        const teamRef = db.collection("tournamentTeams").doc();
+        const entryRef = db.collection("tournamentGroupTeams").doc();
+        createdId = entryRef.id;
+        const team = { id: teamRef.id, tournamentId: input.tournamentId, groupId: input.groupId, member1: input.member1, member2: input.member2, displayName: buildTournamentDisplayName(input.member1, input.member2), memberKey: key };
+        after = { id: entryRef.id, tournamentId: input.tournamentId, groupId: input.groupId, teamId: teamRef.id, played: 0, won: 0, lost: 0, points: 0, qualified: false, order: input.order };
+        transaction.set(teamRef, team);
+        transaction.set(entryRef, after);
+        entity = `tournamentGroupTeams/${entryRef.id}`;
       } else if (["updateGroupTeam", "removeGroupTeam"].includes(input.operation)) {
         const ref = db.doc(`tournamentGroupTeams/${input.entryId}`);
         const snap = await transaction.get(ref);
         if (!snap.exists || snap.data().tournamentId !== input.tournamentId) throw new HttpError(404, "Squadra del girone non trovata");
         before = snap.data();
         entity = `tournamentGroupTeams/${input.entryId}`;
-        if (input.operation === "removeGroupTeam") transaction.delete(ref);
+        if (input.operation === "removeGroupTeam") {
+          transaction.delete(ref);
+          if (before.teamId) transaction.delete(db.doc(`tournamentTeams/${before.teamId}`));
+        }
         else {
           after = { ...before, played: input.played, won: input.won, lost: input.lost, points: input.points, order: input.order, qualified: input.qualified };
           transaction.update(ref, after);
