@@ -8,9 +8,6 @@ import { ROLE_LABELS } from "../types";
 import { runStorageCleanup, undoAuditEntry } from "../lib/championshipAdminApi";
 import { createAdminUser, setAdminUserPassword, updateAdminUser } from "../lib/userAdminApi";
 import { PasswordInput } from "../components/PasswordInput";
-import { ImageUploadField } from "../components/ImageUploadField";
-import { getImageErrorMessage } from "../lib/imageFilePolicy";
-import { uploadInlabLogo, deleteInlabLogo, INLAB_LOGO_ALT } from "../lib/inlabLogoUpload";
 import { savePublicSettings, type PublicSettings } from "../lib/publicSettingsApi";
 
 const TABS = ["Utenti e ruoli", "Impostazioni generali", "Accessi e sicurezza", "Firebase e notifiche", "Backup", "Audit log"] as const;
@@ -149,10 +146,7 @@ export function AdminSettingsPage() {
       )}
 
       {tab === "Impostazioni generali" && (
-        <div className="space-y-4">
-          <PublicSettingsPanel settings={publicSettings.find((item) => item.id === "global")} onMessage={setMessage} />
-          <BrandingLogoPanel settings={publicSettings.find((item) => item.id === "global")} onMessage={setMessage} />
-        </div>
+        <PublicSettingsPanel settings={publicSettings.find((item) => item.id === "global")} onMessage={setMessage} />
       )}
     </section>
   );
@@ -187,96 +181,6 @@ function PublicSettingsPanel({ settings, onMessage }: { settings?: PublicSetting
         className="mt-3 rounded-lg bg-[#BBFF5E] px-4 py-2 text-sm font-bold text-[#081208] disabled:opacity-40">
         {busy ? "Salvataggio..." : "Salva impostazioni"}
       </button>
-    </div>
-  );
-}
-
-function BrandingLogoPanel({ settings, onMessage }: { settings?: PublicSettings; onMessage: (message: string) => void }) {
-  const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-
-  const currentNotice = () => ({
-    publicNoticeEnabled: Boolean(settings?.publicNoticeEnabled),
-    publicNotice: settings?.publicNotice ?? "",
-  });
-
-  const save = async () => {
-    if (!logoFile) return;
-    setSaving(true);
-    setError(null);
-    let uploaded: Awaited<ReturnType<typeof uploadInlabLogo>> | null = null;
-    try {
-      uploaded = await uploadInlabLogo(logoFile);
-      await savePublicSettings({
-        ...currentNotice(),
-        inlabLogoUrl: uploaded.url,
-        inlabLogoStoragePath: uploaded.storagePath,
-        inlabLogoAlt: INLAB_LOGO_ALT,
-      });
-      if (settings?.inlabLogoStoragePath) await deleteInlabLogo(settings.inlabLogoStoragePath);
-      setLogoFile(null);
-      onMessage("Logo InLab aggiornato.");
-    } catch (err) {
-      if (uploaded) await deleteInlabLogo(uploaded.storagePath);
-      console.error(err);
-      setError(getImageErrorMessage(err, "Errore nel salvataggio del logo InLab."));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const remove = async () => {
-    if (!settings?.inlabLogoUrl) return;
-    if (!window.confirm("Eliminare il logo InLab?")) return;
-    setDeleting(true);
-    setError(null);
-    try {
-      await savePublicSettings({ ...currentNotice(), inlabLogoUrl: null, inlabLogoStoragePath: null, inlabLogoAlt: null });
-      await deleteInlabLogo(settings.inlabLogoStoragePath ?? settings.inlabLogoUrl);
-      onMessage("Logo InLab eliminato.");
-    } catch (err) {
-      console.error(err);
-      setError(getImageErrorMessage(err, "Errore nell'eliminazione del logo InLab."));
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  return (
-    <div className="rounded-lg border border-[rgba(251,243,222,0.12)] bg-[#0A0B08] p-4">
-      <h3 className="font-bold">Branding — Logo InLab</h3>
-      <p className="my-2 text-sm text-[rgba(251,243,222,0.58)]">
-        Mostrato in fondo a ogni pagina dell'app, nel blocco "Web app creata da InLab" verso Instagram.
-      </p>
-      <ImageUploadField
-        label="Logo InLab"
-        currentUrl={settings?.inlabLogoUrl}
-        currentAlt={INLAB_LOGO_ALT}
-        selectedFile={logoFile}
-        loading={saving || deleting}
-        error={error}
-        uploadLabel="Carica logo"
-        replaceLabel="Sostituisci logo"
-        removeLabel="Elimina logo"
-        previewAspectClassName="aspect-square"
-        previewObjectFit="contain"
-        onFileChange={(file) => {
-          setError(null);
-          setLogoFile(file);
-        }}
-        onRemoveImage={remove}
-      />
-      {logoFile && (
-        <button
-          onClick={save}
-          disabled={saving}
-          className="mt-3 w-full rounded-lg bg-[#BBFF5E] py-2 text-sm font-bold text-[#081208] disabled:opacity-40"
-        >
-          {saving ? "Salvataggio..." : "Salva logo InLab"}
-        </button>
-      )}
     </div>
   );
 }

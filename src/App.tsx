@@ -19,7 +19,7 @@ import { bindForegroundNotificationTracking } from "./lib/notificationClient";
 import { isSuperAdminWorkspacePath } from "./lib/superAdminRoutes";
 import { OfflineIndicator } from "./components/OfflineIndicator";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
-import { InLabCredit } from "./components/InLabCredit";
+import { AppFooter } from "./components/AppFooter";
 
 export default function App() {
   const location = useLocation();
@@ -95,10 +95,8 @@ export default function App() {
     <AppErrorBoundary><div className="min-h-screen max-w-[480px] mx-auto flex flex-col bg-[#123008]">
       <OfflineIndicator />
       <TopBar />
-      <main className="flex-1 pb-24">
-        {routes}
-        <InLabCredit />
-      </main>
+      <main className="flex-1 pb-24">{routes}</main>
+      <AppFooter />
       <BottomNav />
     </div></AppErrorBoundary>
   );

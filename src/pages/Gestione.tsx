@@ -5,7 +5,6 @@ import { useAuth } from "../contexts/AuthContext";
 import { useCollection } from "../hooks/useCollection";
 import type { ChampionshipEdition, ChampionshipType, Match, Matchday, Role } from "../types";
 import { BADGE_COLORS, ROLE_LABELS } from "../types";
-import { TypeBadge } from "../components/TypeBadge";
 import { HomePage } from "./Home";
 
 export function GestionePage() {
@@ -57,16 +56,12 @@ export function OperationalChampionshipsPage() {
               <button key={edition.id} onClick={() => navigate(`/gestione/edizione/${edition.id}`)}
                 className="relative w-full overflow-hidden rounded-lg border border-[rgba(251,243,222,0.12)] bg-[#0A0B08] px-4 py-4 text-left transition-colors hover:border-[rgba(187,255,94,0.45)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#BBFF5E]">
                 <span className="absolute inset-y-0 left-0 w-1" style={{ background: badge.text }} aria-hidden="true" />
-                <div className="flex items-center gap-2.5">
-                  <TypeBadge type={type} variant="card" />
-                  <div className="min-w-0">
-                    <p className="text-lg font-bold truncate">{type?.name} {edition.season}</p>
-                    <p className="mt-1 text-xs text-[rgba(251,243,222,0.58)]">
-                      {activeDay ? `Giornata attiva: ${activeDay.number}` : "Giornata attiva non impostata"}
-                      {` · ${incomplete} risultat${incomplete === 1 ? "o" : "i"} da completare`}
-                    </p>
-                  </div>
-                </div>
+                {type?.logoUrl && <img src={type.logoUrl} alt={type.logoAlt ?? `Logo ${type.name}`} className="mb-3 h-14 w-14 rounded-lg object-cover" />}
+                <p className="text-lg font-bold">{type?.name} {edition.season}</p>
+                <p className="mt-1 text-xs text-[rgba(251,243,222,0.58)]">
+                  {activeDay ? `Giornata attiva: ${activeDay.number}` : "Giornata attiva non impostata"}
+                  {` · ${incomplete} risultat${incomplete === 1 ? "o" : "i"} da completare`}
+                </p>
               </button>
             );
           })}

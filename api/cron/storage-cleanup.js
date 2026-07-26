@@ -12,18 +12,24 @@ export default async function handler(req, res) {
     const db = admin.firestore(app);
     const bucket = admin.storage(app).bucket();
     const timestamp = new Date().toISOString();
-    const [newsSnap, teamsSnap, filesResult] = await Promise.all([
+    const [newsSnap, teamsSnap, typesSnap, filesResult] = await Promise.all([
       db.collection("homeNews").get(),
       db.collection("teams").get(),
+      db.collection("championshipTypes").get(),
       bucket.getFiles(),
     ]);
     const referenced = new Set([
       ...newsSnap.docs.map((doc) => doc.data().imageStoragePath).filter(Boolean),
       ...teamsSnap.docs.map((doc) => doc.data().teamPhotoStoragePath).filter(Boolean),
+      ...typesSnap.docs.map((doc) => doc.data().logoStoragePath).filter(Boolean),
     ]);
     const orphans = filesResult[0]
       .map((file) => file.name)
-      .filter((path) => (path.startsWith("home-news/") || path.startsWith("teams/")) && !referenced.has(path))
+      .filter((path) => (
+        path.startsWith("home-news/") ||
+        path.startsWith("teams/") ||
+        path.startsWith("championship-types/")
+      ) && !referenced.has(path))
       .slice(0, 400);
 
     for (const path of orphans) {

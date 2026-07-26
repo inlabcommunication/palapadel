@@ -15,9 +15,9 @@ import {
 } from "lucide-react";
 import { BottomNav } from "./BottomNav";
 import { TopBar } from "./TopBar";
-import { InLabCredit } from "./InLabCredit";
 import { useAuth } from "../contexts/AuthContext";
 import { ROLE_LABELS } from "../types";
+import { AppFooter } from "./AppFooter";
 
 const sidebarItems = [
   { to: "/gestione", label: "Dashboard", icon: LayoutDashboard, match: (path: string, hash: string) => path === "/gestione" && !hash },
@@ -119,8 +119,8 @@ export function SuperAdminShell({ children }: { children: React.ReactNode }) {
         </header>
         <main className="flex-1 pb-24 xl:px-8 xl:py-6 xl:pb-10">
           <div className="xl:mx-auto xl:w-full xl:max-w-[1440px]">{children}</div>
-          <InLabCredit />
         </main>
+        <AppFooter />
         <div className="xl:hidden">
           <BottomNav />
         </div>

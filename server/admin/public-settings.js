@@ -5,9 +5,6 @@ import { parseBody, z } from "../_lib/validation.js";
 const schema = z.object({
   publicNoticeEnabled: z.boolean(),
   publicNotice: z.string().trim().max(300),
-  inlabLogoUrl: z.string().url().nullable().optional(),
-  inlabLogoStoragePath: z.string().min(1).nullable().optional(),
-  inlabLogoAlt: z.string().trim().max(150).nullable().optional(),
 }).strict();
 
 export default async function handler(req, res) {
@@ -19,15 +16,7 @@ export default async function handler(req, res) {
     const db = admin.firestore(app);
     const ref = db.doc("publicSettings/global");
     const previous = await ref.get();
-    const after = {
-      publicNoticeEnabled: input.publicNoticeEnabled,
-      publicNotice: input.publicNotice,
-      updatedAt: new Date().toISOString(),
-      updatedBy: caller.uid,
-    };
-    if (input.inlabLogoUrl !== undefined) after.inlabLogoUrl = input.inlabLogoUrl === null ? admin.firestore.FieldValue.delete() : input.inlabLogoUrl;
-    if (input.inlabLogoStoragePath !== undefined) after.inlabLogoStoragePath = input.inlabLogoStoragePath === null ? admin.firestore.FieldValue.delete() : input.inlabLogoStoragePath;
-    if (input.inlabLogoAlt !== undefined) after.inlabLogoAlt = input.inlabLogoAlt === null ? admin.firestore.FieldValue.delete() : input.inlabLogoAlt;
+    const after = { ...input, updatedAt: new Date().toISOString(), updatedBy: caller.uid };
     const batch = db.batch();
     batch.set(ref, after, { merge: true });
     batch.set(db.collection("auditLog").doc(), {

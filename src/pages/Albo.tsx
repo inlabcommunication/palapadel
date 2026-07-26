@@ -5,7 +5,6 @@ import { confirmDelete } from "../lib/confirmDelete";
 import { groupHallOfFameRows, type HallOfFameRow } from "../lib/hallOfFame";
 import type { ChampionshipType, HistoricalWin, Team } from "../types";
 import { BADGE_COLORS } from "../types";
-import { TypeBadge } from "../components/TypeBadge";
 import { Plus, X, Pencil, Trash2, Award, ChevronRight } from "lucide-react";
 import { createHallOfFameWin, deleteHallOfFameWin, updateHallOfFameWin } from "../lib/hallOfFameApi";
 
@@ -299,11 +298,10 @@ export function AlboManagementPanel({ embedded = false }: { embedded?: boolean }
           <button
             key={t.id}
             onClick={() => setSelectedType(t.id)}
-            className={`whitespace-nowrap rounded-full px-3.5 py-2 text-[12.5px] font-semibold shrink-0 flex items-center gap-1.5 ${
+            className={`whitespace-nowrap rounded-full px-3.5 py-2 text-[12.5px] font-semibold shrink-0 ${
               activeType === t.id ? "bg-lime text-[#081208]" : "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.85)]"
             }`}
           >
-            <TypeBadge type={t} size={20} className="rounded-[7px]" />
             {t.name}
           </button>
         ))}

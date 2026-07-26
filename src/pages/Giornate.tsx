@@ -19,7 +19,6 @@ import {
 } from "../lib/matchApi";
 import { derivePermissions } from "../lib/permissions";
 import { MatchdayShareButton } from "../components/MatchdayShareButton";
-import { TypeBadge } from "../components/TypeBadge";
 import { ScheduleImportPanel } from "../components/ScheduleImportPanel";
 import { setActiveMatchday } from "../lib/championshipAdminApi";
 import { OperationalStandings } from "../components/OperationalStandings";
@@ -146,8 +145,7 @@ export function GiornatePage() {
       <button onClick={() => navigate("/gestione")} className="flex items-center gap-1 text-xs text-[rgba(251,243,222,0.58)] mb-3">
         <ArrowLeft size={13} /> Gestione
       </button>
-      <h2 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE] mb-1 flex items-center gap-2">
-        <TypeBadge type={type} variant="header" />
+      <h2 className="text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE] mb-1">
         {type.name} {edition.season}
       </h2>
       <div className="mb-4 mt-3 grid grid-cols-2 rounded-lg bg-[#0A0B08] p-1" role="tablist" aria-label="Area campionato">

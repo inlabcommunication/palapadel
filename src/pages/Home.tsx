@@ -1,13 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { collection, doc, where } from "firebase/firestore";
 import { ImageUploadField } from "../components/ImageUploadField";
 import { useCollection } from "../hooks/useCollection";
-import { useObjectUrl } from "../hooks/useObjectUrl";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase";
 import { confirmDelete } from "../lib/confirmDelete";
-import { getImageErrorMessage } from "../lib/imageFilePolicy";
 import { deleteHomeNewsImage, getNewsExcerpt, getNewsImageAlt, uploadHomeNewsImage } from "../lib/homeNewsImageUpload";
 import { getPublishedNewsForHome, HOME_NEWS_SUBTITLE, HOME_NEWS_TITLE } from "../lib/homePresentation";
 import { notifyNotificationEvent } from "../lib/notificationClient";
@@ -15,7 +13,6 @@ import { deleteHomeNews as deleteHomeNewsRecord, removeHomeNewsImage, saveHomeNe
 import type { PublicSettings } from "../lib/publicSettingsApi";
 import type { ChampionshipEdition, ChampionshipType, ContentStatus, HomeNews, Matchday } from "../types";
 import { BADGE_COLORS } from "../types";
-import { TypeBadge } from "../components/TypeBadge";
 import { ChevronRight, AlertCircle, Plus, X, Pencil, Trash2, Trophy, Megaphone, CalendarDays, Newspaper } from "lucide-react";
 
 export function HomePage() {
@@ -720,6 +717,20 @@ function PreviewMeta({ news }: { news: HomeNews }) {
   );
 }
 
+function useObjectUrl(file: File | null) {
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    if (!file) {
+      setUrl("");
+      return;
+    }
+    const nextUrl = URL.createObjectURL(file);
+    setUrl(nextUrl);
+    return () => URL.revokeObjectURL(nextUrl);
+  }, [file]);
+  return url;
+}
+
 function buildPreviewNews({
   id,
   title,
@@ -751,6 +762,11 @@ function buildPreviewNews({
   };
 }
 
+function getImageErrorMessage(err: unknown, fallback: string) {
+  if (err instanceof Error && err.message) return `${fallback} ${err.message}`;
+  return fallback;
+}
+
 function ChampionshipCard({
   edition,
   type,
@@ -770,17 +786,17 @@ function ChampionshipCard({
     <div className="relative text-left bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl pl-4 pr-4 py-3.5 w-full overflow-hidden">
       <span className="absolute left-0 top-0 bottom-0 w-1" style={{ background: badge.text }} aria-hidden="true" />
       <div className="flex justify-between items-start gap-3">
-        <div className="min-w-0 flex items-start gap-2.5">
-          <TypeBadge type={type} variant="card" className="mt-0.5" />
-          <div className="min-w-0">
-            <p className="text-[11px] uppercase tracking-wider font-bold" style={{ color: badge.text }}>
-              {type?.name ?? "Campionato"}
-            </p>
-            <p className="font-bold text-[17px] truncate mt-1">{edition.season}</p>
-            <p className="text-[12.5px] text-[rgba(251,243,222,0.58)] mt-1">
-              Ultima giornata: {latestMatchday ? `${latestMatchday}a` : "non ancora creata"}
-            </p>
-          </div>
+        {type?.logoUrl && (
+          <img src={type.logoUrl} alt={type.logoAlt ?? `Logo ${type.name}`} className="h-14 w-14 shrink-0 rounded-lg object-cover" loading="lazy" />
+        )}
+        <div className="min-w-0">
+          <p className="text-[11px] uppercase tracking-wider font-bold" style={{ color: badge.text }}>
+            {type?.name ?? "Campionato"}
+          </p>
+          <p className="font-bold text-[17px] truncate mt-1">{edition.season}</p>
+          <p className="text-[12.5px] text-[rgba(251,243,222,0.58)] mt-1">
+            Ultima giornata: {latestMatchday ? `${latestMatchday}a` : "non ancora creata"}
+          </p>
         </div>
         <span className="text-[10.5px] font-bold px-2 py-1 rounded-full shrink-0" style={{ background: badge.bg, color: badge.text }}>
           {edition.status === "conclusa" ? "conclusa" : "attiva"}

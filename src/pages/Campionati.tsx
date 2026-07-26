@@ -32,7 +32,6 @@ import type {
 import { ChampionshipTypeManagement, TeamManagement } from "../components/ChampionshipManagement";
 import { BracketSection } from "../components/BracketSection";
 import { StandingsShareButton } from "../components/StandingsShareButton";
-import { TypeBadge } from "../components/TypeBadge";
 import { parsePastedTable } from "../lib/parsePastedTable";
 import { resolveActiveMatchdayId } from "../lib/activeMatchday";
 import { closeEdition, reorderChampionships, setChampionshipVisibility } from "../lib/championshipAdminApi";
@@ -264,26 +263,16 @@ export function CampionatiPage() {
             <button
               key={t.id}
               onClick={() => selectType(t.id)}
-              className={`whitespace-nowrap rounded-full px-3.5 py-2 text-[12.5px] font-semibold shrink-0 flex items-center gap-1.5 ${
+              className={`inline-flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-[12.5px] font-semibold shrink-0 ${
                 isSel ? "bg-lime text-[#081208]" : "bg-[rgba(251,243,222,0.08)] text-[rgba(251,243,222,0.85)]"
               }`}
             >
-              <TypeBadge type={t} size={20} className="rounded-[7px]" />
+              {t.logoUrl && <img src={t.logoUrl} alt="" className="h-7 w-7 rounded-md object-cover" loading="lazy" />}
               {t.name}
             </button>
           );
         })}
       </div>
-
-      {/* Intestazione: piccolo logo della categoria + nome + stagione, sopra Classifica/Calendario/Tabellone */}
-      {activeType && edition && (
-        <div className="flex items-center gap-2 mb-2">
-          <TypeBadge type={activeType} variant="header" />
-          <p className="font-display text-[19px] leading-none text-[#FBF3DE]">
-            {activeType.name} <span className="text-[rgba(251,243,222,0.55)]">{edition.season}</span>
-          </p>
-        </div>
-      )}
 
       {/* Riga 2: selettore di stagione per la tipologia scelta, + azioni admin */}
       <div className="flex items-center gap-2 mb-4 relative">

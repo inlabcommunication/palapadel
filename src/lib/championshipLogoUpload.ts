@@ -1,23 +1,13 @@
-import { deleteStorageImageQuietly, uploadStorageImage, type UploadedStorageImage } from "./storageImageUpload";
-import { buildChampionshipLogoFolder } from "./championshipLogoPolicy";
+import { deleteStorageImageQuietly, uploadStorageImage } from "./storageImageUpload";
 
-export { buildChampionshipLogoFolder, getChampionshipLogoAlt, getChampionshipTypeInitials } from "./championshipLogoPolicy";
-
-/**
- * Carica il logo di una tipologia di campionato. Dimensione massima indicativa
- * 512x512: passiamo maxWidth 512 a resizeImageFile (via uploadStorageImage), che
- * mantiene sempre le proporzioni e non ingrandisce un'immagine già più piccola.
- * PNG e WebP mantengono la trasparenza (resizeImageFile disegna su canvas e
- * ricodifica nello stesso formato, senza riempire uno sfondo).
- */
-export function uploadChampionshipLogo(championshipTypeId: string, file: File): Promise<UploadedStorageImage> {
+export function uploadChampionshipTypeLogo(typeId: string, file: File) {
   return uploadStorageImage({
-    folderPath: buildChampionshipLogoFolder(championshipTypeId),
+    folderPath: `championship-types/${typeId}/logo`,
     file,
-    maxWidth: 512,
+    maxWidth: 800,
   });
 }
 
-export function deleteChampionshipLogo(storagePathOrUrl?: string | null) {
-  return deleteStorageImageQuietly(storagePathOrUrl, "logo del campionato");
+export function deleteChampionshipTypeLogo(path?: string | null) {
+  return deleteStorageImageQuietly(path, "logo del campionato");
 }

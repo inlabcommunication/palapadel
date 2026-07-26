@@ -8,10 +8,6 @@ const schema = z.discriminatedUnion("operation", [
     orderedIds: z.array(documentId).min(1).max(200).refine((ids) => new Set(ids).size === ids.length, "ID duplicati"),
   }).strict(),
   z.object({
-    operation: z.literal("reorderTypes"),
-    orderedIds: z.array(documentId).min(1).max(50).refine((ids) => new Set(ids).size === ids.length, "ID duplicati"),
-  }).strict(),
-  z.object({
     operation: z.literal("visibility"),
     editionId: documentId,
     isPubliclyVisible: z.boolean(),
@@ -28,25 +24,6 @@ export default async function handler(req, res) {
     const timestamp = new Date().toISOString();
 
     await db.runTransaction(async (transaction) => {
-      if (input.operation === "reorderTypes") {
-        const refs = input.orderedIds.map((id) => db.doc(`championshipTypes/${id}`));
-        const snapshots = await transaction.getAll(...refs);
-        if (snapshots.some((snapshot) => !snapshot.exists)) throw new HttpError(404, "Una o più tipologie non esistono");
-
-        const before = snapshots.map((snapshot) => ({ id: snapshot.id, order: snapshot.data().order ?? null }));
-        refs.forEach((ref, index) => transaction.update(ref, { order: index }));
-        transaction.set(db.collection("auditLog").doc(), {
-          actor: caller.uid,
-          action: "championship_types_reordered",
-          entity: "championshipTypes",
-          detail: JSON.stringify({ role: caller.role }),
-          before,
-          after: input.orderedIds.map((id, order) => ({ id, order })),
-          timestamp,
-        });
-        return;
-      }
-
       if (input.operation === "reorder") {
         const refs = input.orderedIds.map((id) => db.doc(`championshipEditions/${id}`));
         const snapshots = await transaction.getAll(...refs);

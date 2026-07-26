@@ -29,9 +29,6 @@ export interface ChampionshipType {
   name: string;
   hasTeams: boolean;
   badgeColor: "serie-b" | "serie-c" | "principianti" | "femminile" | string;
-  /** Posizione nell'elenco tipologie (schede in Campionati, Albo, ecc.). Assente = 0, poi ordine alfabetico. Riordino riservato al Super Admin. */
-  order?: number;
-  /** Logo della categoria caricato dal Super Admin (branding/championships/{id}/logo/...). Se assente, l'app mostra un placeholder con le iniziali fisse della categoria. */
   logoUrl?: string;
   logoStoragePath?: string;
   logoAlt?: string;
@@ -281,14 +278,3 @@ export const ROLE_LABELS: Record<Role, string> = {
   admin: "Amministratore",
   resultManager: "Gestore risultati",
 };
-
-/**
- * settings/branding — documento unico globale per il logo InLab (footer "Web app
- * creata da InLab" mostrato in fondo a ogni pagina). Scrittura riservata al Super Admin,
- * lettura pubblica (serve a mostrare il logo a chiunque usi l'app).
- */
-export interface BrandingSettings {
-  inlabLogoUrl?: string;
-  inlabLogoStoragePath?: string;
-  inlabLogoAlt?: string;
-}

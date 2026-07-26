@@ -4,10 +4,6 @@ import { documentId, parseBody, z } from "../_lib/validation.js";
 
 const badgeColor = z.string().trim().min(1).max(40);
 const status = z.enum(["bozza", "attiva", "conclusa", "nascosta"]);
-const nullableLogoUrl = z.string().url().nullable().optional();
-const nullableLogoPath = z.string().min(1).nullable().optional();
-const nullableLogoAlt = z.string().trim().max(150).nullable().optional();
-const typeOrder = z.number().int().min(0).max(9999).optional();
 const schema = z.discriminatedUnion("operation", [
   z.object({
     operation: z.literal("createType"),
@@ -15,10 +11,6 @@ const schema = z.discriminatedUnion("operation", [
     name: z.string().trim().min(2).max(100),
     hasTeams: z.boolean(),
     badgeColor,
-    order: typeOrder,
-    logoUrl: nullableLogoUrl,
-    logoStoragePath: nullableLogoPath,
-    logoAlt: nullableLogoAlt,
   }).strict(),
   z.object({
     operation: z.literal("updateType"),
@@ -26,11 +18,15 @@ const schema = z.discriminatedUnion("operation", [
     name: z.string().trim().min(2).max(100),
     hasTeams: z.boolean(),
     badgeColor,
-    order: typeOrder,
-    logoUrl: nullableLogoUrl,
-    logoStoragePath: nullableLogoPath,
-    logoAlt: nullableLogoAlt,
   }).strict(),
+  z.object({
+    operation: z.literal("setTypeLogo"),
+    id: documentId,
+    logoUrl: z.string().url().max(2000),
+    logoStoragePath: z.string().trim().min(3).max(1000),
+    logoAlt: z.string().trim().min(1).max(200),
+  }).strict(),
+  z.object({ operation: z.literal("removeTypeLogo"), id: documentId }).strict(),
   z.object({ operation: z.literal("deleteType"), id: documentId }).strict(),
   z.object({
     operation: z.literal("createEdition"),
@@ -63,27 +59,35 @@ export default async function handler(req, res) {
       let before = null;
       let after = null;
 
-      if (input.operation === "createType" || input.operation === "updateType") {
+      if (input.operation === "setTypeLogo" || input.operation === "removeTypeLogo") {
+        const ref = db.doc(`championshipTypes/${input.id}`);
+        const snap = await transaction.get(ref);
+        if (!snap.exists) throw new HttpError(404, "Tipologia non trovata");
+        before = snap.data();
+        const logoData = input.operation === "setTypeLogo"
+          ? {
+              logoUrl: input.logoUrl,
+              logoStoragePath: input.logoStoragePath,
+              logoAlt: input.logoAlt,
+              updatedAt: timestamp,
+            }
+          : {
+              logoUrl: admin.firestore.FieldValue.delete(),
+              logoStoragePath: admin.firestore.FieldValue.delete(),
+              logoAlt: admin.firestore.FieldValue.delete(),
+              updatedAt: timestamp,
+            };
+        transaction.update(ref, logoData);
+        after = input.operation === "setTypeLogo"
+          ? { ...before, ...logoData }
+          : { ...before, logoUrl: null, logoStoragePath: null, logoAlt: null, updatedAt: timestamp };
+        entity = `championshipTypes/${input.id}`;
+      } else if (input.operation === "createType" || input.operation === "updateType") {
         const ref = db.doc(`championshipTypes/${input.id}`);
         const snap = await transaction.get(ref);
         before = snap.exists ? snap.data() : null;
         if (input.operation === "createType" && snap.exists) throw new HttpError(409, "Tipologia gia esistente");
-        after = {
-          id: input.id,
-          name: input.name,
-          hasTeams: input.hasTeams,
-          badgeColor: input.badgeColor,
-          ...(input.order !== undefined ? { order: input.order } : {}),
-          logoUrl: input.logoUrl === null ? admin.firestore.FieldValue.delete() : input.logoUrl,
-          logoStoragePath: input.logoStoragePath === null ? admin.firestore.FieldValue.delete() : input.logoStoragePath,
-          logoAlt: input.logoAlt === null ? admin.firestore.FieldValue.delete() : input.logoAlt,
-        };
-        // I campi assenti dall'input (undefined, non toccati dal form) non vanno scritti:
-        // rimuoviamo le chiavi undefined per non sovrascrivere per errore un logo esistente
-        // quando il client sta solo aggiornando nome/tipo/colore.
-        for (const key of ["logoUrl", "logoStoragePath", "logoAlt"]) {
-          if (after[key] === undefined) delete after[key];
-        }
+        after = { id: input.id, name: input.name, hasTeams: input.hasTeams, badgeColor: input.badgeColor };
         transaction.set(ref, after, { merge: input.operation === "updateType" });
         entity = `championshipTypes/${input.id}`;
       } else if (input.operation === "deleteType") {
@@ -96,6 +100,16 @@ export default async function handler(req, res) {
         if (!used.empty) throw new HttpError(409, "La tipologia e usata da almeno un'edizione");
         before = snap.data();
         transaction.delete(ref);
+        if (before.logoStoragePath) {
+          transaction.set(db.collection("storageCleanupQueue").doc(), {
+            storagePath: before.logoStoragePath,
+            reason: "Logo di una tipologia eliminata",
+            status: "pending",
+            attempts: 0,
+            createdAt: timestamp,
+            createdBy: caller.uid,
+          });
+        }
         entity = `championshipTypes/${input.id}`;
       } else if (input.operation === "createEdition") {
         const typeSnap = await transaction.get(db.doc(`championshipTypes/${input.typeId}`));
