@@ -8,6 +8,7 @@ interface Props {
   editionId: string;
   typeId: string;
   categoryName: string;
+  championshipLogoUrl?: string;
   season: string;
   entries: EditionTeam[];
   teams: Team[];
@@ -22,6 +23,7 @@ export function OperationalStandings({
   editionId,
   typeId,
   categoryName,
+  championshipLogoUrl,
   season,
   entries,
   teams,
@@ -87,6 +89,7 @@ export function OperationalStandings({
           <StandingsShareButton
             input={{
               categoryName,
+              championshipLogoUrl,
               season,
               kind: "team",
               rows: rows.map((entry, index) => ({

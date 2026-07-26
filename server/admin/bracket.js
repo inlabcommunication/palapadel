@@ -90,6 +90,9 @@ export default async function handler(req, res) {
         after = { generated: input.matches.length };
       } else if (input.operation === "createMatch") {
         if (input.team1Id && input.team1Id === input.team2Id) throw new HttpError(400, "Una squadra non puo giocare contro se stessa");
+        if (input.winnerTeamId && ![input.team1Id, input.team2Id].includes(input.winnerTeamId)) {
+          throw new HttpError(400, "Il vincitore deve essere una delle due squadre dell'incontro");
+        }
         const round = await transaction.get(db.doc(`bracketRounds/${input.roundId}`));
         if (!round.exists || round.data().editionId !== input.editionId) throw new HttpError(404, "Turno non trovato");
         const ref = db.collection("bracketMatches").doc();
@@ -106,6 +109,12 @@ export default async function handler(req, res) {
         if (input.operation === "deleteMatch") transaction.delete(ref);
         else {
           if (input.team1Id && input.team1Id === input.team2Id) throw new HttpError(400, "Una squadra non puo giocare contro se stessa");
+          const nextTeam1Id = input.team1Id !== undefined ? input.team1Id || null : before.team1Id;
+          const nextTeam2Id = input.team2Id !== undefined ? input.team2Id || null : before.team2Id;
+          const nextWinnerTeamId = input.winnerTeamId !== undefined ? input.winnerTeamId || null : before.winnerTeamId;
+          if (nextWinnerTeamId && ![nextTeam1Id, nextTeam2Id].includes(nextWinnerTeamId)) {
+            throw new HttpError(400, "Il vincitore deve essere una delle due squadre dell'incontro");
+          }
           after = { ...before, ...cleanMatch(input) };
           const cleared = { team1Id: admin.firestore.FieldValue.delete(), team2Id: admin.firestore.FieldValue.delete(), score: admin.firestore.FieldValue.delete(), winnerTeamId: admin.firestore.FieldValue.delete() };
           transaction.update(ref, { ...cleared, ...cleanMatch(input) });

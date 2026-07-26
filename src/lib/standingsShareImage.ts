@@ -14,6 +14,7 @@ export interface StandingsShareInput {
   season: string;
   kind: StandingsShareKind;
   rows: StandingShareRow[];
+  championshipLogoUrl?: string;
 }
 
 export interface GeneratedStandingsShareImage {
@@ -104,7 +105,32 @@ function statusLabel(status: string): string {
   return "";
 }
 
-function drawImagePage(input: StandingsShareInput, rows: StandingShareRow[], page: number, pageCount: number): HTMLCanvasElement {
+function loadCanvasImage(url?: string): Promise<HTMLImageElement | null> {
+  if (!url) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = url;
+  });
+}
+
+function drawImageContain(
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  x: number,
+  y: number,
+  width: number,
+  height: number
+) {
+  const ratio = Math.min(width / image.naturalWidth, height / image.naturalHeight);
+  const drawWidth = image.naturalWidth * ratio;
+  const drawHeight = image.naturalHeight * ratio;
+  ctx.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight);
+}
+
+async function drawImagePage(input: StandingsShareInput, rows: StandingShareRow[], page: number, pageCount: number): Promise<HTMLCanvasElement> {
   const canvas = document.createElement("canvas");
   canvas.width = STANDINGS_SHARE_WIDTH;
   canvas.height = STANDINGS_SHARE_HEIGHT;
@@ -132,15 +158,39 @@ function drawImagePage(input: StandingsShareInput, rows: StandingShareRow[], pag
     ctx.stroke();
   }
 
-  ctx.fillStyle = "#BBFF5E";
-  ctx.font = `900 38px ${font}`;
-  ctx.fillText("PALA PADEL", 100, 210);
+  const [championshipLogo, palaPadelLogo] = await Promise.all([
+    loadCanvasImage(input.championshipLogoUrl),
+    loadCanvasImage("/palapadel-club-transparent.png"),
+  ]);
+
+  if (championshipLogo) {
+    drawRoundRect(ctx, 100, 82, 150, 150, 24);
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = "rgba(251,243,222,0.08)";
+    ctx.fillRect(100, 82, 150, 150);
+    drawImageContain(ctx, championshipLogo, 112, 94, 126, 126);
+    ctx.restore();
+  } else {
+    drawRoundRect(ctx, 100, 82, 150, 150, 24);
+    ctx.fillStyle = "rgba(187,255,94,0.12)";
+    ctx.fill();
+    ctx.fillStyle = "#BBFF5E";
+    ctx.font = `900 30px ${font}`;
+    ctx.textAlign = "center";
+    ctx.fillText(input.categoryName.slice(0, 3).toUpperCase(), 175, 172);
+    ctx.textAlign = "left";
+  }
+
+  if (palaPadelLogo) {
+    drawImageContain(ctx, palaPadelLogo, width - 570, 88, 470, 135);
+  }
 
   ctx.fillStyle = "#FBF3DE";
-  drawTextFit(ctx, "CLASSIFICA", 100, 310, 880, font, 84, 58, "900");
+  drawTextFit(ctx, "CLASSIFICA", 100, 330, 880, font, 84, 58, "900");
 
   ctx.fillStyle = "rgba(251,243,222,0.82)";
-  drawTextFit(ctx, `${input.categoryName} - ${input.season}`, 100, 370, 880, font, 36, 25, "700");
+  drawTextFit(ctx, `${input.categoryName} - ${input.season}`, 100, 390, 880, font, 36, 25, "700");
 
   if (pageCount > 1) {
     ctx.textAlign = "right";
@@ -212,14 +262,6 @@ function drawImagePage(input: StandingsShareInput, rows: StandingShareRow[], pag
     ctx.textAlign = "left";
   });
 
-  ctx.fillStyle = "rgba(251,243,222,0.42)";
-  ctx.font = `700 22px ${font}`;
-  ctx.fillText("palapadel.it", 100, height - 250);
-
-  ctx.textAlign = "right";
-  ctx.fillText(new Date().toLocaleDateString("it-IT"), width - 100, height - 250);
-  ctx.textAlign = "left";
-
   return canvas;
 }
 
@@ -231,7 +273,7 @@ export async function generateStandingsShareImages(input: StandingsShareInput): 
 
   for (let index = 0; index < pages.length; index += 1) {
     const page = index + 1;
-    const canvas = drawImagePage(input, pages[index], page, pageCount);
+    const canvas = await drawImagePage(input, pages[index], page, pageCount);
     const blob = await canvasToBlob(canvas);
     images.push({
       page,

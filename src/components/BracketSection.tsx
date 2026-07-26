@@ -80,23 +80,23 @@ export function BracketSection({
                   <p className="text-[12.5px] text-[rgba(251,243,222,0.50)]">Nessun incontro in questo turno.</p>
                 )}
                 {round.matches.map((m, idx) => (
-                  <div key={idx} className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
-                    <div className={`flex items-center justify-between rounded-lg px-2 py-1.5 ${m.winnerSide === 1 ? "bg-[rgba(187,255,94,0.08)]" : ""}`}>
-                      <span className={`text-[13.5px] ${m.winnerSide === 1 ? "font-bold text-[#BBFF5E]" : ""}`}>
+                  <div key={idx} className="grid grid-cols-[minmax(0,1fr)_32px_minmax(0,1fr)] items-center bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
+                    <div className={`min-w-0 rounded-lg px-2 py-2 text-left ${m.winnerSide === 1 ? "bg-[rgba(187,255,94,0.08)]" : ""}`}>
+                      <span className={`block whitespace-normal break-words text-[13.5px] leading-snug ${m.winnerSide === 1 ? "font-bold text-[#BBFF5E]" : ""}`}>
                         {m.team1Name ?? "— vuoto —"}
                       </span>
-                      {m.winnerSide === 1 && <Trophy size={13} className="text-[#BBFF5E]" />}
+                      {m.winnerSide === 1 && <p className="mt-1 text-[9px] font-extrabold uppercase text-[#BBFF5E]">Vincitore</p>}
                     </div>
                     <div className="flex items-center justify-center">
                       <span className="text-[9px] font-bold uppercase tracking-wider text-[rgba(251,243,222,0.3)]">vs</span>
                     </div>
-                    <div className={`flex items-center justify-between rounded-lg px-2 py-1.5 ${m.winnerSide === 2 ? "bg-[rgba(187,255,94,0.08)]" : ""}`}>
-                      <span className={`text-[13.5px] ${m.winnerSide === 2 ? "font-bold text-[#BBFF5E]" : ""}`}>
+                    <div className={`min-w-0 rounded-lg px-2 py-2 text-right ${m.winnerSide === 2 ? "bg-[rgba(187,255,94,0.08)]" : ""}`}>
+                      <span className={`block whitespace-normal break-words text-[13.5px] leading-snug ${m.winnerSide === 2 ? "font-bold text-[#BBFF5E]" : ""}`}>
                         {m.team2Name ?? "— vuoto —"}
                       </span>
-                      {m.winnerSide === 2 && <Trophy size={13} className="text-[#BBFF5E]" />}
+                      {m.winnerSide === 2 && <p className="mt-1 text-[9px] font-extrabold uppercase text-[#BBFF5E]">Vincitore</p>}
                     </div>
-                    {m.score && <p className="font-display text-[15px] tracking-wide text-[#FBF3DE] text-center mt-2">{m.score}</p>}
+                    {m.score && <p className="col-span-3 font-display text-[15px] tracking-wide text-[#FBF3DE] text-center mt-2">{m.score}</p>}
                   </div>
                 ))}
               </div>
@@ -295,14 +295,34 @@ export function BracketSection({
 
 function NewRoundForm({ onCreate, onCancel }: { onCreate: (name: string) => void; onCancel: () => void }) {
   const [name, setName] = useState("");
+  const presets = ["Ottavi", "Quarti", "Semifinale", "Finale"];
   return (
     <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-bold">Nuovo turno</p>
         <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.50)]" /></button>
       </div>
+      <p className="mb-2 text-[11px] font-bold uppercase text-[rgba(251,243,222,0.55)]">Seleziona turno</p>
+      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {presets.map((preset) => (
+          <button
+            key={preset}
+            type="button"
+            onClick={() => setName(preset)}
+            className={`rounded-lg px-2 py-2.5 text-xs font-bold ${
+              name === preset ? "bg-lime text-[#081208]" : "bg-[rgba(251,243,222,0.08)] text-[#FBF3DE]"
+            }`}
+          >
+            {preset}
+          </button>
+        ))}
+      </div>
+      <label className="mb-1 block text-[11px] font-bold uppercase text-[rgba(251,243,222,0.55)]" htmlFor="custom-round-name">
+        Oppure inserisci manualmente
+      </label>
       <input
-        placeholder="Nome turno (es. Ottavi, Quarti, Semifinale, Finale, Spareggio...)"
+        id="custom-round-name"
+        placeholder="Es. Spareggio"
         value={name}
         onChange={(e) => setName(e.target.value)}
         className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
@@ -373,6 +393,16 @@ function RoundDetail({
     }
   };
 
+  const setWinner = async (match: BracketMatch, winnerTeamId: string) => {
+    try {
+      await updateBracketMatch(match.editionId, match.id, { winnerTeamId: winnerTeamId || null });
+      showToast(winnerTeamId ? "Vincitore dell'incontro aggiornato." : "Vincitore rimosso.");
+    } catch (err) {
+      console.error(err);
+      showToast(err instanceof Error ? err.message : "Errore nel salvataggio del vincitore.");
+    }
+  };
+
   return (
     <div>
       {isAdmin && (
@@ -433,31 +463,46 @@ function RoundDetail({
               }}
             />
           ) : (
-            <div key={m.id} className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
-              <div className={`flex items-center justify-between rounded-lg px-2 py-1.5 ${m.winnerTeamId && m.winnerTeamId === m.team1Id ? "bg-[rgba(187,255,94,0.08)]" : ""}`}>
-                <span className={`text-[13.5px] ${m.winnerTeamId && m.winnerTeamId === m.team1Id ? "font-bold text-[#BBFF5E]" : ""}`}>
+            <div key={m.id} className="grid grid-cols-[minmax(0,1fr)_32px_minmax(0,1fr)] items-center bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
+              <div className={`min-w-0 rounded-lg px-2 py-2 text-left ${m.winnerTeamId && m.winnerTeamId === m.team1Id ? "bg-[rgba(187,255,94,0.08)]" : ""}`}>
+                <span className={`block whitespace-normal break-words text-[13.5px] leading-snug ${m.winnerTeamId && m.winnerTeamId === m.team1Id ? "font-bold text-[#BBFF5E]" : ""}`}>
                   {teamName(m.team1Id)}
                 </span>
-                {!!m.winnerTeamId && m.winnerTeamId === m.team1Id && <Trophy size={13} className="text-[#BBFF5E]" />}
+                {!!m.winnerTeamId && m.winnerTeamId === m.team1Id && <p className="mt-1 text-[9px] font-extrabold uppercase text-[#BBFF5E]">Vincitore</p>}
               </div>
               <div className="flex items-center justify-center">
                 <span className="text-[9px] font-bold uppercase tracking-wider text-[rgba(251,243,222,0.3)]">vs</span>
               </div>
-              <div className={`flex items-center justify-between rounded-lg px-2 py-1.5 ${m.winnerTeamId && m.winnerTeamId === m.team2Id ? "bg-[rgba(187,255,94,0.08)]" : ""}`}>
-                <span className={`text-[13.5px] ${m.winnerTeamId && m.winnerTeamId === m.team2Id ? "font-bold text-[#BBFF5E]" : ""}`}>
+              <div className={`min-w-0 rounded-lg px-2 py-2 text-right ${m.winnerTeamId && m.winnerTeamId === m.team2Id ? "bg-[rgba(187,255,94,0.08)]" : ""}`}>
+                <span className={`block whitespace-normal break-words text-[13.5px] leading-snug ${m.winnerTeamId && m.winnerTeamId === m.team2Id ? "font-bold text-[#BBFF5E]" : ""}`}>
                   {teamName(m.team2Id)}
                 </span>
-                {!!m.winnerTeamId && m.winnerTeamId === m.team2Id && <Trophy size={13} className="text-[#BBFF5E]" />}
+                {!!m.winnerTeamId && m.winnerTeamId === m.team2Id && <p className="mt-1 text-[9px] font-extrabold uppercase text-[#BBFF5E]">Vincitore</p>}
               </div>
-              {m.score && <p className="font-display text-[15px] tracking-wide text-[#FBF3DE] text-center mt-2">{m.score}</p>}
+              {m.score && <p className="col-span-3 font-display text-[15px] tracking-wide text-[#FBF3DE] text-center mt-2">{m.score}</p>}
               {isAdmin && (
-                <div className="flex items-center gap-3 mt-2 pt-2 border-t border-[rgba(251,243,222,0.08)]">
-                  <button onClick={() => setEditingMatchId(m.id)} className="flex items-center gap-1 text-[#BBFF5E] text-xs font-semibold">
-                    <Pencil size={12} /> Modifica
-                  </button>
-                  <button onClick={() => removeMatch(m)} className="flex items-center gap-1 text-[#FF6B6B] text-xs font-semibold">
-                    <Trash2 size={12} /> Elimina
-                  </button>
+                <div className="col-span-3 mt-3 border-t border-[rgba(251,243,222,0.08)] pt-3">
+                  <label className="mb-1 block text-[11px] font-bold uppercase text-[rgba(251,243,222,0.55)]" htmlFor={`winner-${m.id}`}>
+                    Vincitore incontro
+                  </label>
+                  <select
+                    id={`winner-${m.id}`}
+                    value={m.winnerTeamId ?? ""}
+                    onChange={(event) => void setWinner(m, event.target.value)}
+                    className="mb-3 w-full rounded-lg border border-[rgba(251,243,222,0.18)] bg-[#0A0B08] px-3 py-2 text-[13px]"
+                  >
+                    <option value="">Non ancora deciso</option>
+                    {m.team1Id && <option value={m.team1Id}>{teamName(m.team1Id)}</option>}
+                    {m.team2Id && <option value={m.team2Id}>{teamName(m.team2Id)}</option>}
+                  </select>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setEditingMatchId(m.id)} className="flex items-center gap-1 text-[#BBFF5E] text-xs font-semibold">
+                      <Pencil size={12} /> Modifica
+                    </button>
+                    <button onClick={() => removeMatch(m)} className="flex items-center gap-1 text-[#FF6B6B] text-xs font-semibold">
+                      <Trash2 size={12} /> Elimina
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

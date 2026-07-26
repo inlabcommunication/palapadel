@@ -2,6 +2,7 @@ import { getAdminApp, admin } from "../_lib/firebaseAdmin.js";
 import { HttpError, requirePost, sendError, verifyCaller } from "../_lib/auth.js";
 import { buildNotificationPayload, defaultNotificationSettings, resolveNotificationMode } from "../_lib/notifications.js";
 import { documentId, parseBody, z } from "../_lib/validation.js";
+import { findBracketWinnerMatch } from "../../shared/bracketWinner.js";
 
 export default async function handler(req, res) {
   try {
@@ -96,12 +97,12 @@ export default async function handler(req, res) {
             ...(match.winnerTeamId === match.team1Id ? { winnerSide: 1 } : match.winnerTeamId === match.team2Id ? { winnerSide: 2 } : {}),
           })),
         }));
-        const finalRound = rounds[rounds.length - 1];
-        const finalMatch = finalRound && bracketMatches.find((match) => match.roundId === finalRound.id && match.winnerTeamId);
-        if (finalMatch?.winnerTeamId) {
-          winnerId = finalMatch.winnerTeamId;
-          winnerName = teams.get(finalMatch.winnerTeamId) ?? "Squadra eliminata";
+        const finalMatch = findBracketWinnerMatch(rounds, bracketMatches);
+        if (!finalMatch?.winnerTeamId) {
+          throw new HttpError(400, "Il tabellone e attivo: indica il vincitore della Finale prima di concludere l'edizione");
         }
+        winnerId = finalMatch.winnerTeamId;
+        winnerName = teams.get(finalMatch.winnerTeamId) ?? "Squadra eliminata";
       }
 
       if (!winnerName) throw new HttpError(400, "Impossibile determinare il vincitore dell'edizione");

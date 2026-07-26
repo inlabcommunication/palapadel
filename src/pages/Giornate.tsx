@@ -167,6 +167,7 @@ export function GiornatePage() {
           editionId={edition.id}
           typeId={edition.typeId}
           categoryName={type.name}
+          championshipLogoUrl={type.logoUrl}
           season={edition.season}
           entries={editionTeams}
           teams={teams}

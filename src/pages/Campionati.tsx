@@ -398,7 +398,7 @@ export function CampionatiPage() {
             </button>
           </div>
           {contentTab === "standings" ? (
-            <TeamStandings edition={edition} championshipName={activeType.name} isAdmin={isAdmin} showToast={showToast} />
+            <TeamStandings edition={edition} championshipName={activeType.name} championshipLogoUrl={activeType.logoUrl} isAdmin={isAdmin} showToast={showToast} />
           ) : (
             <>
               <PublicCalendar edition={edition} />
@@ -408,7 +408,7 @@ export function CampionatiPage() {
         </>
       )}
       {edition && activeType && !activeType.hasTeams && (
-        <FemaleStandings edition={edition} championshipName={activeType.name} isAdmin={isAdmin} showToast={showToast} />
+        <FemaleStandings edition={edition} championshipName={activeType.name} championshipLogoUrl={activeType.logoUrl} isAdmin={isAdmin} showToast={showToast} />
       )}
 
       {toast && (
@@ -594,11 +594,13 @@ function EditEditionForm({
 function TeamStandings({
   edition,
   championshipName,
+  championshipLogoUrl,
   isAdmin,
   showToast,
 }: {
   edition: ChampionshipEdition;
   championshipName: string;
+  championshipLogoUrl?: string;
   isAdmin: boolean;
   showToast: (msg: string) => void;
 }) {
@@ -724,7 +726,7 @@ function TeamStandings({
         {canShareAsResultManager && (
           <div className="mt-3">
             <StandingsShareButton
-              input={{ categoryName: championshipName, season: edition.season, kind: "team", rows: frozenShareRows }}
+              input={{ categoryName: championshipName, championshipLogoUrl, season: edition.season, kind: "team", rows: frozenShareRows }}
               showToast={showToast}
             />
           </div>
@@ -732,7 +734,7 @@ function TeamStandings({
         {isAdmin && (
           <div className="mt-3 flex flex-col gap-2 items-start">
             <StandingsShareButton
-              input={{ categoryName: championshipName, season: edition.season, kind: "team", rows: frozenShareRows }}
+              input={{ categoryName: championshipName, championshipLogoUrl, season: edition.season, kind: "team", rows: frozenShareRows }}
               showToast={showToast}
             />
             <button onClick={() => setShowLive(true)} className="flex items-center gap-1 text-xs text-[rgba(251,243,222,0.50)]">
@@ -816,6 +818,7 @@ function TeamStandings({
           <StandingsShareButton
             input={{
               categoryName: championshipName,
+              championshipLogoUrl,
               season: edition.season,
               kind: "team",
               rows: rows.map((r, i) => ({
@@ -835,6 +838,7 @@ function TeamStandings({
           <StandingsShareButton
             input={{
               categoryName: championshipName,
+              championshipLogoUrl,
               season: edition.season,
               kind: "team",
               rows: rows.map((r, i) => ({
@@ -1867,11 +1871,13 @@ function EditionTeamEditRow({
 function FemaleStandings({
   edition,
   championshipName,
+  championshipLogoUrl,
   isAdmin,
   showToast,
 }: {
   edition: ChampionshipEdition;
   championshipName: string;
+  championshipLogoUrl?: string;
   isAdmin: boolean;
   showToast: (msg: string) => void;
 }) {
@@ -1975,7 +1981,7 @@ function FemaleStandings({
         {canShareAsResultManager && (
           <div className="mt-3">
             <StandingsShareButton
-              input={{ categoryName: championshipName, season: edition.season, kind: "female", rows: frozenShareRows }}
+              input={{ categoryName: championshipName, championshipLogoUrl, season: edition.season, kind: "female", rows: frozenShareRows }}
               showToast={showToast}
             />
           </div>
@@ -1983,7 +1989,7 @@ function FemaleStandings({
         {isAdmin && (
           <div className="mt-3 flex flex-col gap-2 items-start">
             <StandingsShareButton
-              input={{ categoryName: championshipName, season: edition.season, kind: "female", rows: frozenShareRows }}
+              input={{ categoryName: championshipName, championshipLogoUrl, season: edition.season, kind: "female", rows: frozenShareRows }}
               showToast={showToast}
             />
             <button onClick={() => setShowLive(true)} className="flex items-center gap-1 text-xs text-[rgba(251,243,222,0.50)]">
@@ -2052,6 +2058,7 @@ function FemaleStandings({
           <StandingsShareButton
             input={{
               categoryName: championshipName,
+              championshipLogoUrl,
               season: edition.season,
               kind: "female",
               rows: rows.map((r, i) => ({
@@ -2071,6 +2078,7 @@ function FemaleStandings({
           <StandingsShareButton
             input={{
               categoryName: championshipName,
+              championshipLogoUrl,
               season: edition.season,
               kind: "female",
               rows: rows.map((r, i) => ({

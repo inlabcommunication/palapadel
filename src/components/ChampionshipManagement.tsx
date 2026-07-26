@@ -7,6 +7,7 @@ import { uploadTeamPhotoAsset, deleteTeamPhotoByPath, TeamPhotoError } from "../
 import type { ChampionshipType, Team } from "../types";
 import { BADGE_COLORS } from "../types";
 import { deleteTeam, saveTeam } from "../lib/teamAdminApi";
+import { BackendApiError } from "../lib/backendClient";
 import {
   createChampionshipType,
   deleteChampionshipType,
@@ -319,7 +320,10 @@ export function TeamManagement({ onDone }: { onDone: (msg: string) => void }) {
     } catch (err) {
       if (uploadedPhoto) await deleteTeamPhotoByPath(uploadedPhoto.storagePath);
       console.error(err);
-      const msg = err instanceof TeamPhotoError ? err.message : "Errore nella creazione della squadra.";
+      const msg =
+        err instanceof TeamPhotoError || err instanceof BackendApiError
+          ? err.message
+          : "Errore nella creazione della squadra.";
       setPhotoError(msg);
       onDone(msg);
     } finally {
@@ -506,7 +510,10 @@ function EditTeamRow({
     } catch (err) {
       if (uploadedPhoto) await deleteTeamPhotoByPath(uploadedPhoto.storagePath);
       console.error(err);
-      const msg = err instanceof TeamPhotoError ? err.message : "Errore nel salvataggio.";
+      const msg =
+        err instanceof TeamPhotoError || err instanceof BackendApiError
+          ? err.message
+          : "Errore nel salvataggio.";
       setPhotoError(msg);
       onDone(msg);
     } finally {
