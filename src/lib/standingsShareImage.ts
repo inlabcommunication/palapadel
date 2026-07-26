@@ -34,7 +34,6 @@ export function buildStandingsShareCacheKey(input: StandingsShareInput): string 
     categoryName: input.categoryName,
     season: input.season,
     kind: input.kind,
-    championshipLogoUrl: input.championshipLogoUrl ?? "",
     rows: input.rows.map((row) => ({
       position: row.position,
       name: row.name,
@@ -192,32 +191,10 @@ async function drawImagePage(input: StandingsShareInput, rows: StandingShareRow[
     ctx.stroke();
   }
 
-  const [championshipLogo, palaPadelLogo] = await Promise.all([
-    loadCanvasImage(input.championshipLogoUrl),
-    loadCanvasImage("/palapadel-club-transparent.png"),
-  ]);
-
-  if (championshipLogo) {
-    drawRoundRect(ctx, 100, 82, 150, 150, 24);
-    ctx.save();
-    ctx.clip();
-    ctx.fillStyle = "rgba(251,243,222,0.08)";
-    ctx.fillRect(100, 82, 150, 150);
-    drawImageContain(ctx, championshipLogo, 112, 94, 126, 126);
-    ctx.restore();
-  } else {
-    drawRoundRect(ctx, 100, 82, 150, 150, 24);
-    ctx.fillStyle = "rgba(187,255,94,0.12)";
-    ctx.fill();
-    ctx.fillStyle = "#BBFF5E";
-    ctx.font = `900 30px ${font}`;
-    ctx.textAlign = "center";
-    ctx.fillText(input.categoryName.slice(0, 3).toUpperCase(), 175, 172);
-    ctx.textAlign = "left";
-  }
+  const palaPadelLogo = await loadCanvasImage("/palapadel-club-transparent.png");
 
   if (palaPadelLogo) {
-    drawImageContain(ctx, palaPadelLogo, width - 570, 88, 470, 135);
+    drawImageContain(ctx, palaPadelLogo, (width - 560) / 2, 72, 560, 165);
   }
 
   ctx.fillStyle = "#FBF3DE";

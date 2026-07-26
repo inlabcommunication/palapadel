@@ -14,6 +14,7 @@ import {
   renameBracketRound,
   toggleBracket as toggleBracketViaApi,
   updateBracketMatch,
+  type BracketMatchFields,
 } from "../lib/bracketAdminApi";
 
 
@@ -206,7 +207,13 @@ export function BracketSection({
       for (let i = 0; i < currentMatches.length; i += 2) {
         const winnerA = currentMatches[i]?.winnerTeamId;
         const winnerB = currentMatches[i + 1]?.winnerTeamId;
-        generated.push({ order: order++, ...(winnerA ? { team1Id: winnerA } : {}), ...(winnerB ? { team2Id: winnerB } : {}) });
+        generated.push({
+          order: order++,
+          team1SourceMatchId: currentMatches[i]?.id ?? null,
+          team2SourceMatchId: currentMatches[i + 1]?.id ?? null,
+          ...(winnerA ? { team1Id: winnerA } : {}),
+          ...(winnerB ? { team2Id: winnerB } : {}),
+        });
       }
       await generateBracketRound(edition.id, nextRound.id, generated);
       setSelectedRoundId(nextRound.id);
@@ -285,6 +292,8 @@ export function BracketSection({
           onRename={(name) => renameRound(selectedRound, name)}
           onRemove={() => removeRound(selectedRound)}
           teams={teams}
+          allMatches={allMatches}
+          rounds={sortedRounds}
           isAdmin={isAdmin}
           showToast={showToast}
         />
@@ -347,6 +356,8 @@ function RoundDetail({
   onRename,
   onRemove,
   teams,
+  allMatches,
+  rounds,
   isAdmin,
   showToast,
 }: {
@@ -358,6 +369,8 @@ function RoundDetail({
   onRename: (name: string) => void;
   onRemove: () => void;
   teams: Team[];
+  allMatches: BracketMatch[];
+  rounds: BracketRound[];
   isAdmin: boolean;
   showToast: (msg: string) => void;
 }) {
@@ -367,13 +380,23 @@ function RoundDetail({
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
 
   const sortedMatches = [...matches].sort((a, b) => a.order - b.order);
+  const roundOrder = rounds.find((item) => item.id === round.id)?.order ?? 0;
+  const sourceOptions = rounds
+    .filter((item) => item.order < roundOrder)
+    .flatMap((sourceRound) =>
+      allMatches
+        .filter((match) => match.roundId === sourceRound.id)
+        .sort((a, b) => a.order - b.order)
+        .map((match, index) => ({ matchId: match.id, label: `Vincente ${sourceRound.name} ${index + 1}` }))
+    );
+  const sourceLabel = (id?: string) => sourceOptions.find((option) => option.matchId === id)?.label;
 
   const teamName = (id?: string) => (id ? teams.find((t) => t.id === id)?.name ?? "Squadra eliminata" : "— vuoto —");
 
-  const createMatch = async (team1Id: string, team2Id: string) => {
+  const createMatch = async (fields: BracketMatchFields) => {
     try {
       const nextOrder = sortedMatches.length > 0 ? Math.max(...sortedMatches.map((m) => m.order)) + 1 : 0;
-      await createBracketMatch(round.editionId, round.id, nextOrder, { team1Id: team1Id || null, team2Id: team2Id || null });
+      await createBracketMatch(round.editionId, round.id, nextOrder, fields);
       setShowNewMatch(false);
       showToast("Incontro aggiunto.");
     } catch (err) {
@@ -456,6 +479,7 @@ function RoundDetail({
               key={m.id}
               match={m}
               teams={teams}
+              sourceOptions={sourceOptions}
               onCancel={() => setEditingMatchId(null)}
               onDone={(msg) => {
                 showToast(msg);
@@ -466,7 +490,7 @@ function RoundDetail({
             <div key={m.id} className="grid grid-cols-[minmax(0,1fr)_32px_minmax(0,1fr)] items-center bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
               <div className={`min-w-0 rounded-lg px-2 py-2 text-left ${m.winnerTeamId && m.winnerTeamId === m.team1Id ? "bg-[rgba(187,255,94,0.08)]" : ""}`}>
                 <span className={`block whitespace-normal break-words text-[13.5px] leading-snug ${m.winnerTeamId && m.winnerTeamId === m.team1Id ? "font-bold text-[#BBFF5E]" : ""}`}>
-                  {teamName(m.team1Id)}
+                  {m.team1Id ? teamName(m.team1Id) : sourceLabel(m.team1SourceMatchId) ?? teamName()}
                 </span>
                 {!!m.winnerTeamId && m.winnerTeamId === m.team1Id && <p className="mt-1 text-[9px] font-extrabold uppercase text-[#BBFF5E]">Vincitore</p>}
               </div>
@@ -475,7 +499,7 @@ function RoundDetail({
               </div>
               <div className={`min-w-0 rounded-lg px-2 py-2 text-right ${m.winnerTeamId && m.winnerTeamId === m.team2Id ? "bg-[rgba(187,255,94,0.08)]" : ""}`}>
                 <span className={`block whitespace-normal break-words text-[13.5px] leading-snug ${m.winnerTeamId && m.winnerTeamId === m.team2Id ? "font-bold text-[#BBFF5E]" : ""}`}>
-                  {teamName(m.team2Id)}
+                  {m.team2Id ? teamName(m.team2Id) : sourceLabel(m.team2SourceMatchId) ?? teamName()}
                 </span>
                 {!!m.winnerTeamId && m.winnerTeamId === m.team2Id && <p className="mt-1 text-[9px] font-extrabold uppercase text-[#BBFF5E]">Vincitore</p>}
               </div>
@@ -510,10 +534,18 @@ function RoundDetail({
         )}
       </div>
 
+      {round.name.trim().toLowerCase() === "finale" && sortedMatches.some((match) => match.winnerTeamId) && (
+        <div className="mt-4 rounded-2xl border border-[#BBFF5E] bg-[rgba(187,255,94,0.10)] px-5 py-6 text-center">
+          <Trophy className="mx-auto mb-2 text-[#BBFF5E]" size={30} />
+          <p className="text-[11px] font-extrabold uppercase text-[#BBFF5E]">Vincitore</p>
+          <p className="mt-1 font-display text-3xl text-[#FBF3DE]">{teamName(sortedMatches.find((match) => match.winnerTeamId)?.winnerTeamId)}</p>
+        </div>
+      )}
+
       {isAdmin && (
         <div className="mt-3">
           {showNewMatch ? (
-            <NewMatchForm teams={teams} onCreate={createMatch} onCancel={() => setShowNewMatch(false)} />
+            <NewMatchForm teams={teams} sourceOptions={sourceOptions} onCreate={createMatch} onCancel={() => setShowNewMatch(false)} />
           ) : (
             <button onClick={() => setShowNewMatch(true)} className="flex items-center gap-1.5 text-[13px] font-semibold text-[#BBFF5E]">
               <Plus size={15} /> Aggiungi incontro
@@ -527,15 +559,23 @@ function RoundDetail({
 
 function NewMatchForm({
   teams,
+  sourceOptions,
   onCreate,
   onCancel,
 }: {
   teams: Team[];
-  onCreate: (team1Id: string, team2Id: string) => void;
+  sourceOptions: { matchId: string; label: string }[];
+  onCreate: (fields: BracketMatchFields) => void;
   onCancel: () => void;
 }) {
-  const [team1Id, setTeam1Id] = useState("");
-  const [team2Id, setTeam2Id] = useState("");
+  const [slot1, setSlot1] = useState("");
+  const [slot2, setSlot2] = useState("");
+  const fieldsFor = (slot: string, side: 1 | 2): BracketMatchFields => {
+    const teamKey = side === 1 ? "team1Id" : "team2Id";
+    const sourceKey = side === 1 ? "team1SourceMatchId" : "team2SourceMatchId";
+    if (slot.startsWith("winner:")) return { [teamKey]: null, [sourceKey]: slot.slice(7) };
+    return { [teamKey]: slot.replace(/^team:/, "") || null, [sourceKey]: null };
+  };
 
   return (
     <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-2xl p-3.5">
@@ -543,19 +583,21 @@ function NewMatchForm({
         <p className="text-[13px] font-bold">Nuovo incontro</p>
         <button onClick={onCancel}><X size={16} className="text-[rgba(251,243,222,0.50)]" /></button>
       </div>
-      <select value={team1Id} onChange={(e) => setTeam1Id(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2">
+      <select value={slot1} onChange={(e) => setSlot1(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2">
         <option value="">— vuoto (slot in attesa) —</option>
         {teams.map((t) => (
-          <option key={t.id} value={t.id}>{t.name}</option>
+          <option key={t.id} value={`team:${t.id}`}>{t.name}</option>
         ))}
+        {sourceOptions.map((option) => <option key={option.matchId} value={`winner:${option.matchId}`}>{option.label}</option>)}
       </select>
-      <select value={team2Id} onChange={(e) => setTeam2Id(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2">
+      <select value={slot2} onChange={(e) => setSlot2(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2">
         <option value="">— vuoto (slot in attesa) —</option>
         {teams.map((t) => (
-          <option key={t.id} value={t.id}>{t.name}</option>
+          <option key={t.id} value={`team:${t.id}`}>{t.name}</option>
         ))}
+        {sourceOptions.map((option) => <option key={option.matchId} value={`winner:${option.matchId}`}>{option.label}</option>)}
       </select>
-      <button onClick={() => onCreate(team1Id, team2Id)} className="w-full bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold">
+      <button onClick={() => onCreate({ ...fieldsFor(slot1, 1), ...fieldsFor(slot2, 2) })} className="w-full bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold">
         Aggiungi
       </button>
     </div>
@@ -565,26 +607,34 @@ function NewMatchForm({
 function EditMatchForm({
   match,
   teams,
+  sourceOptions,
   onCancel,
   onDone,
 }: {
   match: BracketMatch;
   teams: Team[];
+  sourceOptions: { matchId: string; label: string }[];
   onCancel: () => void;
   onDone: (msg: string) => void;
 }) {
-  const [team1Id, setTeam1Id] = useState(match.team1Id ?? "");
-  const [team2Id, setTeam2Id] = useState(match.team2Id ?? "");
+  const [slot1, setSlot1] = useState(match.team1SourceMatchId ? `winner:${match.team1SourceMatchId}` : match.team1Id ? `team:${match.team1Id}` : "");
+  const [slot2, setSlot2] = useState(match.team2SourceMatchId ? `winner:${match.team2SourceMatchId}` : match.team2Id ? `team:${match.team2Id}` : "");
   const [score, setScore] = useState(match.score ?? "");
   const [winner, setWinner] = useState(match.winnerTeamId ?? "");
   const [saving, setSaving] = useState(false);
+  const directTeamId = (slot: string) => slot.startsWith("team:") ? slot.slice(5) : "";
+  const sourceMatchId = (slot: string) => slot.startsWith("winner:") ? slot.slice(7) : "";
+  const team1Id = directTeamId(slot1) || (sourceMatchId(slot1) ? match.team1Id ?? "" : "");
+  const team2Id = directTeamId(slot2) || (sourceMatchId(slot2) ? match.team2Id ?? "" : "");
 
   const save = async () => {
     setSaving(true);
     try {
       await updateBracketMatch(match.editionId, match.id, {
-        team1Id: team1Id || null,
-        team2Id: team2Id || null,
+        team1Id: directTeamId(slot1) || null,
+        team2Id: directTeamId(slot2) || null,
+        team1SourceMatchId: sourceMatchId(slot1) || null,
+        team2SourceMatchId: sourceMatchId(slot2) || null,
         score: score.trim(),
         winnerTeamId: winner || null,
       });
@@ -599,17 +649,19 @@ function EditMatchForm({
 
   return (
     <div className="bg-[#123008] border border-[rgba(251,243,222,0.18)] rounded-2xl p-3">
-      <select value={team1Id} onChange={(e) => setTeam1Id(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2">
+      <select value={slot1} onChange={(e) => { setSlot1(e.target.value); setWinner(""); }} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2">
         <option value="">— vuoto —</option>
         {teams.map((t) => (
-          <option key={t.id} value={t.id}>{t.name}</option>
+          <option key={t.id} value={`team:${t.id}`}>{t.name}</option>
         ))}
+        {sourceOptions.map((option) => <option key={option.matchId} value={`winner:${option.matchId}`}>{option.label}</option>)}
       </select>
-      <select value={team2Id} onChange={(e) => setTeam2Id(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2">
+      <select value={slot2} onChange={(e) => { setSlot2(e.target.value); setWinner(""); }} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-[13px] bg-[#0A0B08] mb-2">
         <option value="">— vuoto —</option>
         {teams.map((t) => (
-          <option key={t.id} value={t.id}>{t.name}</option>
+          <option key={t.id} value={`team:${t.id}`}>{t.name}</option>
         ))}
+        {sourceOptions.map((option) => <option key={option.matchId} value={`winner:${option.matchId}`}>{option.label}</option>)}
       </select>
       <input
         placeholder="Risultato (es. 2-1, 6-3 6-4, ecc.)"

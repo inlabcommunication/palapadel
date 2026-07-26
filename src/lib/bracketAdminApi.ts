@@ -1,6 +1,13 @@
 import { postToBackend } from "./backendClient";
 
-export type BracketMatchFields = { team1Id?: string | null; team2Id?: string | null; score?: string; winnerTeamId?: string | null };
+export type BracketMatchFields = {
+  team1Id?: string | null;
+  team2Id?: string | null;
+  team1SourceMatchId?: string | null;
+  team2SourceMatchId?: string | null;
+  score?: string;
+  winnerTeamId?: string | null;
+};
 const call = <T = { ok: true }>(body: object) => postToBackend<T>("/api/admin/bracket", body);
 
 export const toggleBracket = (editionId: string, enabled: boolean) => call({ operation: "toggle", editionId, enabled });

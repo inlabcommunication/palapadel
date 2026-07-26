@@ -212,6 +212,8 @@ export interface BracketMatch {
   order: number;
   team1Id?: string;
   team2Id?: string;
+  team1SourceMatchId?: string;
+  team2SourceMatchId?: string;
   score?: string;
   winnerTeamId?: string;
 }

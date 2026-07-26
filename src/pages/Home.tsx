@@ -127,7 +127,7 @@ export function HomePage() {
       ) : publishedNews.length === 0 ? (
         <EmptyHint text="Nessuna comunicazione pubblicata." />
       ) : (
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)]">
+        <div className={`grid gap-4 ${secondaryNews.length > 0 ? "lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)] lg:items-start" : ""}`}>
           {mainNews &&
             (editingNewsId === mainNews.id ? (
               <EditNewsForm
