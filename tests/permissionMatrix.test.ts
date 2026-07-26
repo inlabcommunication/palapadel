@@ -10,6 +10,8 @@ import {
   canManageResults,
   canShareMatchday,
   canShareStandings,
+  canManageTournaments,
+  canOperateTournaments,
 } from "../shared/permissions.js";
 
 test("Admin ha solo i permessi operativi previsti", () => {
@@ -20,6 +22,8 @@ test("Admin ha solo i permessi operativi previsti", () => {
   assert.equal(canEditMatchSchedule("admin"), true);
   assert.equal(canManageNews("admin"), false);
   assert.equal(canManageChampionships("admin"), false);
+  assert.equal(canManageTournaments("admin"), false);
+  assert.equal(canOperateTournaments("admin"), true);
 });
 
 test("Result Manager non modifica struttura o calendario", () => {
@@ -28,6 +32,7 @@ test("Result Manager non modifica struttura o calendario", () => {
   assert.equal(canCreateMatch("resultManager"), false);
   assert.equal(canEnrollExistingTeam("resultManager"), false);
   assert.equal(canEditMatchSchedule("resultManager"), false);
+  assert.equal(canOperateTournaments("resultManager"), false);
 });
 
 test("i tre ruoli operativi possono condividere", () => {

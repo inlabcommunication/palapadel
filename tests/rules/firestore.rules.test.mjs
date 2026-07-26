@@ -276,3 +276,33 @@ test("solo il superAdmin puo leggere history notifiche e analytics aggregati", a
   await assertFails(admin.firestore().doc("notificationHistory/h1").get());
   await assertFails(admin.firestore().doc("analyticsDaily/2026-07-25").get());
 });
+test("il pubblico legge solo tornei visibili in corso o conclusi e i relativi gironi", async () => {
+  await seedBaseData();
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await db.doc("tournaments/pubblico").set({ name: "Open", status: "in_corso", isPubliclyVisible: true });
+    await db.doc("tournaments/bozza").set({ name: "Bozza", status: "bozza", isPubliclyVisible: true });
+    await db.doc("tournaments/nascosto").set({ name: "Privato", status: "in_corso", isPubliclyVisible: false });
+    await db.doc("tournamentGroups/g1").set({ tournamentId: "pubblico", name: "Girone A", order: 0 });
+    await db.doc("tournamentGroups/g2").set({ tournamentId: "nascosto", name: "Girone B", order: 0 });
+  });
+  const anon = testEnv.unauthenticatedContext().firestore();
+  await assertSucceeds(anon.doc("tournaments/pubblico").get());
+  await assertSucceeds(anon.doc("tournamentGroups/g1").get());
+  await assertFails(anon.doc("tournaments/bozza").get());
+  await assertFails(anon.doc("tournaments/nascosto").get());
+  await assertFails(anon.doc("tournamentGroups/g2").get());
+});
+
+test("Admin e Super Admin leggono le bozze torneo ma nessuno scrive direttamente", async () => {
+  await seedBaseData();
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.firestore().doc("tournaments/bozza").set({ name: "Bozza", status: "bozza", isPubliclyVisible: false });
+  });
+  const admin = testEnv.authenticatedContext("admin-uid").firestore();
+  const superAdmin = testEnv.authenticatedContext("superadmin-uid").firestore();
+  await assertSucceeds(admin.doc("tournaments/bozza").get());
+  await assertSucceeds(superAdmin.doc("tournaments/bozza").get());
+  await assertFails(admin.doc("tournaments/bozza").update({ name: "Manomesso" }));
+  await assertFails(superAdmin.doc("tournaments/bozza").update({ name: "Manomesso" }));
+});

@@ -17,6 +17,11 @@ const BACKUP_COLLECTIONS = Object.freeze({
   notificationSettings: "configurazioneNotifiche",
   publicSettings: "impostazioniPubbliche",
   auditLog: "audit",
+  tournaments: "tornei",
+  tournamentGroups: "gironiTornei",
+  tournamentGroupTeams: "squadreGironiTornei",
+  tournamentBracketRounds: "turniTabelloniTornei",
+  tournamentBracketMatches: "partiteTabelloniTornei",
 });
 
 function jsonSafe(value) {
@@ -46,7 +51,7 @@ export default async function handler(req, res) {
     await db.collection("auditLog").add({
       actor: caller.uid,
       action: "backup_downloaded",
-      detail: JSON.stringify({ role: caller.role, schemaVersion: 1 }),
+      detail: JSON.stringify({ role: caller.role, schemaVersion: 2 }),
       before: null,
       after: { collections: entries.length },
       timestamp: new Date().toISOString(),
@@ -55,7 +60,7 @@ export default async function handler(req, res) {
     res.status(200).json({
       ok: true,
       backup: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         exportedAt: new Date().toISOString(),
         ...Object.fromEntries(entries),
       },

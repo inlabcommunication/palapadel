@@ -5,6 +5,7 @@ import { useAuth } from "../contexts/AuthContext";
 const items = [
   { to: "/", label: "Home", icon: Home, end: true },
   { to: "/campionati", label: "Campionati", icon: Trophy },
+  { to: "/tornei", label: "Tornei", icon: Trophy },
   { to: "/news", label: "News", icon: Newspaper },
   { to: "/albo", label: "Albo d'oro", icon: Award },
   { to: "/notifiche", label: "Notifiche", icon: Bell },
@@ -13,6 +14,7 @@ const items = [
 const superAdminItems = [
   { to: "/gestione", label: "Dashboard", icon: Home, end: true },
   { to: "/campionati", label: "Campionati", icon: Trophy },
+  { to: "/tornei", label: "Tornei", icon: Trophy },
   { to: "/giornate", label: "Giornate", icon: CalendarDays },
   { to: "/#news", label: "News", icon: Newspaper },
   { to: "/albo", label: "Albo", icon: Award },

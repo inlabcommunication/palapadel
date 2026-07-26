@@ -237,6 +237,62 @@ export interface HomeNews {
   deletedAt?: string;
 }
 
+export type TournamentStatus = "bozza" | "in_corso" | "concluso";
+export type TournamentBracketMode = "unico" | "gold_silver";
+export type TournamentBracketKey = "main" | "gold" | "silver";
+
+export interface Tournament {
+  id: string;
+  name: string;
+  season: string;
+  status: TournamentStatus;
+  bracketMode: TournamentBracketMode;
+  isPubliclyVisible: boolean;
+  createdAt: string;
+}
+
+export interface TournamentGroup {
+  id: string;
+  tournamentId: string;
+  name: string;
+  order: number;
+}
+
+export interface TournamentGroupTeam {
+  id: string;
+  tournamentId: string;
+  groupId: string;
+  teamId: string;
+  played: number;
+  won: number;
+  lost: number;
+  points: number;
+  order: number;
+  qualified: boolean;
+}
+
+export interface TournamentBracketRound {
+  id: string;
+  tournamentId: string;
+  bracketKey: TournamentBracketKey;
+  name: string;
+  order: number;
+}
+
+export interface TournamentBracketMatch {
+  id: string;
+  tournamentId: string;
+  bracketKey: TournamentBracketKey;
+  roundId: string;
+  order: number;
+  team1Id?: string;
+  team2Id?: string;
+  team1SourceMatchId?: string;
+  team2SourceMatchId?: string;
+  score?: string;
+  winnerTeamId?: string;
+}
+
 /**
  * historicalWins/{id} — vittorie storiche, sia precedenti alla creazione dell'app
  * (inserite a mano dal Super Amministratore) sia generate in futuro dalla

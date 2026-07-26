@@ -13,6 +13,7 @@ import { GestionePage, OperationalChampionshipsPage } from "./pages/Gestione";
 import { GiornatePage } from "./pages/Giornate";
 import { AnalyticsPage } from "./pages/Analytics";
 import { AdminSettingsPage } from "./pages/AdminSettings";
+import { TorneiPage } from "./pages/Tornei";
 import { useAuth } from "./contexts/AuthContext";
 import { canTrackAnalytics, configureAnalyticsContext, trackAnalyticsEvent } from "./lib/analyticsClient";
 import { bindForegroundNotificationTracking } from "./lib/notificationClient";
@@ -74,6 +75,7 @@ export default function App() {
       <Route path="/" element={<HomePage />} />
       <Route path="/campionati" element={<CampionatiPage />} />
       <Route path="/campionati/:editionId" element={<CampionatiPage />} />
+      <Route path="/tornei" element={<TorneiPage />} />
       <Route path="/news" element={<NewsPage />} />
       <Route path="/storico" element={<Navigate to="/news" replace />} />
       <Route path="/albo" element={<AlboPage />} />

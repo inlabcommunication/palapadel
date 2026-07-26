@@ -47,6 +47,12 @@ service cloud.firestore {
         news.deleted != true;
     }
 
+    function tournamentIsPublic(tournamentId) {
+      let tournament = get(/databases/$(database)/documents/tournaments/$(tournamentId)).data;
+      return tournament.isPubliclyVisible == true &&
+        tournament.status in ['in_corso', 'concluso'];
+    }
+
     // Ognuno legge solo il proprio documento utente. Solo il Super Amministratore scrive.
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isSuperAdmin());
@@ -205,6 +211,34 @@ service cloud.firestore {
 
     match /publicSettings/{id} {
       allow read: if true;
+      allow write: if false;
+    }
+
+    match /tournaments/{id} {
+      allow read: if isAdminOrAbove() || (
+        resource.data.isPubliclyVisible == true &&
+        resource.data.status in ['in_corso', 'concluso']
+      );
+      allow write: if false;
+    }
+
+    match /tournamentGroups/{id} {
+      allow read: if isAdminOrAbove() || tournamentIsPublic(resource.data.tournamentId);
+      allow write: if false;
+    }
+
+    match /tournamentGroupTeams/{id} {
+      allow read: if isAdminOrAbove() || tournamentIsPublic(resource.data.tournamentId);
+      allow write: if false;
+    }
+
+    match /tournamentBracketRounds/{id} {
+      allow read: if isAdminOrAbove() || tournamentIsPublic(resource.data.tournamentId);
+      allow write: if false;
+    }
+
+    match /tournamentBracketMatches/{id} {
+      allow read: if isAdminOrAbove() || tournamentIsPublic(resource.data.tournamentId);
       allow write: if false;
     }
   }
