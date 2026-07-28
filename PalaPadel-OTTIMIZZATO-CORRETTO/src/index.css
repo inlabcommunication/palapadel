@@ -1,0 +1,128 @@
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+html {
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  background: #123008;
+  color: #FBF3DE;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+#root {
+  overflow-x: hidden;
+  /* rispetta l'area sicura inferiore su iPhone/Android con gesture bar */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+.hero-padel-ball {
+  position: absolute;
+  top: -38px;
+  right: -28px;
+  width: 164px;
+  height: 164px;
+  overflow: hidden;
+  border: 2px solid rgba(187, 255, 94, 0.22);
+  border-radius: 50%;
+  background: rgba(187, 255, 94, 0.055);
+  pointer-events: none;
+  transform: rotate(-14deg);
+}
+
+.hero-padel-ball span {
+  position: absolute;
+  top: -18px;
+  width: 82px;
+  height: 198px;
+  border: 2px solid rgba(187, 255, 94, 0.19);
+  border-radius: 50%;
+}
+
+.hero-padel-ball span:first-child {
+  left: -43px;
+}
+
+.hero-padel-ball span:last-child {
+  right: -43px;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
+}
+
+:focus-visible {
+  outline: 2px solid #BBFF5E;
+  outline-offset: 2px;
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+  color: #FBF3DE;
+  background: #0A0B08;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(251, 243, 222, 0.50);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: 2px solid #BBFF5E;
+  outline-offset: 1px;
+}
+
+textarea {
+  resize: vertical;
+}
+
+select option {
+  background: #0A0B08;
+  color: #FBF3DE;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
