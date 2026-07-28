@@ -22,11 +22,12 @@ export function HomePage() {
   const isAdmin = appUser?.role === "superAdmin";
 
   const { data: types } = useCollection<ChampionshipType>("championshipTypes");
-  const { data: editions, loading } = useCollection<ChampionshipEdition>(
+  const editionsQuery = useCollection<ChampionshipEdition>(
     "championshipEditions",
     isAdmin ? [] : [where("status", "in", ["attiva", "conclusa"]), where("isPubliclyVisible", "==", true)],
     [isAdmin]
   );
+  const { data: editions, loading, error: editionsError } = editionsQuery;
   const { data: news, loading: newsLoading } = useCollection<HomeNews>(
     "homeNews",
     isAdmin ? [] : [where("status", "==", "pubblicato")],
@@ -213,7 +214,14 @@ export function HomePage() {
       <SectionTitle className="mt-8">CAMPIONATI IN CORSO</SectionTitle>
       <div className="grid gap-3 sm:grid-cols-2">
         {loading && <EmptyHint text="Carico i campionati..." />}
-        {!loading && active.length === 0 && <EmptyHint text="Nessun campionato attivo al momento." />}
+        {!loading && editionsError && (
+          <div className="rounded-lg border border-[#FF6B6B]/40 bg-[#0A0B08] p-4 text-sm">
+            <p className="font-bold text-[#FF9B6B]">Campionati non disponibili</p>
+            <p className="mt-1 text-[rgba(251,243,222,0.62)]">{editionsError.message}</p>
+            <button onClick={editionsQuery.retry} className="mt-2 font-bold text-[#BBFF5E]">Riprova</button>
+          </div>
+        )}
+        {!loading && !editionsError && active.length === 0 && <EmptyHint text="Nessun campionato attivo al momento." />}
         {active.map((ed) => (
           <ChampionshipCard
             key={ed.id}

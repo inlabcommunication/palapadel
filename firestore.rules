@@ -16,7 +16,7 @@ service cloud.firestore {
     }
 
     function isEnabledUser() {
-      return isSignedIn() && myUser().disabled != true;
+      return isSignedIn() && myUser().get('disabled', false) != true;
     }
 
     function isSuperAdmin() {
@@ -38,7 +38,7 @@ service cloud.firestore {
     // Un'edizione è visibile pubblicamente solo se attiva o conclusa (mai bozza/nascosta).
     function editionIsPublic(editionId) {
       let edition = get(/databases/$(database)/documents/championshipEditions/$(editionId)).data;
-      return edition.status in ['attiva', 'conclusa'] && edition.isPubliclyVisible == true;
+      return edition.status in ['attiva', 'conclusa'] && edition.get('isPubliclyVisible', false) == true;
     }
 
     function newsIsPublic(news) {
@@ -49,7 +49,7 @@ service cloud.firestore {
 
     function tournamentIsPublic(tournamentId) {
       let tournament = get(/databases/$(database)/documents/tournaments/$(tournamentId)).data;
-      return tournament.isPubliclyVisible == true &&
+      return tournament.get('isPubliclyVisible', false) == true &&
         tournament.status in ['in_corso', 'concluso'];
     }
 
@@ -81,7 +81,7 @@ service cloud.firestore {
     match /championshipEditions/{id} {
       allow read: if isGestoreOrAbove() || (
         resource.data.status in ['attiva', 'conclusa'] &&
-        resource.data.isPubliclyVisible == true
+        resource.data.get('isPubliclyVisible', false) == true
       );
       // lastRecalculatedAt viene scritto dal backend con Admin SDK (bypassa le regole):
       // qui restano solo le scritture amministrative dirette dal client.
@@ -216,7 +216,7 @@ service cloud.firestore {
 
     match /tournaments/{id} {
       allow read: if isAdminOrAbove() || (
-        resource.data.isPubliclyVisible == true &&
+        resource.data.get('isPubliclyVisible', false) == true &&
         resource.data.status in ['in_corso', 'concluso']
       );
       allow write: if false;

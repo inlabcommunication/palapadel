@@ -44,6 +44,12 @@ const schema = z.discriminatedUnion("operation", [
   z.object({ operation: z.literal("deleteEdition"), editionId: documentId }).strict(),
 ]);
 
+export function resolveEditionVisibility(beforeStatus, beforeVisibility, nextStatus) {
+  if (nextStatus === "nascosta" || nextStatus === "bozza") return false;
+  if (nextStatus === "attiva" && beforeStatus !== "attiva") return true;
+  return beforeVisibility === true;
+}
+
 export default async function handler(req, res) {
   try {
     requirePost(req);
@@ -149,8 +155,26 @@ export default async function handler(req, res) {
         if (!snap.exists) throw new HttpError(404, "Edizione non trovata");
         if (!typeSnap.exists) throw new HttpError(404, "Tipologia non trovata");
         before = snap.data();
-        after = { ...before, typeId: input.typeId, season: input.season, status: input.status, updatedAt: timestamp };
-        transaction.update(ref, { typeId: input.typeId, season: input.season, status: input.status, updatedAt: timestamp });
+        const isPubliclyVisible = resolveEditionVisibility(
+          before.status,
+          before.isPubliclyVisible,
+          input.status
+        );
+        after = {
+          ...before,
+          typeId: input.typeId,
+          season: input.season,
+          status: input.status,
+          isPubliclyVisible,
+          updatedAt: timestamp,
+        };
+        transaction.update(ref, {
+          typeId: input.typeId,
+          season: input.season,
+          status: input.status,
+          isPubliclyVisible,
+          updatedAt: timestamp,
+        });
         entity = `championshipEditions/${input.editionId}`;
       } else {
         const ref = db.doc(`championshipEditions/${input.editionId}`);

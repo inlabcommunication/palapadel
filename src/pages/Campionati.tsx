@@ -375,6 +375,14 @@ export function CampionatiPage() {
                 )}
               </p>
               <div className="flex items-center gap-3">
+                {isAdmin && activeType?.hasTeams && (
+                  <button
+                    onClick={() => navigate(`/gestione/edizione/${edition.id}`)}
+                    className="flex items-center gap-1 text-xs font-semibold text-[#FBF3DE]"
+                  >
+                    <Calendar size={13} /> Gestisci giornate e partite
+                  </button>
+                )}
                 {isAdmin && (
                   <button onClick={() => setEditingEdition(true)} className="flex items-center gap-1 text-xs text-[#BBFF5E] font-semibold">
                     <Pencil size={13} /> Modifica edizione
