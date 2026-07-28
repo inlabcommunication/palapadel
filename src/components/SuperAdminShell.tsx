@@ -9,6 +9,7 @@ import {
   Home,
   LayoutDashboard,
   LogOut,
+  Bell,
   Newspaper,
   ShieldCheck,
   Trophy,
@@ -27,8 +28,9 @@ const sidebarItems = [
   { to: "/giornate", label: "Giornate e partite", icon: CalendarDays, match: (path: string) => path === "/giornate" || path.startsWith("/gestione/edizione") },
   { to: "/albo", label: "Albo d'oro", icon: Award, match: (path: string) => path === "/albo" },
   { to: "/#news", label: "PalaPadel News", icon: Newspaper, match: (path: string, hash: string) => path === "/" && (!hash || hash === "#news") },
+  { to: "/notifiche", label: "Notifiche", icon: Bell, match: (path: string) => path === "/notifiche" },
   { to: "/analytics", label: "Analytics", icon: BarChart3, match: (path: string) => path === "/analytics" },
-  { to: "/utenti-impostazioni", label: "Utenti e impostazioni", icon: ShieldCheck, match: (path: string) => path === "/utenti-impostazioni" || path === "/notifiche" },
+  { to: "/utenti-impostazioni", label: "Utenti e impostazioni", icon: ShieldCheck, match: (path: string) => path === "/utenti-impostazioni" },
 ];
 
 export function SuperAdminShell({ children }: { children: React.ReactNode }) {

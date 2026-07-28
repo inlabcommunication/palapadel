@@ -18,6 +18,7 @@ const superAdminItems = [
   { to: "/giornate", label: "Giornate", icon: CalendarDays },
   { to: "/#news", label: "News", icon: Newspaper },
   { to: "/albo", label: "Albo", icon: Award },
+  { to: "/notifiche", label: "Notifiche", icon: Bell },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
   { to: "/utenti-impostazioni", label: "Impostazioni", icon: ShieldCheck },
 ];
