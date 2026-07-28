@@ -80,7 +80,7 @@ export function CentralNotificationPanel() {
         type="button"
         onClick={openPanel}
         aria-label="Manda notifica"
-        className="fixed bottom-24 right-4 z-40 inline-flex min-h-11 items-center gap-2 rounded-full border border-[#BBFF5E] bg-[#0A0B08] px-4 py-2.5 text-xs font-extrabold text-[#BBFF5E] shadow-lg xl:bottom-6 xl:right-6"
+        className="fixed bottom-24 right-4 z-40 inline-flex min-h-11 items-center gap-2 rounded-full border border-[#BBFF5E] bg-[#0A0B08] px-4 py-2.5 text-xs font-extrabold text-[#BBFF5E] shadow-lg xl:bottom-6 xl:left-1/2 xl:right-auto xl:-translate-x-1/2"
       >
         <BellRing size={17} />
         <span>Notifica</span>
