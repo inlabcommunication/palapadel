@@ -1,0 +1,76 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function myUser() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function myRole() {
+      return myUser().role;
+    }
+
+    function isEnabledUser() {
+      return isSignedIn() && myUser().get('disabled', false) != true;
+    }
+
+    function isSuperAdmin() {
+      return isEnabledUser() && myRole() in ['superAdmin', 'superadmin'];
+    }
+
+    function isValidImage() {
+      return request.resource.contentType in
+        ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    }
+
+    function isUnderSizeLimit() {
+      return request.resource.size <= 5 * 1024 * 1024;
+    }
+
+    function publishedHomeNews(newsId) {
+      let news = firestore.get(/databases/(default)/documents/homeNews/$(newsId)).data;
+      return news.status == 'pubblicato';
+    }
+
+    match /teams/{teamId}/team-photo/{fileName} {
+      allow read: if true;
+      allow create, update: if isSuperAdmin() && isValidImage() && isUnderSizeLimit();
+      allow delete: if isSuperAdmin();
+    }
+
+    match /home-news/{newsId}/cover/{fileName} {
+      allow read: if publishedHomeNews(newsId) || isSuperAdmin();
+      allow create, update: if isSuperAdmin() && isValidImage() && isUnderSizeLimit();
+      allow delete: if isSuperAdmin();
+    }
+
+    // Loghi delle categorie generali, per esempio Serie B o Femminile.
+    match /championship-types/{typeId}/logo/{fileName} {
+      allow read: if true;
+      allow create, update: if isSuperAdmin() && isValidImage() && isUnderSizeLimit();
+      allow delete: if isSuperAdmin();
+    }
+
+    // Logo specifico di una singola edizione, quando differisce da quello di categoria.
+    match /championship-editions/{editionId}/logo/{fileName} {
+      allow read: if true;
+      allow create, update: if isSuperAdmin() && isValidImage() && isUnderSizeLimit();
+      allow delete: if isSuperAdmin();
+    }
+
+    match /tournaments/{tournamentId}/logo/{fileName} {
+      allow read: if true;
+      allow create, update: if isSuperAdmin() && isValidImage() && isUnderSizeLimit();
+      allow delete: if isSuperAdmin();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

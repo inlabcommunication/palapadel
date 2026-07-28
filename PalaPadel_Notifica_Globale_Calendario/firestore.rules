@@ -1,0 +1,250 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function myUser() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function myRole() {
+      return myUser().role;
+    }
+
+    function isEnabledUser() {
+      return isSignedIn() && myUser().get('disabled', false) != true;
+    }
+
+    function isSuperAdmin() {
+      return isEnabledUser() && myRole() in ['superAdmin', 'superadmin'];
+    }
+
+    function isAdminOrAbove() {
+      return isEnabledUser() && (myRole() in ['superAdmin', 'superadmin'] || myRole() == 'admin');
+    }
+
+    function isGestoreOrAbove() {
+      return isEnabledUser() && (
+        myRole() in ['superAdmin', 'superadmin'] ||
+        myRole() == 'admin' ||
+        myRole() in ['resultManager', 'gestore']
+      );
+    }
+
+    // Un'edizione è visibile pubblicamente solo se attiva o conclusa (mai bozza/nascosta).
+    function editionIsPublic(editionId) {
+      let edition = get(/databases/$(database)/documents/championshipEditions/$(editionId)).data;
+      return edition.status in ['attiva', 'conclusa'] && edition.get('isPubliclyVisible', false) == true;
+    }
+
+    function newsIsPublic(news) {
+      // Le query pubbliche filtrano per status. Le news eliminate vengono prima
+      // riportate a "bozza" dal backend e poi cancellate.
+      return news.status == 'pubblicato';
+    }
+
+    function tournamentIsPublic(tournamentId) {
+      let tournament = get(/databases/$(database)/documents/tournaments/$(tournamentId)).data;
+      return tournament.get('isPubliclyVisible', false) == true &&
+        tournament.status in ['in_corso', 'concluso'];
+    }
+
+    // Ognuno legge solo il proprio documento utente. Solo il Super Amministratore scrive.
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isSuperAdmin());
+      allow write: if false;
+    }
+
+    // Fase 16 — mappatura pubblica "nome utente" -> email interna per il login. Serve
+    // solo poter leggere UN documento preciso e già noto (get), mai elencare l'intera
+    // collezione (list), che esporrebbe tutti gli username registrati. Il frontend
+    // (src/pages/Login.tsx) usa già getDoc su un riferimento preciso, mai una query.
+    match /usernameEmails/{slug} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // Dati pubblici in lettura per chiunque (anche senza login), scrittura riservata.
+    match /championshipTypes/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Le edizioni in bozza o nascoste non sono leggibili pubblicamente, solo da
+    // amministratori/gestori. Le query pubbliche del frontend filtrano già per
+    // status in ["attiva","conclusa"], quindi restano compatibili con questa regola.
+    match /championshipEditions/{id} {
+      allow read: if isGestoreOrAbove() || (
+        resource.data.status in ['attiva', 'conclusa'] &&
+        resource.data.get('isPubliclyVisible', false) == true
+      );
+      // lastRecalculatedAt viene scritto dal backend con Admin SDK (bypassa le regole):
+      // qui restano solo le scritture amministrative dirette dal client.
+      allow write: if false;
+    }
+
+    match /teams/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Fase 2/8 — la classifica squadre è gestita ESCLUSIVAMENTE dal backend con
+    // Firebase Admin SDK (api/standings/manage-entry.js, recalculate.js, set-status.js),
+    // che bypassa queste regole. Nessun ruolo scrive qui direttamente dal client,
+    // nemmeno admin/superAdmin: un solo percorso di scrittura possibile.
+    match /editionTeams/{id} {
+      allow read: if isGestoreOrAbove() || editionIsPublic(resource.data.editionId);
+      allow write: if false;
+    }
+
+    match /femaleParticipants/{id} {
+      allow read: if isGestoreOrAbove() || editionIsPublic(resource.data.editionId);
+      allow write: if false;
+    }
+
+    // Le giornate vengono create dal backend, che valida ruolo, duplicati e audit.
+    match /matchdays/{id} {
+      allow read: if isGestoreOrAbove() || editionIsPublic(resource.data.editionId);
+      allow write: if false;
+    }
+
+    // Fase 1/6/8/9 — il frontend usa esclusivamente gli endpoint in api/matches/*.js e
+    // api/home-news/*.js (Firebase Admin SDK, bypassano queste regole) per QUALUNQUE
+    // scrittura su matches: risultato/stato, creazione, eliminazione, e i campi di
+    // notifica (notificationStatus/notificationDraftCreatedAt/notificationNewsId).
+    // Nessun ruolo scrive qui direttamente dal client.
+    match /matches/{id} {
+      allow read: if isGestoreOrAbove() || editionIsPublic(resource.data.editionId);
+      allow write: if false;
+    }
+
+    // Le notizie in bozza non sono pubbliche.
+    match /homeNews/{id} {
+      allow read: if isSuperAdmin() || newsIsPublic(resource.data);
+      allow write: if false;
+    }
+
+    // Notifiche push: installazioni/token/preferenze vengono scritti solo dagli
+    // endpoint Vercel con Admin SDK. Il client pubblico non deve poter leggere token
+    // o storico invii; il Super Amministratore legge solo configurazione e audit.
+    match /notificationSettings/{id} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    match /notificationDrafts/{id} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    match /notificationHistory/{id} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    match /notificationDispatches/{id} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    match /notificationInstallations/{installationId} {
+      allow read, write: if false;
+      match /{document=**} {
+        allow read, write: if false;
+      }
+    }
+
+    // Analytics interni anonimi: il tracciamento passa dagli endpoint, il client non
+    // scrive direttamente e solo il Super Amministratore legge gli aggregati.
+    match /analyticsDaily/{id} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    match /analyticsEvents/{id} {
+      allow read, write: if false;
+    }
+
+    match /analyticsInstallations/{id} {
+      allow read, write: if false;
+    }
+
+    match /bracketRounds/{id} {
+      allow read: if isGestoreOrAbove() || editionIsPublic(resource.data.editionId);
+      allow write: if false;
+    }
+
+    match /bracketMatches/{id} {
+      allow read: if isGestoreOrAbove() || editionIsPublic(resource.data.editionId);
+      allow write: if false;
+    }
+
+    // Vittorie storiche (Albo d'oro): quelle precedenti all'app sono inserite a mano dal
+    // Super Amministratore, quelle successive vengono create automaticamente alla chiusura
+    // di un'edizione (vedi src/lib/freezeEdition.ts), sempre con permessi da amministratore.
+    match /historicalWins/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Log di controllo: creato dal backend con Admin SDK (bypassa le regole) o, in
+    // amministrazione, da un client admin. Mai leggibile pubblicamente. Immutabile.
+    match /auditLog/{id} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    match /storageCleanupQueue/{id} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    match /productionErrors/{id} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    match /publicSettings/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /tournaments/{id} {
+      allow read: if isAdminOrAbove() || (
+        resource.data.get('isPubliclyVisible', false) == true &&
+        resource.data.status in ['in_corso', 'concluso']
+      );
+      allow write: if false;
+    }
+
+    match /tournamentGroups/{id} {
+      allow read: if isAdminOrAbove() || tournamentIsPublic(resource.data.tournamentId);
+      allow write: if false;
+    }
+
+    match /tournamentTeams/{id} {
+      allow read: if isAdminOrAbove() || tournamentIsPublic(resource.data.tournamentId);
+      allow write: if false;
+    }
+
+    match /tournamentGroupTeams/{id} {
+      allow read: if isAdminOrAbove() || tournamentIsPublic(resource.data.tournamentId);
+      allow write: if false;
+    }
+
+    match /tournamentBracketRounds/{id} {
+      allow read: if isAdminOrAbove() || tournamentIsPublic(resource.data.tournamentId);
+      allow write: if false;
+    }
+
+    match /tournamentBracketMatches/{id} {
+      allow read: if isAdminOrAbove() || tournamentIsPublic(resource.data.tournamentId);
+      allow write: if false;
+    }
+  }
+}
