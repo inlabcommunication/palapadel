@@ -33,7 +33,6 @@ import type {
 import { ChampionshipTypeManagement, TeamManagement } from "../components/ChampionshipManagement";
 import { BracketSection } from "../components/BracketSection";
 import { StandingsShareButton } from "../components/StandingsShareButton";
-import { ContextNotificationButton } from "../components/ContextNotificationButton";
 import { parsePastedTable } from "../lib/parsePastedTable";
 import { resolveActiveMatchdayId } from "../lib/activeMatchday";
 import { closeEdition, reorderChampionshipTypes, setChampionshipVisibility } from "../lib/championshipAdminApi";
@@ -415,29 +414,9 @@ export function CampionatiPage() {
                 </button>
               )}
               <TeamStandings edition={edition} championshipName={activeType.name} championshipLogoUrl={activeType.logoUrl} isAdmin={isAdmin} showToast={showToast} />
-              <ContextNotificationButton
-                event={{
-                  type: "standings_update",
-                  title: "Aggiornamento classifica",
-                  body: `La classifica di ${activeType.name} ${edition.season} è stata aggiornata.`,
-                  url: `/campionati/${edition.id}`,
-                  editionId: edition.id,
-                }}
-              />
             </>
           ) : contentTab === "calendar" ? (
-            <>
-              <PublicCalendar edition={edition} />
-              <ContextNotificationButton
-                event={{
-                  type: "match_result",
-                  title: "Aggiornamento calendario",
-                  body: `Il calendario di ${activeType.name} ${edition.season} è stato aggiornato.`,
-                  url: `/campionati/${edition.id}?tab=calendar`,
-                  editionId: edition.id,
-                }}
-              />
-            </>
+            <PublicCalendar edition={edition} />
           ) : (
             <>
               {!isAdmin && <button onClick={() => setContentTab("standings")} className="mb-2 text-xs font-bold text-[#BBFF5E]">Torna alla classifica</button>}
@@ -447,18 +426,7 @@ export function CampionatiPage() {
         </>
       )}
       {edition && activeType && !activeType.hasTeams && (
-        <>
-          <FemaleStandings edition={edition} championshipName={activeType.name} championshipLogoUrl={activeType.logoUrl} isAdmin={isAdmin} showToast={showToast} />
-          <ContextNotificationButton
-            event={{
-              type: "standings_update",
-              title: "Aggiornamento classifica",
-              body: `La classifica di ${activeType.name} ${edition.season} è stata aggiornata.`,
-              url: `/campionati/${edition.id}`,
-              editionId: edition.id,
-            }}
-          />
-        </>
+        <FemaleStandings edition={edition} championshipName={activeType.name} championshipLogoUrl={activeType.logoUrl} isAdmin={isAdmin} showToast={showToast} />
       )}
 
       {toast && (
