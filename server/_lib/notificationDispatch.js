@@ -12,9 +12,12 @@ export async function collectTargetTokens(db, payload) {
     if (install.notificationsEnabled === false || install.permission !== "granted") continue;
     const topics = normalizeTopicPrefs(install.topics);
     if (topics[payload.type] === false) continue;
-    targets.push(tokenDoc.data().token);
+    const token = tokenDoc.data().token;
+    if (typeof token === "string" && token.trim()) {
+      targets.push({ token, ref: tokenDoc.ref });
+    }
   }
-  return [...new Set(targets)];
+  return [...new Map(targets.map((target) => [target.token, target])).values()];
 }
 
 export async function dispatchNotification(app, db, payload, callerUid, options = {}) {
@@ -25,7 +28,8 @@ export async function dispatchNotification(app, db, payload, callerUid, options 
     if (dispatchSnap.exists) return { ...dispatchSnap.data(), idempotent: true };
   }
 
-  const tokens = await collectTargetTokens(db, payload);
+  const targets = await collectTargetTokens(db, payload);
+  const tokens = targets.map((target) => target.token);
   const now = new Date().toISOString();
   let status = "sent";
   let successCount = 0;
@@ -43,6 +47,19 @@ export async function dispatchNotification(app, db, payload, callerUid, options 
       successCount = response.successCount;
       failureCount = response.failureCount;
       status = failureCount > 0 && successCount === 0 ? "failed" : "sent";
+      const invalidCodes = new Set([
+        "messaging/invalid-registration-token",
+        "messaging/registration-token-not-registered",
+      ]);
+      const invalidWrites = response.responses.flatMap((item, index) => {
+        if (item.success || !invalidCodes.has(item.error?.code)) return [];
+        return [targets[index].ref.set({
+          active: false,
+          invalidatedAt: now,
+          invalidationReason: item.error.code,
+        }, { merge: true })];
+      });
+      await Promise.all(invalidWrites);
     } catch (err) {
       status = "failed";
       failureCount = tokens.length;

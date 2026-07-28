@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Bell, Check, Clock, Send, X } from "lucide-react";
+import { Bell, Check, Send, X } from "lucide-react";
 import { where } from "firebase/firestore";
 import { useAuth } from "../contexts/AuthContext";
 import { useCollection } from "../hooks/useCollection";
@@ -7,6 +7,7 @@ import type { ChampionshipEdition, ChampionshipType } from "../types";
 import {
   createNotificationDraft,
   defaultUserNotificationPrefs,
+  dispatchDueNotifications,
   getNotificationHistory,
   getNotificationDiagnostics,
   getNotificationSettings,
@@ -17,7 +18,6 @@ import {
   requestPushRegistration,
   saveNotificationPreferences,
   saveNotificationSettings,
-  scheduleNotification,
   sendNotification,
   type NotificationEventInput,
   type NotificationHistoryEntry,
@@ -169,7 +169,6 @@ function SuperAdminNotificationsPanel({ showToast }: { showToast: (msg: string) 
     url: "/notifiche",
     editionId: null,
   });
-  const [scheduledAt, setScheduledAt] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
   const [diagnostics, setDiagnostics] = useState<NotificationDiagnostics | null>(null);
   const [checkingDiagnostics, setCheckingDiagnostics] = useState(false);
@@ -265,18 +264,6 @@ function SuperAdminNotificationsPanel({ showToast }: { showToast: (msg: string) 
     }
   };
 
-  const schedule = async () => {
-    if (!scheduledAt) return;
-    try {
-      await scheduleNotification(event, new Date(scheduledAt).toISOString());
-      showToast("Notifica programmata.");
-      await load();
-    } catch (err) {
-      console.error(err);
-      showToast("Errore nella programmazione.");
-    }
-  };
-
   const sendNow = async () => {
     try {
       const result = await sendNotification(event);
@@ -285,6 +272,21 @@ function SuperAdminNotificationsPanel({ showToast }: { showToast: (msg: string) 
     } catch (err) {
       console.error(err);
       showToast("Errore durante l'invio.");
+    }
+  };
+
+  const dispatchDue = async () => {
+    try {
+      const result = await dispatchDueNotifications();
+      showToast(
+        result.dispatched.length > 0
+          ? `${result.dispatched.length} notifiche programmate elaborate.`
+          : "Nessuna notifica pronta per l'invio."
+      );
+      await load();
+    } catch (err) {
+      console.error(err);
+      showToast("Errore nell'invio delle notifiche programmate.");
     }
   };
 
@@ -430,28 +432,18 @@ function SuperAdminNotificationsPanel({ showToast }: { showToast: (msg: string) 
           placeholder="/notifiche"
           className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-2"
         />
-        <input
-          type="datetime-local"
-          value={scheduledAt}
-          onChange={(e) => setScheduledAt(e.target.value)}
-          className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2.5 text-sm mb-3"
-        />
-
         {preview && (
           <div className="bg-[#123008] rounded-lg px-3 py-2 text-[12.5px] text-[rgba(251,243,222,0.85)] mb-3">
             {preview}
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <button onClick={runPreview} className="flex items-center justify-center gap-1.5 border border-[rgba(251,243,222,0.18)] rounded-lg py-2.5 text-sm font-semibold">
             <Check size={15} /> Anteprima
           </button>
           <button onClick={createDraft} className="flex items-center justify-center gap-1.5 border border-[rgba(251,243,222,0.18)] rounded-lg py-2.5 text-sm font-semibold">
             <X size={15} /> Bozza
-          </button>
-          <button onClick={schedule} disabled={!scheduledAt} className="flex items-center justify-center gap-1.5 border border-[rgba(251,243,222,0.18)] rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50">
-            <Clock size={15} /> Programma
           </button>
           <button onClick={sendNow} className="flex items-center justify-center gap-1.5 bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold">
             <Send size={15} /> Invia
@@ -460,9 +452,12 @@ function SuperAdminNotificationsPanel({ showToast }: { showToast: (msg: string) 
       </div>
 
       <div className="bg-[#0A0B08] border border-[rgba(251,243,222,0.10)] rounded-xl overflow-hidden">
-        <p className="px-3.5 py-2.5 text-[12px] uppercase tracking-wider font-bold text-[rgba(251,243,222,0.58)] border-b border-[rgba(251,243,222,0.08)]">
-          Storico
-        </p>
+        <div className="flex items-center justify-between gap-3 border-b border-[rgba(251,243,222,0.08)] px-3.5 py-2.5">
+          <p className="text-[12px] uppercase tracking-wider font-bold text-[rgba(251,243,222,0.58)]">Storico</p>
+          <button onClick={dispatchDue} className="text-xs font-semibold text-[#BBFF5E]">
+            Invia programmate ora
+          </button>
+        </div>
         {history.length === 0 ? (
           <p className="px-3.5 py-3 text-[12.5px] text-[rgba(251,243,222,0.50)]">Nessuna notifica ancora.</p>
         ) : (

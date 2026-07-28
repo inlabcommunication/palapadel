@@ -4,6 +4,7 @@ import { ChevronRight, Megaphone, Newspaper, X } from "lucide-react";
 import { useCollection } from "../hooks/useCollection";
 import { getNewsExcerpt, getNewsImageAlt } from "../lib/homeNewsImagePolicy";
 import { getPublishedNewsForHome } from "../lib/homePresentation";
+import { ContextNotificationButton } from "../components/ContextNotificationButton";
 import type { HomeNews } from "../types";
 
 export function NewsPage() {
@@ -66,6 +67,17 @@ export function NewsPage() {
           </article>
         ))}
       </div>}
+
+      {!loading && !error && (
+        <ContextNotificationButton
+          event={{
+            type: "news",
+            title: "PalaPadel News",
+            body: "Controlla le news del PalaPadel.",
+            url: "/news",
+          }}
+        />
+      )}
 
       {selectedNews && (
         <div

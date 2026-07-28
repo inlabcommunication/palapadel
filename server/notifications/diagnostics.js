@@ -23,7 +23,10 @@ export default async function handler(req, res) {
       const data = doc.data();
       return data.permission === "granted" && data.notificationsEnabled !== false;
     }).length;
-    const validTokens = tokensSnap.docs.filter((doc) => typeof doc.data().token === "string" && doc.data().token.length > 20).length;
+    const validTokens = tokensSnap.docs.filter((doc) => {
+      const data = doc.data();
+      return data.active !== false && typeof data.token === "string" && data.token.length > 20;
+    }).length;
     const recentFailures = historySnap.docs.reduce((total, doc) => total + Number(doc.data().failureCount ?? 0), 0);
     const recentSuccesses = historySnap.docs.reduce((total, doc) => total + Number(doc.data().successCount ?? 0), 0);
 

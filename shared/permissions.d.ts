@@ -21,6 +21,7 @@ export type Permission =
   | "shareMatchday"
   | "manageHallOfFame"
   | "manageNotifications"
+  | "sendNotifications"
   | "downloadBackup"
   | "viewAuditLog"
   | "undoOperation"
@@ -52,3 +53,4 @@ export function canShareStandings(role: unknown): boolean;
 export function canShareMatchday(role: unknown): boolean;
 export function canManageTournaments(role: unknown): boolean;
 export function canOperateTournaments(role: unknown): boolean;
+export function canSendNotifications(role: unknown): boolean;

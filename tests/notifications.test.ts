@@ -14,7 +14,7 @@ test("normalizeNotificationSettings conserva solo modalita valide e completa i d
   });
 
   assert.equal(settings.globalEnabled, true);
-  assert.equal(settings.typeModes.match_result, "automatic");
+  assert.equal(settings.typeModes.match_result, "draft");
   assert.equal(settings.typeModes.news, "ask");
   assert.equal(settings.typeModes.winner, "draft");
 });
@@ -26,7 +26,7 @@ test("resolveNotificationMode applica override per edizione e switch globale", (
     editionModes: { ed1: { match_result: "automatic" } },
   });
 
-  assert.equal(resolveNotificationMode(settings, "match_result", "ed1"), "automatic");
+  assert.equal(resolveNotificationMode(settings, "match_result", "ed1"), "draft");
   assert.equal(resolveNotificationMode(settings, "match_result", "ed2"), "draft");
   assert.equal(resolveNotificationMode({ ...settings, globalEnabled: false }, "match_result", "ed1"), "disabled");
 });

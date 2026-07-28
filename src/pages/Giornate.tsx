@@ -23,6 +23,7 @@ import { ScheduleImportPanel } from "../components/ScheduleImportPanel";
 import { setActiveMatchday } from "../lib/championshipAdminApi";
 import { OperationalStandings } from "../components/OperationalStandings";
 import { BracketSection } from "../components/BracketSection";
+import { ContextNotificationButton } from "../components/ContextNotificationButton";
 import { resolveActiveMatchdayId } from "../lib/activeMatchday";
 import type { ChampionshipEdition, ChampionshipType, EditionTeam, Team, Matchday, Match, MatchStatus } from "../types";
 import { ArrowLeft, Plus, Clock, Ban, Trash2, X, Pencil, ChevronDown, CalendarDays } from "lucide-react";
@@ -176,20 +177,31 @@ export function GiornatePage() {
       </button>
 
       {activeTab === "standings" ? (
-        <OperationalStandings
-          editionId={edition.id}
-          typeId={edition.typeId}
-          categoryName={type.name}
-          championshipLogoUrl={type.logoUrl}
-          season={edition.season}
-          entries={editionTeams}
-          teams={teams}
-          matches={matches}
-          canEdit={perms.canEditOperationalStandings}
-          canEnroll={perms.canEnrollExistingTeam}
-          canShare={perms.canShareStandings}
-          showToast={showToast}
-        />
+        <>
+          <OperationalStandings
+            editionId={edition.id}
+            typeId={edition.typeId}
+            categoryName={type.name}
+            championshipLogoUrl={type.logoUrl}
+            season={edition.season}
+            entries={editionTeams}
+            teams={teams}
+            matches={matches}
+            canEdit={perms.canEditOperationalStandings}
+            canEnroll={perms.canEnrollExistingTeam}
+            canShare={perms.canShareStandings}
+            showToast={showToast}
+          />
+          <ContextNotificationButton
+            event={{
+              type: "standings_update",
+              title: "Aggiornamento classifica",
+              body: `La classifica di ${type.name} ${edition.season} è stata aggiornata.`,
+              url: `/campionati/${edition.id}`,
+              editionId: edition.id,
+            }}
+          />
+        </>
       ) : activeTab === "bracket" ? (
         <BracketSection edition={edition} isAdmin={canManageMatchdays} showToast={showToast} />
       ) : (
@@ -277,6 +289,15 @@ export function GiornatePage() {
           showToast={showToast}
         />
       )}
+      <ContextNotificationButton
+        event={{
+          type: "match_result",
+          title: "Aggiornamento calendario",
+          body: `Il calendario di ${type.name} ${edition.season} è stato aggiornato.`,
+          url: `/campionati/${edition.id}?tab=calendar`,
+          editionId: edition.id,
+        }}
+      />
         </>
       )}
 

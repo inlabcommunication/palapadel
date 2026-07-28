@@ -6,7 +6,7 @@ export const NOTIFICATION_TYPES = [
   "news",
 ];
 
-export const NOTIFICATION_MODES = ["disabled", "ask", "automatic", "draft"];
+export const NOTIFICATION_MODES = ["disabled", "ask", "draft"];
 
 export const DEFAULT_TYPE_MODES = {
   match_result: "draft",
@@ -17,6 +17,7 @@ export const DEFAULT_TYPE_MODES = {
 };
 
 export function normalizeNotificationMode(value, fallback = "draft") {
+  if (value === "automatic") return "draft";
   return NOTIFICATION_MODES.includes(value) ? value : fallback;
 }
 

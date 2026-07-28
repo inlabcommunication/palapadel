@@ -19,6 +19,7 @@ import {
   canReorderChampionships,
   canShareStandings,
   canShareMatchday,
+  canSendNotifications,
 } from "../../shared/permissions.js";
 
 export {
@@ -41,6 +42,7 @@ export {
   canReorderChampionships,
   canShareStandings,
   canShareMatchday,
+  canSendNotifications,
 };
 
 export interface Permissions {

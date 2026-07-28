@@ -146,7 +146,7 @@ export default async function handler(req, res) {
           eventType: payload.type,
           editionId,
           mode,
-          status: mode === "automatic" ? "queued" : "draft",
+          status: "draft",
           sourceRef: `championshipEditions/${editionId}`,
           createdAt: timestamp,
           createdBy: caller.uid,

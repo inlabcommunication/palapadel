@@ -4,7 +4,6 @@ import {
   defaultNotificationSettings,
   resolveNotificationMode,
 } from "./notifications.js";
-import { dispatchNotification } from "./notificationDispatch.js";
 
 export async function enqueueNotificationEvent(app, event, options = {}) {
   const db = admin.firestore(app);
@@ -17,7 +16,7 @@ export async function enqueueNotificationEvent(app, event, options = {}) {
   const now = new Date().toISOString();
   const id = options.idempotencyKey || db.collection("notificationDrafts").doc().id;
   const draftRef = db.doc(`notificationDrafts/${id}`);
-  const draftStatus = mode === "automatic" ? "queued" : "draft";
+  const draftStatus = "draft";
   await draftRef.set(
     {
       id,
@@ -50,14 +49,6 @@ export async function enqueueNotificationEvent(app, event, options = {}) {
     },
     { merge: true }
   );
-
-  if (mode === "automatic") {
-    const dispatch = await dispatchNotification(app, db, payload, options.createdBy ?? "system", {
-      draftRef,
-      idempotencyKey: `auto-${id}`,
-    });
-    return { mode, status: dispatch.status, payload, draftId: id, historyId: dispatch.historyId };
-  }
 
   return { mode, status: draftStatus, payload, draftId: id };
 }

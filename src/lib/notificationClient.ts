@@ -23,7 +23,6 @@ export const NOTIFICATION_LABELS: Record<(typeof NOTIFICATION_TYPES)[number], st
 export const NOTIFICATION_MODE_LABELS = {
   disabled: "Disattivata",
   ask: "Chiedi",
-  automatic: "Automatica",
   draft: "Bozza",
 } as const;
 
@@ -84,7 +83,7 @@ export async function saveNotificationSettings(settings: NotificationSettings) {
 }
 
 export async function saveNotificationPreferences(topics: Record<NotificationType, boolean>, enabled: boolean) {
-  return fetch("/api/notifications/preferences", {
+  const response = await fetch("/api/notifications/preferences", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -95,6 +94,8 @@ export async function saveNotificationPreferences(topics: Record<NotificationTyp
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     }),
   });
+  if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || "Salvataggio preferenze non riuscito");
+  return response.json();
 }
 
 export async function requestPushRegistration(topics: Record<NotificationType, boolean>) {
@@ -110,7 +111,7 @@ export async function requestPushRegistration(topics: Record<NotificationType, b
   const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
   const messaging = getMessaging(app);
   const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration });
-  await fetch("/api/notifications/subscribe", {
+  const response = await fetch("/api/notifications/subscribe", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -122,6 +123,7 @@ export async function requestPushRegistration(topics: Record<NotificationType, b
       standalone: window.matchMedia?.("(display-mode: standalone)").matches ?? false,
     }),
   });
+  if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || "Registrazione push non riuscita");
   trackAnalyticsEvent("notification_subscribed");
   return { ok: true as const };
 }
@@ -142,10 +144,6 @@ export function createNotificationDraft(event: NotificationEventInput, scheduled
   return postToBackend<{ ok: true; draftId: string }>("/api/notifications/create-draft", { event, scheduledAt });
 }
 
-export function scheduleNotification(event: NotificationEventInput, scheduledAt: string) {
-  return postToBackend<{ ok: true; draftId: string }>("/api/notifications/schedule", { event, scheduledAt });
-}
-
 export function sendNotification(event: NotificationEventInput) {
   return postToBackend<{ ok: true; status: string; successCount: number; failureCount: number }>("/api/notifications/send", {
     event,
@@ -155,6 +153,13 @@ export function sendNotification(event: NotificationEventInput) {
 
 export function getNotificationHistory() {
   return postToBackend<{ ok: true; history: NotificationHistoryEntry[] }>("/api/notifications/history", { limit: 50 });
+}
+
+export function dispatchDueNotifications() {
+  return postToBackend<{
+    ok: true;
+    dispatched: Array<{ draftId: string; status: string; successCount: number; failureCount: number }>;
+  }>("/api/notifications/dispatch-due", {});
 }
 
 export interface NotificationDiagnostics {
