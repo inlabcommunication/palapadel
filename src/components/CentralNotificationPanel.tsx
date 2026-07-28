@@ -92,7 +92,7 @@ export function CentralNotificationPanel() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="central-notification-title"
-            className="w-full max-w-lg rounded-lg border border-[rgba(251,243,222,0.14)] bg-[#0A0B08] p-4"
+            className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-lg border border-[rgba(251,243,222,0.14)] bg-[#0A0B08] p-4"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">
