@@ -118,8 +118,8 @@ export function SuperAdminShell({ children }: { children: React.ReactNode }) {
             <LogOut size={15} />
             {appUser ? ROLE_LABELS[appUser.role] : "Esci"}
           </button>
-          <CentralNotificationPanel />
         </header>
+        <CentralNotificationPanel />
         <main className="flex-1 pb-24 xl:px-8 xl:py-6 xl:pb-10">
           <div className="xl:mx-auto xl:w-full xl:max-w-[1440px]">{children}</div>
         </main>
