@@ -195,7 +195,8 @@ export default async function handler(req, res) {
           db.collection("matches").where("editionId", "==", input.editionId)
         );
         const totals = computeMatchTotalsForTeam(matchesSnap.docs.map((doc) => doc.data()), before.teamId);
-        const after = {
+        const operationalNotes = input.operationalNotes || null;
+        const entryUpdate = {
           baselinePoints: input.baselinePoints,
           baselinePlayed: input.baselinePlayed,
           matchPoints: totals.points,
@@ -205,15 +206,19 @@ export default async function handler(req, res) {
           points: input.baselinePoints + totals.points + input.manualPointsAdjustment,
           played: input.baselinePlayed + totals.played + input.manualPlayedAdjustment,
           order: input.order,
-          operationalNotes: input.operationalNotes || admin.firestore.FieldValue.delete(),
+          operationalNotes: operationalNotes ?? admin.firestore.FieldValue.delete(),
         };
-        transaction.update(entryRef, after);
+        transaction.update(entryRef, entryUpdate);
         transaction.set(db.collection("auditLog").doc(), {
           actor: caller.uid,
           action: "editionteam_updated",
           entity: `editionTeams/${entryRef.id}`,
           before,
-          after: { ...before, ...after },
+          after: {
+            ...before,
+            ...entryUpdate,
+            operationalNotes,
+          },
           detail: JSON.stringify({ role: caller.role, reason: input.reason }),
           timestamp,
         });

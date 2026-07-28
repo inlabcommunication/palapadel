@@ -1749,26 +1749,19 @@ function EditionTeamEditRow({
   onCancel: () => void;
   onDone: (msg: string) => void;
 }) {
-  // "Punti calcolati" / "PG" in questa scheda rappresentano la BASELINE manuale: il
-  // ricalcolo automatico (Fase 5) somma sopra questi valori i punti/partite giocate
-  // che derivano dalle partite in matches (matchPoints/matchPlayed), che qui restano
-  // invariati e non vanno persi salvando questa scheda.
-  const [baselinePoints, setBaselinePoints] = useState(
-    String(editionTeam.baselinePoints ?? editionTeam.calculatedPoints ?? editionTeam.points)
-  );
-  const [manualAdjustment, setManualAdjustment] = useState(String(editionTeam.manualPointsAdjustment ?? 0));
-  const [baselinePlayed, setBaselinePlayed] = useState(String(editionTeam.baselinePlayed ?? editionTeam.played));
-  const [manualPlayedAdjustment, setManualPlayedAdjustment] = useState(String(editionTeam.manualPlayedAdjustment ?? 0));
+  const matchPoints = editionTeam.matchPoints ?? 0;
+  const matchPlayed = editionTeam.matchPlayed ?? 0;
+  const [points, setPoints] = useState(String(editionTeam.points));
+  const [played, setPlayed] = useState(String(editionTeam.played));
   const [order, setOrder] = useState(String(editionTeam.order));
   const [status, setStatus] = useState<ParticipationStatus>(editionTeam.status);
   const [policy, setPolicy] = useState<1 | 2 | 3 | 4>(1);
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
+  const finalPoints = Number(points) || 0;
+  const finalPlayed = Number(played) || 0;
+  const manualAdjustment = "0";
 
-  const matchPoints = editionTeam.matchPoints ?? 0;
-  const matchPlayed = editionTeam.matchPlayed ?? 0;
-  const finalPoints = (Number(baselinePoints) || 0) + matchPoints + (Number(manualAdjustment) || 0);
-  const finalPlayed = (Number(baselinePlayed) || 0) + matchPlayed + (Number(manualPlayedAdjustment) || 0);
   const statusChanged = status !== editionTeam.status;
   const statusNeedsPolicy = statusChanged && (status === "ritirata" || status === "squalificata");
 
@@ -1794,10 +1787,10 @@ function EditionTeamEditRow({
       await updateStandingsEntry({
         editionId,
         editionTeamId: editionTeam.id,
-        baselinePoints: Number(baselinePoints) || 0,
-        baselinePlayed: Number(baselinePlayed) || 0,
-        manualPointsAdjustment: Number(manualAdjustment) || 0,
-        manualPlayedAdjustment: Number(manualPlayedAdjustment) || 0,
+        baselinePoints: (Number(points) || 0) - matchPoints,
+        baselinePlayed: Math.max(0, (Number(played) || 0) - matchPlayed),
+        manualPointsAdjustment: 0,
+        manualPlayedAdjustment: Math.min(0, (Number(played) || 0) - matchPlayed),
         order: Number(order) || 0,
         reason: reason.trim(),
       });
@@ -1805,7 +1798,7 @@ function EditionTeamEditRow({
       onCancel();
     } catch (err) {
       console.error(err);
-      const msg = err instanceof StandingsApiError ? err.message : "Errore nel salvataggio.";
+      const msg = err instanceof Error ? err.message : "Errore nel salvataggio.";
       onDone(msg);
     } finally {
       setSaving(false);
@@ -1834,30 +1827,32 @@ function EditionTeamEditRow({
       <p className="text-[12.5px] font-semibold mb-2">{label}</p>
       <div className="flex gap-2 mb-2">
         <div className="flex-1">
-          <p className="text-[11px] text-[rgba(251,243,222,0.50)] mb-1">Punti calcolati</p>
+          <p className="text-[11px] text-[rgba(251,243,222,0.50)] mb-1">Punti</p>
           <input
             type="number"
-            value={baselinePoints}
-            onChange={(e) => setBaselinePoints(e.target.value)}
+            min="0"
+            value={points}
+            onChange={(e) => setPoints(e.target.value)}
             className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm"
           />
         </div>
         <div className="flex-1">
-          <p className="text-[11px] text-[rgba(251,243,222,0.50)] mb-1">Correzione (+/-)</p>
+          <p className="text-[11px] text-[rgba(251,243,222,0.50)] mb-1">Giornate</p>
           <input
             type="number"
-            value={manualAdjustment}
-            onChange={(e) => setManualAdjustment(e.target.value)}
+            min="0"
+            value={played}
+            onChange={(e) => setPlayed(e.target.value)}
             className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm"
           />
         </div>
       </div>
       {(matchPoints !== 0 || matchPlayed !== 0) && (
-        <p className="text-[11px] text-[rgba(251,243,222,0.50)] mb-2">
+        <p className="hidden">
           + {matchPoints} pt / {matchPlayed} PG dalle partite già registrate in questa edizione
         </p>
       )}
-      <p className="text-[12px] text-[rgba(251,243,222,0.58)] mb-2">
+      <p className="hidden">
         Punti finali: <span className="font-display text-[15px] text-[#BBFF5E]">{finalPoints}</span>
         {Number(manualAdjustment) !== 0 && (
           <span className="text-[rgba(251,243,222,0.50)]"> · sopravvive a un futuro import Excel</span>
@@ -1865,13 +1860,13 @@ function EditionTeamEditRow({
         {" · "}PG finali: <span className="font-display text-[15px] text-[#BBFF5E]">{finalPlayed}</span>
       </p>
       <div className="flex gap-2 mb-2">
-        <div className="flex-1">
+        <div className="hidden">
           <p className="text-[11px] text-[rgba(251,243,222,0.50)] mb-1">PG</p>
-          <input type="number" value={baselinePlayed} onChange={(e) => setBaselinePlayed(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
+          <input type="number" value={played} onChange={(e) => setPlayed(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
         </div>
-        <div className="flex-1">
+        <div className="hidden">
           <p className="text-[11px] text-[rgba(251,243,222,0.50)] mb-1">Correzione PG (+/-)</p>
-          <input type="number" value={manualPlayedAdjustment} onChange={(e) => setManualPlayedAdjustment(e.target.value)} className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
+          <input type="number" value="0" readOnly className="w-full border border-[rgba(251,243,222,0.18)] rounded-lg px-3 py-2 text-sm" />
         </div>
         <div className="w-16">
           <p className="text-[11px] text-[rgba(251,243,222,0.50)] mb-1">Ordine</p>

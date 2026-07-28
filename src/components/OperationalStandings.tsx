@@ -239,7 +239,8 @@ function StandingEditDialog({
   onClose: () => void;
   onDone: (message: string) => void;
 }) {
-  const [adjustment, setAdjustment] = useState(entry.manualPointsAdjustment ?? 0);
+  const [points, setPoints] = useState(entry.points);
+  const [played, setPlayed] = useState(entry.played);
   const [status, setStatus] = useState<ParticipationStatus>(entry.status);
   const [operationalNotes, setOperationalNotes] = useState(entry.operationalNotes ?? "");
   const [reason, setReason] = useState("");
@@ -250,16 +251,17 @@ function StandingEditDialog({
     setBusy(true);
     try {
       if (
-        adjustment !== (entry.manualPointsAdjustment ?? 0) ||
+        points !== entry.points ||
+        played !== entry.played ||
         operationalNotes.trim() !== (entry.operationalNotes ?? "")
       ) {
         await updateStandingsEntry({
           editionId,
           editionTeamId: entry.id,
-          baselinePoints: entry.baselinePoints ?? 0,
-          baselinePlayed: entry.baselinePlayed ?? 0,
-          manualPointsAdjustment: adjustment,
-          manualPlayedAdjustment: entry.manualPlayedAdjustment ?? 0,
+          baselinePoints: points - (entry.matchPoints ?? 0),
+          baselinePlayed: Math.max(0, played - (entry.matchPlayed ?? 0)),
+          manualPointsAdjustment: 0,
+          manualPlayedAdjustment: Math.min(0, played - (entry.matchPlayed ?? 0)),
           order: entry.order,
           operationalNotes: operationalNotes.trim() || undefined,
           reason: reason.trim(),
@@ -290,10 +292,16 @@ function StandingEditDialog({
           <h3 id="standing-edit-title" className="font-bold">Modifica {teamName}</h3>
           <button aria-label="Chiudi" onClick={onClose}><X size={18} /></button>
         </div>
-        <label className="mt-4 block text-xs font-bold">Correzione punti
-          <input type="number" value={adjustment} onChange={(event) => setAdjustment(Number(event.target.value))}
+        <div className="mt-4 grid grid-cols-2 gap-3">
+        <label className="block text-xs font-bold">Punti
+          <input type="number" min={0} value={points} onChange={(event) => setPoints(Number(event.target.value))}
             className="mt-1 w-full rounded-lg border border-[rgba(251,243,222,0.18)] px-3 py-2" />
         </label>
+        <label className="block text-xs font-bold">Giornate
+          <input type="number" min={0} value={played} onChange={(event) => setPlayed(Number(event.target.value))}
+            className="mt-1 w-full rounded-lg border border-[rgba(251,243,222,0.18)] px-3 py-2" />
+        </label>
+        </div>
         <label className="mt-3 block text-xs font-bold">Stato
           <select value={status} onChange={(event) => setStatus(event.target.value as ParticipationStatus)}
             className="mt-1 w-full rounded-lg border border-[rgba(251,243,222,0.18)] px-3 py-2">
