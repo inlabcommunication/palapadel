@@ -2,6 +2,7 @@ import { Shield, LogOut } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { ROLE_LABELS } from "../types";
 import { useNavigate } from "react-router-dom";
+import { CentralNotificationPanel } from "./CentralNotificationPanel";
 
 export function TopBar() {
   const { authenticatedAppUser, viewMode, setViewMode, logout } = useAuth();
@@ -48,6 +49,7 @@ export function TopBar() {
                 Utente
               </button>
             </div>
+            <CentralNotificationPanel />
             <button onClick={logout} aria-label={`Esci da ${ROLE_LABELS[authenticatedAppUser.role]}`} className="rounded-full bg-[#0A0B08] p-2">
               <LogOut size={15} />
             </button>

@@ -79,9 +79,10 @@ export function CentralNotificationPanel() {
       <button
         type="button"
         onClick={openPanel}
-        className="mb-5 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#BBFF5E] px-4 py-3.5 text-sm font-extrabold text-[#081208]"
+        aria-label="Manda notifica"
+        className="rounded-full bg-[#0A0B08] p-2 text-[#BBFF5E]"
       >
-        <BellRing size={18} /> Manda notifica
+        <BellRing size={15} />
       </button>
 
       {open && (

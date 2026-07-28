@@ -16,7 +16,7 @@ service firebase.storage {
     }
 
     function isEnabledUser() {
-      return isSignedIn() && myUser().disabled != true;
+      return isSignedIn() && myUser().get('disabled', false) != true;
     }
 
     function isSuperAdmin() {
@@ -34,9 +34,7 @@ service firebase.storage {
 
     function publishedHomeNews(newsId) {
       let news = firestore.get(/databases/(default)/documents/homeNews/$(newsId)).data;
-      return news.status == 'pubblicato' &&
-        news.active != false &&
-        news.deleted != true;
+      return news.status == 'pubblicato';
     }
 
     match /teams/{teamId}/team-photo/{fileName} {

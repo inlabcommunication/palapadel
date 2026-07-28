@@ -7,7 +7,6 @@ import type { ChampionshipEdition, ChampionshipType, Match, Matchday, Role } fro
 import { BADGE_COLORS, ROLE_LABELS } from "../types";
 import { HomePage } from "./Home";
 import { sortEditionsByTypeOrder } from "../lib/championshipOrder";
-import { CentralNotificationPanel } from "../components/CentralNotificationPanel";
 
 export function GestionePage() {
   const { appUser } = useAuth();
@@ -39,7 +38,6 @@ export function OperationalChampionshipsPage() {
     <div className="p-4 pb-6">
       <h2 className="mb-1 text-[13px] font-extrabold uppercase tracking-wider text-[#FBF3DE]">Campionati attivi</h2>
       <p className="mb-4 text-[12.5px] text-[rgba(251,243,222,0.58)]">Scegli il campionato su cui lavorare.</p>
-      <CentralNotificationPanel />
       {loading ? (
         <p className="text-sm text-[rgba(251,243,222,0.58)]">Caricamento campionati...</p>
       ) : visible.length === 0 ? (
@@ -82,7 +80,6 @@ function SuperAdminDashboard({ role }: { role: Role }) {
         <Settings size={16} className="text-[#BBFF5E]" />
         <h2 className="text-[13px] font-extrabold uppercase text-[#FBF3DE]">Gestione · {ROLE_LABELS[role]}</h2>
       </div>
-      <CentralNotificationPanel />
       <div className="mb-4 grid grid-cols-2 gap-2">
         <button onClick={() => navigate("/analytics")} className="rounded-lg border border-[rgba(251,243,222,0.12)] bg-[#0A0B08] p-3 text-xs font-bold"><BarChart3 size={16} className="mx-auto mb-1 text-[#BBFF5E]" />Analytics</button>
         <button onClick={() => navigate("/utenti-impostazioni")} className="rounded-lg border border-[rgba(251,243,222,0.12)] bg-[#0A0B08] p-3 text-xs font-bold"><Settings size={16} className="mx-auto mb-1 text-[#BBFF5E]" />Impostazioni</button>
