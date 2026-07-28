@@ -5,8 +5,13 @@ import { computeMatchTotalsForTeam } from "../_lib/standingsRules.js";
 import { documentId, parseBody, z } from "../_lib/validation.js";
 
 const reason = z.string().trim().min(5, "Inserisci una motivazione").max(500);
-const bodySchema = z.discriminatedUnion("op", [
+export const bodySchema = z.union([
   z.object({ op: z.literal("add"), editionId: documentId, teamId: documentId }).strict(),
+  z.object({
+    op: z.literal("addBulk"),
+    editionId: documentId,
+    teamIds: z.array(documentId).min(1).max(100),
+  }).strict(),
   z.object({
     op: z.literal("add"),
     editionId: documentId,
@@ -53,25 +58,85 @@ export default async function handler(req, res) {
     const timestamp = new Date().toISOString();
     const edition = await assertEditionHasTeams(db, input.editionId);
 
-    if (input.op === "add") {
+    if (input.op === "add" || input.op === "addBulk") {
       if (!canEnrollExistingTeam(caller.role)) {
         throw new HttpError(403, "Solo Admin e Super Admin possono iscrivere una squadra");
       }
-      if ("newTeam" in input && caller.role !== "superAdmin") {
+      if (input.op === "add" && "newTeam" in input && caller.role !== "superAdmin") {
         throw new HttpError(403, "Solo il Super Admin puo creare una nuova squadra");
       }
 
       await db.runTransaction(async (transaction) => {
+        if (input.op === "addBulk") {
+          const teamIds = [...new Set(input.teamIds)];
+          if (teamIds.length !== input.teamIds.length) {
+            throw new HttpError(400, "La selezione contiene squadre duplicate");
+          }
+          const teamRefs = teamIds.map((teamId) => db.doc(`teams/${teamId}`));
+          const teamSnaps = await transaction.getAll(...teamRefs);
+          const entriesSnap = await transaction.get(
+            db.collection("editionTeams").where("editionId", "==", input.editionId)
+          );
+          const enrolledIds = new Set(entriesSnap.docs.map((doc) => doc.data().teamId));
+
+          teamSnaps.forEach((teamSnap, index) => {
+            const teamId = teamIds[index];
+            if (!teamSnap.exists || teamSnap.data().deletedAt) {
+              throw new HttpError(404, "Una delle squadre selezionate non e disponibile");
+            }
+            const compatible = teamSnap.data().compatibleTypeIds;
+            if (Array.isArray(compatible) && !compatible.includes(edition.typeId)) {
+              throw new HttpError(400, `La squadra ${teamSnap.data().name || teamId} non e compatibile con questa categoria`);
+            }
+            if (enrolledIds.has(teamId)) {
+              throw new HttpError(409, `La squadra ${teamSnap.data().name || teamId} e gia iscritta`);
+            }
+          });
+
+          teamIds.forEach((teamId, index) => {
+            const entryRef = db.doc(`editionTeams/${input.editionId}_${teamId}`);
+            transaction.set(entryRef, {
+              id: entryRef.id,
+              editionId: input.editionId,
+              teamId,
+              baselinePoints: 0,
+              baselinePlayed: 0,
+              matchPoints: 0,
+              matchPlayed: 0,
+              manualPointsAdjustment: 0,
+              manualPlayedAdjustment: 0,
+              points: 0,
+              played: 0,
+              order: entriesSnap.size + index,
+              status: "normale",
+            });
+          });
+          transaction.set(db.collection("auditLog").doc(), {
+            actor: caller.uid,
+            action: "editionteams_added_bulk",
+            entity: `championshipEditions/${input.editionId}`,
+            before: null,
+            after: { editionId: input.editionId, teamIds },
+            detail: JSON.stringify({ role: caller.role, count: teamIds.length }),
+            timestamp,
+          });
+          return;
+        }
+
         let teamId = "teamId" in input ? input.teamId : null;
+        let newTeamWrite = null;
         if ("newTeam" in input) {
           const teamRef = db.collection("teams").doc();
           teamId = teamRef.id;
-          transaction.set(teamRef, {
-            id: teamId,
-            name: input.newTeam.name,
-            roster: input.newTeam.roster,
-            createdAt: timestamp,
-          });
+          newTeamWrite = {
+            ref: teamRef,
+            data: {
+              id: teamId,
+              name: input.newTeam.name,
+              roster: input.newTeam.roster,
+              createdAt: timestamp,
+            },
+          };
         } else {
           const teamSnap = await transaction.get(db.doc(`teams/${teamId}`));
           if (!teamSnap.exists || teamSnap.data().deletedAt) throw new HttpError(404, "Squadra non disponibile");
@@ -86,6 +151,7 @@ export default async function handler(req, res) {
         const entriesSnap = await transaction.get(
           db.collection("editionTeams").where("editionId", "==", input.editionId)
         );
+        if (newTeamWrite) transaction.set(newTeamWrite.ref, newTeamWrite.data);
         transaction.set(entryRef, {
           id: entryRef.id,
           editionId: input.editionId,
@@ -111,7 +177,10 @@ export default async function handler(req, res) {
           timestamp,
         });
       });
-      res.status(200).json({ ok: true });
+      res.status(200).json({
+        ok: true,
+        ...(input.op === "addBulk" ? { added: input.teamIds.length } : {}),
+      });
       return;
     }
 

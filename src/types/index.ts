@@ -276,6 +276,9 @@ export interface TournamentGroupTeam {
   tournamentId: string;
   groupId: string;
   teamId: string; // ID di tournamentTeams, non della raccolta globale teams
+  member1?: string;
+  member2?: string;
+  displayName?: string;
   played: number;
   won: number;
   lost: number;

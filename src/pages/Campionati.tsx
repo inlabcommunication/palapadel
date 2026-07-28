@@ -7,6 +7,7 @@ import { confirmDelete } from "../lib/confirmDelete";
 import { compareStandingRows } from "../lib/standingsEngine";
 import { importStandings, importFemaleStandings, StandingsApiError, type ImportStandingsRow, type ImportFemaleRow } from "../lib/standingsApi";
 import {
+  addEntriesToStandings,
   addEntryToStandings,
   updateStandingsEntry,
   removeStandingsEntry,
@@ -1555,7 +1556,7 @@ function AddTeamToEdition({
   onCancel: () => void;
 }) {
   const [mode, setMode] = useState<"existing" | "new">(availableTeams.length > 0 ? "existing" : "new");
-  const [teamId, setTeamId] = useState(availableTeams[0]?.id ?? "");
+  const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
   const [teamSearch, setTeamSearch] = useState("");
   const [name, setName] = useState("");
   const [rosterText, setRosterText] = useState("");
@@ -1570,10 +1571,13 @@ function AddTeamToEdition({
     setSaving(true);
     try {
       if (mode === "existing") {
-        if (!teamId) return;
-        await addEntryToStandings({ editionId, teamId });
-        setTeamId("");
-        onDone("Squadra aggiunta alla classifica.");
+        if (selectedTeamIds.size === 0) return;
+        const response = await addEntriesToStandings({
+          editionId,
+          teamIds: [...selectedTeamIds],
+        });
+        setSelectedTeamIds(new Set());
+        onDone(`${response.added} ${response.added === 1 ? "squadra aggiunta" : "squadre aggiunte"} alla classifica.`);
       } else {
         const roster = rosterText.split(",").map((s) => s.trim()).filter(Boolean);
         if (!name.trim() || roster.length < 2 || roster.length > 6) {
@@ -1630,18 +1634,34 @@ function AddTeamToEdition({
                 <button
                   key={team.id}
                   type="button"
-                  onClick={() => setTeamId(team.id)}
-                  className={`block w-full border-b border-[rgba(251,243,222,0.08)] px-3 py-3 text-left text-sm last:border-b-0 ${
-                    teamId === team.id ? "bg-[rgba(187,255,94,0.14)] text-[#BBFF5E]" : "hover:bg-[rgba(251,243,222,0.05)]"
+                  onClick={() => setSelectedTeamIds((current) => {
+                    const next = new Set(current);
+                    if (next.has(team.id)) next.delete(team.id);
+                    else next.add(team.id);
+                    return next;
+                  })}
+                  className={`flex w-full items-center gap-3 border-b border-[rgba(251,243,222,0.08)] px-3 py-3 text-left text-sm last:border-b-0 ${
+                    selectedTeamIds.has(team.id) ? "bg-[rgba(187,255,94,0.14)] text-[#BBFF5E]" : "hover:bg-[rgba(251,243,222,0.05)]"
                   }`}
                 >
-                  {team.name}
+                  <input
+                    type="checkbox"
+                    checked={selectedTeamIds.has(team.id)}
+                    onChange={() => undefined}
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    className="pointer-events-none h-4 w-4 accent-[#BBFF5E]"
+                  />
+                  <span>{team.name}</span>
                 </button>
               ))}
               {filteredTeams.length === 0 && (
                 <p className="p-4 text-sm text-[rgba(251,243,222,0.50)]">Nessuna squadra corrisponde alla ricerca.</p>
               )}
             </div>
+            <p className="mb-3 text-xs font-bold text-[#BBFF5E]">
+              {selectedTeamIds.size} {selectedTeamIds.size === 1 ? "squadra selezionata" : "squadre selezionate"}
+            </p>
           </>
         )
       ) : (
@@ -1662,10 +1682,14 @@ function AddTeamToEdition({
       )}
       <button
         onClick={submit}
-        disabled={saving}
+        disabled={saving || (mode === "existing" && selectedTeamIds.size === 0)}
         className="w-full bg-lime text-[#081208] rounded-lg py-2.5 text-sm font-bold disabled:opacity-50"
       >
-        {saving ? "In corso..." : "Aggiungi"}
+        {saving
+          ? "In corso..."
+          : mode === "existing"
+            ? `Aggiungi ${selectedTeamIds.size || ""} ${selectedTeamIds.size === 1 ? "squadra" : "squadre"}`.trim()
+            : "Aggiungi"}
       </button>
     </div>
   );

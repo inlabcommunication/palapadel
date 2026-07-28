@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Plus, Pencil, X } from "lucide-react";
 import type { EditionTeam, Match, ParticipationStatus, Team } from "../types";
-import { addEntryToStandings, setTeamStatus, updateStandingsEntry } from "../lib/standingsAdminApi";
+import { addEntriesToStandings, setTeamStatus, updateStandingsEntry } from "../lib/standingsAdminApi";
 import { StandingsShareButton } from "./StandingsShareButton";
 
 interface Props {
@@ -35,7 +35,7 @@ export function OperationalStandings({
 }: Props) {
   const [editing, setEditing] = useState<EditionTeam | null>(null);
   const [enrolling, setEnrolling] = useState(false);
-  const [selectedTeamId, setSelectedTeamId] = useState("");
+  const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
   const [teamSearch, setTeamSearch] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -67,12 +67,12 @@ export function OperationalStandings({
   };
 
   const enroll = async () => {
-    if (!selectedTeamId) return;
+    if (selectedTeamIds.size === 0) return;
     setBusy(true);
     try {
-      await addEntryToStandings({ editionId, teamId: selectedTeamId });
-      setSelectedTeamId("");
-      showToast("Squadra iscritta al campionato.");
+      const response = await addEntriesToStandings({ editionId, teamIds: [...selectedTeamIds] });
+      setSelectedTeamIds(new Set());
+      showToast(`${response.added} ${response.added === 1 ? "squadra iscritta" : "squadre iscritte"} al campionato.`);
     } catch (error) {
       console.error(error);
       showToast(error instanceof Error ? error.message : "Iscrizione non riuscita.");
@@ -173,22 +173,38 @@ export function OperationalStandings({
                   <button
                     key={team.id}
                     type="button"
-                    onClick={() => setSelectedTeamId(team.id)}
-                    className={`block w-full border-b border-[rgba(251,243,222,0.08)] px-3 py-3 text-left text-sm last:border-b-0 ${
-                      selectedTeamId === team.id ? "bg-[rgba(187,255,94,0.14)] text-[#BBFF5E]" : "hover:bg-[rgba(251,243,222,0.05)]"
+                    onClick={() => setSelectedTeamIds((current) => {
+                      const next = new Set(current);
+                      if (next.has(team.id)) next.delete(team.id);
+                      else next.add(team.id);
+                      return next;
+                    })}
+                    className={`flex w-full items-center gap-3 border-b border-[rgba(251,243,222,0.08)] px-3 py-3 text-left text-sm last:border-b-0 ${
+                      selectedTeamIds.has(team.id) ? "bg-[rgba(187,255,94,0.14)] text-[#BBFF5E]" : "hover:bg-[rgba(251,243,222,0.05)]"
                     }`}
                   >
-                    {team.name}
+                    <input
+                      type="checkbox"
+                      checked={selectedTeamIds.has(team.id)}
+                      onChange={() => undefined}
+                      tabIndex={-1}
+                      aria-hidden="true"
+                      className="pointer-events-none h-4 w-4 accent-[#BBFF5E]"
+                    />
+                    <span>{team.name}</span>
                   </button>
                 ))}
                 {availableTeams.length > 0 && filteredAvailableTeams.length === 0 && (
                   <p className="p-4 text-sm text-[rgba(251,243,222,0.58)]">Nessuna squadra corrisponde alla ricerca.</p>
                 )}
               </div>
+              <p className="mb-3 text-xs font-bold text-[#BBFF5E]">
+                {selectedTeamIds.size} {selectedTeamIds.size === 1 ? "squadra selezionata" : "squadre selezionate"}
+              </p>
               <div className="flex gap-2">
-                <button onClick={enroll} disabled={busy || !selectedTeamId}
+                <button onClick={enroll} disabled={busy || selectedTeamIds.size === 0}
                   className="min-h-11 flex-1 rounded-lg bg-[#BBFF5E] px-4 text-sm font-bold text-[#081208] disabled:opacity-40">
-                  {busy ? "Iscrizione..." : "Iscrivi"}
+                  {busy ? "Iscrizione..." : `Iscrivi ${selectedTeamIds.size || ""} ${selectedTeamIds.size === 1 ? "squadra" : "squadre"}`.trim()}
                 </button>
               </div>
               {availableTeams.length === 0 && <p className="mt-2 text-xs text-[rgba(251,243,222,0.58)]">Non ci sono altre squadre disponibili.</p>}

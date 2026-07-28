@@ -180,7 +180,10 @@ function GroupsPanel({ tournament, groups, entries, teams, isOperator, notify }:
 }) {
   const [newGroup, setNewGroup] = useState("");
   const sortedGroups = [...groups].sort((a, b) => a.order - b.order);
-  const teamName = (id: string) => teams.find((team) => team.id === id)?.displayName ?? "Coppia rimossa";
+  const teamName = (entry: TournamentGroupTeam) =>
+    teams.find((team) => team.id === entry.teamId)?.displayName ??
+    entry.displayName ??
+    (entry.member1 && entry.member2 ? `${entry.member1} / ${entry.member2}` : "Coppia non disponibile");
   const addGroup = async () => {
     if (!newGroup.trim()) return;
     try {
@@ -207,7 +210,7 @@ function GroupsPanel({ tournament, groups, entries, teams, isOperator, notify }:
 
 function GroupCard({ tournament, group, entries, teamName, isOperator, notify }: {
   tournament: Tournament; group: TournamentGroup; entries: TournamentGroupTeam[];
-  teamName: (id: string) => string; isOperator: boolean; notify: (message: string) => void;
+  teamName: (entry: TournamentGroupTeam) => string; isOperator: boolean; notify: (message: string) => void;
 }) {
   const [member1, setMember1] = useState("");
   const [member2, setMember2] = useState("");
@@ -240,7 +243,7 @@ function GroupCard({ tournament, group, entries, teamName, isOperator, notify }:
             </tr>
           </thead>
           <tbody>
-            {sorted.map((entry) => <GroupTeamRow key={entry.id} tournamentId={tournament.id} entry={entry} name={teamName(entry.teamId)} canEdit={isOperator} showOperational={isOperator} canRemove={isOperator} notify={notify} />)}
+            {sorted.map((entry) => <GroupTeamRow key={entry.id} tournamentId={tournament.id} entry={entry} name={teamName(entry)} canEdit={isOperator} showOperational={isOperator} canRemove={isOperator} notify={notify} />)}
           </tbody>
         </table>
       </div>

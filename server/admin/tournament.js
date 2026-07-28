@@ -170,7 +170,21 @@ export default async function handler(req, res) {
         const entryRef = db.collection("tournamentGroupTeams").doc();
         createdId = entryRef.id;
         const team = { id: teamRef.id, tournamentId: input.tournamentId, groupId: input.groupId, member1: input.member1, member2: input.member2, displayName: buildTournamentDisplayName(input.member1, input.member2), memberKey: key };
-        after = { id: entryRef.id, tournamentId: input.tournamentId, groupId: input.groupId, teamId: teamRef.id, played: 0, won: 0, lost: 0, points: 0, qualified: false, order: input.order };
+        after = {
+          id: entryRef.id,
+          tournamentId: input.tournamentId,
+          groupId: input.groupId,
+          teamId: teamRef.id,
+          member1: input.member1,
+          member2: input.member2,
+          displayName: team.displayName,
+          played: 0,
+          won: 0,
+          lost: 0,
+          points: 0,
+          qualified: false,
+          order: input.order,
+        };
         transaction.set(teamRef, team);
         transaction.set(entryRef, after);
         entity = `tournamentGroupTeams/${entryRef.id}`;

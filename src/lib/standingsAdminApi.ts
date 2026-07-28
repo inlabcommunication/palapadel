@@ -57,6 +57,13 @@ export function addEntryToStandings(input: AddEntryInput) {
   return postToBackend<{ ok: true }>("/api/standings/manage-entry", { op: "add", ...input });
 }
 
+export function addEntriesToStandings(input: { editionId: string; teamIds: string[] }) {
+  return postToBackend<{ ok: true; added: number }>("/api/standings/manage-entry", {
+    op: "addBulk",
+    ...input,
+  });
+}
+
 export function updateStandingsEntry(input: UpdateEntryInput) {
   return postToBackend<{ ok: true }>("/api/standings/manage-entry", { op: "update", ...input });
 }
