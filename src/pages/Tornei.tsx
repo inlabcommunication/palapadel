@@ -57,7 +57,12 @@ export function TorneiPage() {
   };
 
   if (selected) {
-    return <TournamentDetail tournament={selected} isSuperAdmin={isSuperAdmin} isOperator={isOperator} onBack={() => setSelectedId(null)} notify={notify} />;
+    return (
+      <>
+        <TournamentDetail tournament={selected} isSuperAdmin={isSuperAdmin} isOperator={isOperator} onBack={() => setSelectedId(null)} notify={notify} />
+        {toast && <Toast text={toast} />}
+      </>
+    );
   }
 
   return (
@@ -405,8 +410,32 @@ function NewTournamentMatch({ tournament, bracketKey, round, order, teams, sourc
   tournament: Tournament; bracketKey: TournamentBracketKey; round: TournamentBracketRound; order: number; teams: TournamentTeam[]; sourceOptions: { id: string; label: string }[]; onClose: () => void; notify: (message: string) => void;
 }) {
   const [slot1, setSlot1] = useState(""); const [slot2, setSlot2] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
   const fields = (value: string, side: 1 | 2): TournamentMatchFields => value.startsWith("source:") ? { [side === 1 ? "team1SourceMatchId" : "team2SourceMatchId"]: value.slice(7) } : { [side === 1 ? "team1Id" : "team2Id"]: value.replace("team:", "") || null };
-  return <div className="border border-[rgba(251,243,222,0.12)] bg-[#0A0B08] p-4"><SlotSelect value={slot1} onChange={setSlot1} teams={teams} sources={sourceOptions} allowSources /><SlotSelect value={slot2} onChange={setSlot2} teams={teams} sources={sourceOptions} allowSources /><div className="flex gap-2"><button onClick={async () => { try { await createTournamentMatch(tournament.id, bracketKey, round.id, order, { ...fields(slot1, 1), ...fields(slot2, 2) }); notify("Incontro creato."); onClose(); } catch (error) { notify(error instanceof Error ? error.message : "Errore."); } }} className="flex-1 rounded-lg bg-[#BBFF5E] py-2 font-bold text-[#081208]">Crea</button><button onClick={onClose} className="flex-1 rounded-lg border border-[rgba(251,243,222,0.16)]">Annulla</button></div></div>;
+  const create = async () => {
+    if (slot1 && slot1 === slot2) {
+      setError("Seleziona due coppie o due sorgenti diverse.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await createTournamentMatch(tournament.id, bracketKey, round.id, order, {
+        ...fields(slot1, 1),
+        ...fields(slot2, 2),
+      });
+      notify("Incontro creato.");
+      onClose();
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Creazione dell'incontro non riuscita.";
+      setError(message);
+      notify(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  return <div className="border border-[rgba(251,243,222,0.12)] bg-[#0A0B08] p-4"><SlotSelect value={slot1} onChange={(value) => { setSlot1(value); setError(""); }} teams={teams} sources={sourceOptions} allowSources /><SlotSelect value={slot2} onChange={(value) => { setSlot2(value); setError(""); }} teams={teams} sources={sourceOptions} allowSources />{error && <p role="alert" className="mb-3 text-sm font-bold text-[#FF6B6B]">{error}</p>}<div className="flex gap-2"><button onClick={create} disabled={saving} className="flex-1 rounded-lg bg-[#BBFF5E] py-2 font-bold text-[#081208] disabled:opacity-40">{saving ? "Creazione..." : "Crea"}</button><button onClick={onClose} disabled={saving} className="flex-1 rounded-lg border border-[rgba(251,243,222,0.16)] disabled:opacity-40">Annulla</button></div></div>;
 }
 
 function SlotSelect({ value, onChange, teams, sources, allowSources }: { value: string; onChange: (value: string) => void; teams: TournamentTeam[]; sources: { id: string; label: string }[]; allowSources: boolean }) {

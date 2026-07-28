@@ -244,15 +244,8 @@ export default async function handler(req, res) {
         entity = `tournamentBracketMatches/${input.matchId}`;
         if (input.operation === "deleteMatch") transaction.delete(ref);
         else {
-          if (caller.role === "admin" && (input.team1SourceMatchId !== undefined || input.team2SourceMatchId !== undefined)) {
-            throw new HttpError(403, "L'Admin non puo modificare i collegamenti strutturali");
-          }
           const matches = new Map(matchSnaps.docs.map((doc) => [doc.id, { id: doc.id, ...doc.data() }]));
           after = matchUpdate(before, input, matches);
-          if (caller.role === "admin") {
-            if (input.team1Id !== undefined) after.team1SourceMatchId = null;
-            if (input.team2Id !== undefined) after.team2SourceMatchId = null;
-          }
           validateMatch(after, matches);
           transaction.update(ref, firestoreMatch(after));
           matches.set(after.id, after);
