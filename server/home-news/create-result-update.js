@@ -10,39 +10,9 @@
 // notificationStatus="draft", notificationDraftCreatedAt, notificationNewsId,
 // notificationSentAt=null. Non dichiara mai un invio reale.
 
-import admin from "firebase-admin";
-import { roleAllowed } from "../_lib/roles.js";
+import { getAdminApp, admin } from "../_lib/firebaseAdmin.js";
+import { HttpError, verifyCaller } from "../_lib/auth.js";
 import { documentId, parseBody, z } from "../_lib/validation.js";
-
-function getAdminApp() {
-  if (admin.apps.length) return admin.app();
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || "{}");
-  return admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-}
-
-class HttpError extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
-
-async function verifyCaller(app, req) {
-  const authHeader = req.headers.authorization || "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!idToken) throw new HttpError(401, "Token mancante");
-  const decoded = await admin.auth(app).verifyIdToken(idToken);
-  const callerSnap = await admin.firestore(app).doc(`users/${decoded.uid}`).get();
-  if (!callerSnap.exists) throw new HttpError(403, "Utente non registrato");
-  const callerData = callerSnap.data();
-  if (callerData.disabled) throw new HttpError(403, "Account disattivato");
-  // Fase 6/14 — solo admin/superAdmin creano aggiornamenti Home: il resultManager non
-  // è autorizzato (non ha permessi di scrittura su homeNews).
-  if (!roleAllowed(callerData.role, ["superAdmin"])) {
-    throw new HttpError(403, "Solo il superAdmin può creare un aggiornamento Home");
-  }
-  return { uid: decoded.uid, role: callerData.role };
-}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -52,7 +22,7 @@ export default async function handler(req, res) {
 
   try {
     const app = getAdminApp();
-    const auth = await verifyCaller(app, req);
+    const auth = await verifyCaller(app, req, ["superAdmin"], "Solo il superAdmin può creare un aggiornamento Home");
     const db = admin.firestore(app);
 
     const { matchIds, editionId, matchdayId, typeName, season } = parseBody(z.object({

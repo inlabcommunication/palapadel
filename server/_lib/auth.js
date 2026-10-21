@@ -13,7 +13,7 @@ export function requirePost(req) {
   if (req.method !== "POST") throw new HttpError(405, "Metodo non consentito");
 }
 
-export async function verifyCaller(app, req, allowedRoles = []) {
+export async function verifyCaller(app, req, allowedRoles = [], forbiddenMessage = "Permessi insufficienti") {
   const authHeader = req.headers.authorization || "";
   const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
   if (!idToken) throw new HttpError(401, "Token mancante");
@@ -26,7 +26,7 @@ export async function verifyCaller(app, req, allowedRoles = []) {
   if (callerData.disabled) throw new HttpError(403, "Account disattivato");
   const role = normalizeRole(callerData.role);
   if (!role || (allowedRoles.length > 0 && !allowedRoles.includes(role))) {
-    throw new HttpError(403, "Permessi insufficienti");
+    throw new HttpError(403, forbiddenMessage);
   }
 
   return {
