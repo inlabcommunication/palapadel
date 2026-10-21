@@ -40,12 +40,23 @@ I ruoli vivono in `users/{uid}` su Firestore, non nei custom claims. `src/lib/pe
 
 | Permesso | superAdmin | admin | resultManager |
 |---|---:|---:|---:|
-| Inserire/correggere risultati, rinviare/annullare | sì | sì | sì |
-| Creare/eliminare partite e giornate | sì | sì | no |
-| Gestire campionati, squadre e albo d'oro | sì | sì | no |
-| Gestire PalaPadel News | sì | sì | no |
-| Caricare immagini news/squadre | sì | sì | no |
-| Gestire notifiche, analytics, utenti e password | sì | no | no |
+| Inserire/correggere risultati, rinviare/annullare partite | sì | sì | sì (solo edizioni attive) |
+| Correzioni operative della classifica di un'edizione | sì | sì | sì |
+| Iscrivere a un'edizione una squadra già esistente | sì | sì | no |
+| Creare giornate, creare/modificare/eliminare partite | sì | sì | no |
+| Tornei: gironi, turni e partite; tabellone finale | sì | sì | no |
+| Tornei: creare/modificare/eliminare il torneo e il suo logo | sì | no | no |
+| Inviare notifiche dal contesto (risultati, classifiche) | sì | sì | no |
+| Condividere classifica e giornata in PNG | sì | sì | sì |
+| Gestire campionati, edizioni, chiusura edizione e ordine | sì | no | no |
+| Anagrafica squadre, foto squadre e Femminile | sì | no | no |
+| Import calendario, import e ricalcolo classifiche | sì | no | no |
+| PalaPadel News e relative immagini | sì | no | no |
+| Albo d'oro | sì | no | no |
+| Impostazioni notifiche, bozze, programmazione e storico | sì | no | no |
+| Analytics, utenti e password, backup, annullamento operazioni | sì | no | no |
+
+La tabella riflette `shared/permissions.js`, `shared/tournamentPermissions.js`, i controlli degli endpoint in `server/` e le regole `storage.rules`.
 
 Gli account con `disabled: true` non ereditano più i permessi di ruolo nelle regole Firestore e Storage.
 
@@ -80,7 +91,7 @@ Le PalaPadel News sono salvate in `homeNews/{id}`. Campi principali:
 - `imageStoragePath`
 - `imageAlt`
 
-L'immagine è facoltativa. Il Super Admin/Admin la carica da computer, smartphone o tablet tramite file picker o drag and drop. Il form mostra preview immediata, nome file, dimensione, stato caricamento, errori chiari, sostituzione, eliminazione e anteprima editoriale desktop/mobile.
+L'immagine è facoltativa. Il Super Admin la carica da computer, smartphone o tablet tramite file picker o drag and drop. Il form mostra preview immediata, nome file, dimensione, stato caricamento, errori chiari, sostituzione, eliminazione e anteprima editoriale desktop/mobile.
 
 I file vengono salvati in Firebase Storage:
 
@@ -105,7 +116,7 @@ Nel documento `teams/{id}` vengono salvati:
 - `teamPhotoUrl`
 - `teamPhotoStoragePath`
 
-Il modulo Super Admin/Admin mostra la foto già salvata, preview prima del salvataggio, sostituzione ed eliminazione con conferma. Anche qui il flusso mantiene Firestore e Storage coerenti in caso di errore.
+Il modulo Super Admin mostra la foto già salvata, preview prima del salvataggio, sostituzione ed eliminazione con conferma. Anche qui il flusso mantiene Firestore e Storage coerenti in caso di errore.
 
 ## Firebase Storage
 
@@ -113,9 +124,9 @@ Le regole in `storage.rules` permettono:
 
 - lettura pubblica delle foto squadra;
 - lettura pubblica delle immagini delle news pubblicate;
-- lettura immagini news in bozza solo ad admin/superAdmin;
-- scrittura immagini solo ad admin/superAdmin abilitati;
-- blocco per resultManager, anonimi e account disabled.
+- lettura immagini news in bozza solo al superAdmin;
+- scrittura immagini solo al superAdmin abilitato;
+- blocco per admin, resultManager, anonimi e account disabled.
 
 Pubblica le regole con:
 
@@ -135,6 +146,10 @@ La pagina `Notifiche` gestisce:
 Gli eventi risultato, correzione, ricalcolo classifica, vincitore campionato e news passano da `enqueueNotificationEvent`, che mantiene idempotenza tramite `notificationDispatches`.
 
 Gli analytics sono interni: `api/analytics/track` registra eventi anonimi per `installationId`, mentre `api/analytics/summary` restituisce aggregati solo al Super Admin.
+
+`api/analytics/track` è pubblico, quindi ha dei limiti: 30 eventi al minuto e 500 al giorno per dispositivo, 120 richieste al minuto per IP e un tetto globale giornaliero (predefinito 3000 eventi, modificabile con la variabile `ANALYTICS_DAILY_EVENT_LIMIT` su Vercel). Oltre i limiti gli eventi vengono scartati con risposta 429, senza scritture su Firestore.
+
+La pulizia dei file orfani in Storage (cron notturno `api/cron/storage-cleanup` e scansione manuale) considera solo i file caricati da più di 24 ore.
 
 ## Configurazione locale
 
@@ -223,7 +238,7 @@ Le migrazioni usano Firebase Admin SDK. Richiedono `FIREBASE_SERVICE_ACCOUNT` op
 ## Test e qualità
 
 ```bash
-npm test              # unit test, attualmente 60
+npm test              # unit test, attualmente 133
 npm run lint          # ESLint
 npm run build         # TypeScript + Vite production build
 npm run test:emulator # Firestore/Auth/Storage rules, richiede Java nel PATH
