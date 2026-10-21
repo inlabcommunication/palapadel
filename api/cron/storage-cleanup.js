@@ -1,4 +1,5 @@
 import { getAdminApp, admin } from "../../server/_lib/firebaseAdmin.js";
+import { findOrphanStoragePaths } from "../../server/_lib/storageOrphans.js";
 
 export default async function handler(req, res) {
   const expected = process.env.CRON_SECRET;
@@ -23,14 +24,11 @@ export default async function handler(req, res) {
       ...teamsSnap.docs.map((doc) => doc.data().teamPhotoStoragePath).filter(Boolean),
       ...typesSnap.docs.map((doc) => doc.data().logoStoragePath).filter(Boolean),
     ]);
-    const orphans = filesResult[0]
-      .map((file) => file.name)
-      .filter((path) => (
-        path.startsWith("home-news/") ||
-        path.startsWith("teams/") ||
-        path.startsWith("championship-types/")
-      ) && !referenced.has(path))
-      .slice(0, 400);
+    const orphans = findOrphanStoragePaths(
+      filesResult[0],
+      referenced,
+      ["home-news/", "teams/", "championship-types/"]
+    ).slice(0, 400);
 
     for (const path of orphans) {
       const id = Buffer.from(path).toString("base64url").slice(0, 500);
