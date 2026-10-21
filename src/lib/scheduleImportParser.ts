@@ -1,4 +1,5 @@
 import { MAX_ADMIN_IMPORT_ROWS, validateAdminImportFile } from "./excelImportPolicy.js";
+import { readFirstSheetAsText } from "./excelSheetReader.js";
 
 export interface ParsedScheduleRow {
   matchdayNumber: number;
@@ -55,7 +56,7 @@ export function parseScheduleText(text: string): ParsedScheduleRow[] {
 
 export async function parseScheduleFile(file: File) {
   const extension = file.name.split(".").pop()?.toLowerCase();
-  const validationError = validateAdminImportFile(file, ["xlsx", "xls", "docx", "txt"]);
+  const validationError = validateAdminImportFile(file, ["xlsx", "docx", "txt"]);
   if (validationError) throw new Error(validationError);
   const buffer = await file.arrayBuffer();
   if (extension === "docx") {
@@ -63,12 +64,9 @@ export async function parseScheduleFile(file: File) {
     const result = await mammoth.extractRawText({ arrayBuffer: buffer });
     return parseScheduleText(result.value);
   }
-  if (extension === "xlsx" || extension === "xls") {
-    const XLSX = await import("xlsx");
-    const workbook = XLSX.read(buffer, { type: "array", cellDates: false, dense: true, bookVBA: false, WTF: false });
-    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-    const table = XLSX.utils.sheet_to_json<(string | number)[]>(firstSheet, { header: 1, raw: false, range: `A1:H${MAX_ADMIN_IMPORT_ROWS}` });
-    return parseScheduleText(table.map((row) => row.map((cell) => String(cell ?? "")).join(";")).join("\n"));
+  if (extension === "xlsx") {
+    const table = await readFirstSheetAsText(buffer, { maxRows: MAX_ADMIN_IMPORT_ROWS, maxColumns: 8 });
+    return parseScheduleText(table.map((row) => row.join(";")).join("\n"));
   }
   return parseScheduleText(new TextDecoder().decode(buffer));
 }

@@ -80,7 +80,7 @@ export function ScheduleImportPanel({ editionId, teams, onClose, onDone }: {
         <button onClick={() => prepare(parseScheduleText(text))} className="rounded-lg bg-[#BBFF5E] px-3 py-2 text-xs font-bold text-[#081208]">Analizza testo</button>
         <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-[rgba(251,243,222,0.16)] px-3 py-2 text-xs font-bold">
           <Upload size={14} /> Excel o Word
-          <input type="file" accept=".xlsx,.xls,.docx,.txt" className="hidden" onChange={async (event) => {
+          <input type="file" accept=".xlsx,.docx,.txt" className="hidden" onChange={async (event) => {
             const file = event.target.files?.[0];
             if (file) prepare(await parseScheduleFile(file));
           }} />

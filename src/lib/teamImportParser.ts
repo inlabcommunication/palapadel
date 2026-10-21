@@ -1,4 +1,5 @@
 import { MAX_ADMIN_IMPORT_ROWS, validateAdminImportFile } from "./excelImportPolicy.js";
+import { readFirstSheetAsText } from "./excelSheetReader.js";
 
 export interface ImportedTeamRow {
   rowNumber: number;
@@ -65,17 +66,13 @@ export function parseTeamImportRows(rows: unknown[][]): TeamImportParseResult {
 }
 
 export async function parseTeamImportFile(file: File): Promise<TeamImportParseResult> {
-  const validationError = validateAdminImportFile(file, ["xlsx", "xls"]);
+  const validationError = validateAdminImportFile(file, ["xlsx"]);
   if (validationError) return { teams: [], errors: [validationError] };
-  const XLSX = await import("xlsx");
-  const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", dense: true, bookVBA: false, WTF: false });
-  const firstSheetName = workbook.SheetNames[0];
-  if (!firstSheetName) return { teams: [], errors: ["Il file Excel non contiene fogli."] };
-  const rows = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[firstSheetName], {
-    header: 1,
-    defval: "",
-    raw: false,
-    range: `A1:G${MAX_ADMIN_IMPORT_ROWS}`,
-  });
+  let rows: string[][];
+  try {
+    rows = await readFirstSheetAsText(await file.arrayBuffer(), { maxRows: MAX_ADMIN_IMPORT_ROWS, maxColumns: 7 });
+  } catch (err) {
+    return { teams: [], errors: [err instanceof Error ? err.message : "File Excel non leggibile."] };
+  }
   return parseTeamImportRows(rows);
 }
