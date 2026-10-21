@@ -1,7 +1,6 @@
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
 
 // Le chiavi arrivano da variabili d'ambiente (vedi .env.example).
 // Su Vercel vanno impostate come Environment Variables del progetto.
@@ -17,4 +16,3 @@ const firebaseConfig = {
 export const app: FirebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-export const storage = getStorage(app);

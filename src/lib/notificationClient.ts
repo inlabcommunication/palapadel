@@ -1,4 +1,3 @@
-import { getMessaging, getToken, isSupported, onMessage } from "firebase/messaging";
 import { app } from "../firebase";
 import { postToBackend } from "./backendClient";
 import { getInstallationId } from "./installationId";
@@ -123,6 +122,7 @@ export async function requestPushRegistration(topics: Record<NotificationType, b
   trackAnalyticsEvent("notification_permission", { permission });
   if (permission !== "granted") return { ok: false, reason: permission };
 
+  const { getMessaging, getToken, isSupported } = await import("firebase/messaging");
   const supported = await isSupported();
   const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
   if (!supported || !vapidKey) return { ok: false, reason: "missing_config" as const };
@@ -148,6 +148,7 @@ export async function requestPushRegistration(topics: Record<NotificationType, b
 }
 
 export async function bindForegroundNotificationTracking() {
+  const { getMessaging, isSupported, onMessage } = await import("firebase/messaging");
   if (!(await isSupported())) return () => undefined;
   const messaging = getMessaging(app);
   return onMessage(messaging, () => {

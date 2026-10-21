@@ -1,5 +1,4 @@
-import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import { storage } from "../firebase";
+import { app } from "../firebase";
 import { resizeImageFile } from "./imageResize";
 import { assertValidImageFile, makeStorageSafeFilename } from "./imageFilePolicy";
 import { postToBackend } from "./backendClient";
@@ -11,6 +10,12 @@ export {
   formatImageFileSize,
   makeStorageSafeFilename,
 } from "./imageFilePolicy";
+
+// Firebase Storage serve solo a chi carica immagini: si scarica alla prima necessità.
+async function loadStorage() {
+  const storageModule = await import("firebase/storage");
+  return { ...storageModule, storage: storageModule.getStorage(app) };
+}
 
 export interface UploadedStorageImage {
   url: string;
@@ -34,6 +39,7 @@ export async function uploadStorageImage({
   const resized = await resizeImageFile(file, maxWidth);
   const fileName = `${Date.now()}-${makeStorageSafeFilename(resized.name)}`;
   const storagePath = `${folderPath.replace(/\/+$/, "")}/${fileName}`;
+  const { getDownloadURL, ref, storage, uploadBytes } = await loadStorage();
   const storageRef = ref(storage, storagePath);
   await uploadBytes(storageRef, resized, { contentType: resized.type });
   const url = await getDownloadURL(storageRef);
@@ -49,6 +55,7 @@ export async function uploadStorageImage({
 
 export async function deleteStorageImage(storagePathOrUrl?: string | null) {
   if (!storagePathOrUrl) return;
+  const { deleteObject, ref, storage } = await loadStorage();
   await deleteObject(ref(storage, storagePathOrUrl));
 }
 
