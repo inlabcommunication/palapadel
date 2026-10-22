@@ -14,6 +14,7 @@ import hallOfFame from "../../server/admin/hall-of-fame.js";
 import bracket from "../../server/admin/bracket.js";
 import publicSettings from "../../server/admin/public-settings.js";
 import purgeEdition from "../../server/admin/purge-edition.js";
+import teamImport from "../../server/admin/team-import.js";
 
 const handlers = {
   "set-password": setPassword,
@@ -32,6 +33,7 @@ const handlers = {
   bracket,
   "public-settings": publicSettings,
   "purge-edition": purgeEdition,
+  "team-import": teamImport,
 };
 
 export default function handler(req, res) {

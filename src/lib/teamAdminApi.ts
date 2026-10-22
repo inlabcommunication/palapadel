@@ -1,4 +1,5 @@
 import { postToBackend } from "./backendClient";
+import type { TeamImportDecision } from "../../shared/teamImportPlan.js";
 
 export function saveTeam(input: {
   operation: "create" | "update";
@@ -19,4 +20,11 @@ export function deleteTeam(teamId: string) {
 
 export function importTeams(teams: { name: string; roster: string[] }[]) {
   return postToBackend<{ ok: true; imported: number }>("/api/admin/team", { operation: "import", teams });
+}
+
+export function importTeamsWithDecisions(input: { editionId?: string; rows: TeamImportDecision[] }) {
+  return postToBackend<{ ok: true; created: number; replaced: number; used: number; enrolled: number; skipped: number }>(
+    "/api/admin/team-import",
+    input
+  );
 }
