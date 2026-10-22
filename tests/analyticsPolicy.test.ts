@@ -31,3 +31,18 @@ test("server analytics policy skips staff roles from body or properties", () => 
   assert.equal(isCountedAnalyticsInstallation({ excludedFromAnalytics: true }), false);
   assert.equal(isCountedAnalyticsInstallation({ actorRole: "gestore" }), true);
 });
+
+test("dispositivi: attivi e nuovi nel periodo, totale da sempre, staff escluso", async () => {
+  const { countAnalyticsDevices } = await import("../server/_lib/analyticsPolicy.js");
+  const now = Date.parse("2026-10-22T12:00:00.000Z");
+  const daysAgo = (n: number) => new Date(now - n * 24 * 60 * 60 * 1000).toISOString();
+  const installs = [
+    { firstSeenAt: daysAgo(2), lastSeenAt: daysAgo(1) },
+    { firstSeenAt: daysAgo(60), lastSeenAt: daysAgo(3) },
+    { firstSeenAt: daysAgo(90), lastSeenAt: daysAgo(45) },
+    { firstSeenAt: daysAgo(1), lastSeenAt: daysAgo(1), excludedFromAnalytics: true },
+    { firstSeenAt: daysAgo(1), lastSeenAt: daysAgo(1), actorRole: "superadmin" },
+    { lastSeenAt: "data non valida" },
+  ];
+  assert.deepEqual(countAnalyticsDevices(installs, 30, now), { active: 2, new: 1, total: 4 });
+});

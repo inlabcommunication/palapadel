@@ -16,3 +16,21 @@ export function getAnalyticsActorRole(body, properties) {
 export function isCountedAnalyticsInstallation(data) {
   return data?.excludedFromAnalytics !== true && !shouldSkipAnalyticsRole(data?.actorRole ?? data?.role);
 }
+
+/**
+ * Conteggio dispositivi (in realtà browser: lo stesso telefono può contare più volte).
+ * active: visti nel periodo; new: visti per la prima volta nel periodo; total: da sempre.
+ */
+export function countAnalyticsDevices(installations, days, now = Date.now()) {
+  const cutoff = now - days * 24 * 60 * 60 * 1000;
+  const counted = installations.filter(isCountedAnalyticsInstallation);
+  const inPeriod = (value) => {
+    const time = Date.parse(value ?? "");
+    return Number.isFinite(time) && time >= cutoff;
+  };
+  return {
+    active: counted.filter((item) => inPeriod(item.lastSeenAt)).length,
+    new: counted.filter((item) => inPeriod(item.firstSeenAt)).length,
+    total: counted.length,
+  };
+}

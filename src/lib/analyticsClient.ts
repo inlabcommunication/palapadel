@@ -15,7 +15,10 @@ export type AnalyticsEventType =
 export interface AnalyticsSummary {
   ok: true;
   totals: {
+    /** Browser visti nel periodo richiesto (lo stesso telefono può contare più volte). */
     devices: number;
+    devicesNew: number;
+    devicesTotal: number;
     eventsTotal: number;
     sessions: number;
     installs: number;

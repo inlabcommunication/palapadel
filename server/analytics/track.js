@@ -36,6 +36,11 @@ function todayKey(date = new Date()) {
 export default async function handler(req, res) {
   try {
     requirePost(req);
+    // Le anteprime Vercel usano lo stesso database: le loro visite (test) non contano.
+    if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== "production") {
+      res.status(200).json({ ok: true, skipped: true });
+      return;
+    }
     if (!allowIp(getClientIp(req))) throw new HttpError(429, "Troppe richieste");
     const body = parseBody(z.object({
       installationId: z.string().regex(/^[a-zA-Z0-9_-]{16,96}$/),
