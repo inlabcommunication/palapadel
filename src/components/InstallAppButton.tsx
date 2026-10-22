@@ -1,7 +1,16 @@
 import { useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { Download, Share, SquarePlus, X } from "lucide-react";
-import { getInstallMode, promptInstall, subscribeInstallState } from "../lib/pwaInstall";
+import type { ReactNode } from "react";
+import { ArrowDown, ArrowUp, Download, Share, SquarePlus, X } from "lucide-react";
+import {
+  getInstallMode,
+  getIosArrowSpot,
+  getIosBrowser,
+  promptInstall,
+  subscribeInstallState,
+  type ArrowSpot,
+  type IosBrowser,
+} from "../lib/pwaInstall";
 
 /**
  * Pulsante "Installa PalaPadel": su Android/desktop apre il prompt nativo
@@ -11,6 +20,8 @@ import { getInstallMode, promptInstall, subscribeInstallState } from "../lib/pwa
 export function InstallAppButton({ variant = "card" }: { variant?: "card" | "topbar" }) {
   const mode = useSyncExternalStore(subscribeInstallState, getInstallMode, () => null);
   const [iosGuideOpen, setIosGuideOpen] = useState(false);
+  const iosBrowser = getIosBrowser();
+  const arrowSpot = getIosArrowSpot(iosBrowser);
 
   if (!mode) return null;
 
@@ -60,9 +71,12 @@ export function InstallAppButton({ variant = "card" }: { variant?: "card" | "top
       {/* Portale su <body>: la guida deve stare sopra barra in alto e menu in basso. */}
       {iosGuideOpen && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:items-center"
+          className={`fixed inset-0 z-50 flex justify-center bg-black/75 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:items-center ${
+            arrowSpot?.startsWith("bottom") ? "items-start pt-[max(1rem,env(safe-area-inset-top))] pb-28" : arrowSpot ? "items-end pt-28" : "items-end"
+          }`}
           onClick={() => setIosGuideOpen(false)}
         >
+          {arrowSpot && <GuideArrow spot={arrowSpot} label={IOS_GUIDES[iosBrowser].arrowLabel} />}
           <section
             role="dialog"
             aria-modal="true"
@@ -73,7 +87,7 @@ export function InstallAppButton({ variant = "card" }: { variant?: "card" | "top
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 id="ios-install-title" className="text-lg font-extrabold">Installa PalaPadel</h2>
-                <p className="mt-1 text-xs text-[rgba(251,243,222,0.58)]">Su iPhone e iPad bastano pochi tocchi in Safari.</p>
+                <p className="mt-1 text-xs text-[rgba(251,243,222,0.58)]">{IOS_GUIDES[iosBrowser].intro}</p>
               </div>
               <button
                 type="button"
@@ -86,28 +100,15 @@ export function InstallAppButton({ variant = "card" }: { variant?: "card" | "top
             </div>
 
             <ol className="mt-4 flex flex-col gap-2">
-              <li className="flex items-center gap-3 rounded-lg border border-[rgba(251,243,222,0.12)] p-3">
-                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#BBFF5E] text-xs font-extrabold text-[#081208]">1</span>
-                <span className="text-sm">
-                  Tocca <strong>Condividi</strong>{" "}
-                  <Share size={16} className="inline-block align-text-bottom text-[#BBFF5E]" aria-label="icona Condividi" />{" "}
-                  nella barra di Safari (se non lo vedi, tocca prima <strong>•••</strong>).
-                </span>
-              </li>
-              <li className="flex items-center gap-3 rounded-lg border border-[rgba(251,243,222,0.12)] p-3">
-                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#BBFF5E] text-xs font-extrabold text-[#081208]">2</span>
-                <span className="text-sm">
-                  Tocca <strong>Visualizza altro</strong> (o scorri l'elenco) e scegli{" "}
-                  <strong>Aggiungi alla schermata Home</strong>{" "}
-                  <SquarePlus size={16} className="inline-block align-text-bottom text-[#BBFF5E]" aria-label="icona Aggiungi" />,
-                  poi conferma con <strong>Aggiungi</strong>.
-                </span>
-              </li>
+              {IOS_GUIDES[iosBrowser].steps.map((step, index) => (
+                <li key={index} className="flex items-center gap-3 rounded-lg border border-[rgba(251,243,222,0.12)] p-3">
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#BBFF5E] text-xs font-extrabold text-[#081208]">{index + 1}</span>
+                  <span className="text-sm">{step}</span>
+                </li>
+              ))}
             </ol>
 
-            <p className="mt-3 text-[11px] text-[rgba(251,243,222,0.50)]">
-              Se non vedi l'opzione, apri questa pagina con Safari. PalaPadel comparirà tra le app con la sua icona.
-            </p>
+            <p className="mt-3 text-[11px] text-[rgba(251,243,222,0.50)]">{IOS_GUIDES[iosBrowser].note}</p>
 
             <button
               type="button"
@@ -121,5 +122,91 @@ export function InstallAppButton({ variant = "card" }: { variant?: "card" | "top
         document.body
       )}
     </>
+  );
+}
+
+const ShareIcon = () => <Share size={16} className="inline-block align-text-bottom text-[#BBFF5E]" aria-label="icona Condividi" />;
+const AddIcon = () => <SquarePlus size={16} className="inline-block align-text-bottom text-[#BBFF5E]" aria-label="icona Aggiungi" />;
+const addToHome = (
+  <>
+    Tocca <strong>Visualizza altro</strong> (o scorri l'elenco) e scegli <strong>Aggiungi alla schermata Home</strong> <AddIcon />,
+    poi conferma con <strong>Aggiungi</strong>.
+  </>
+);
+
+// Ogni browser su iPhone ha il comando in un menu diverso (Chrome, Edge e Firefox da iOS 16.4).
+const IOS_GUIDES: Record<IosBrowser, { arrowLabel: string; intro: string; steps: ReactNode[]; note: string }> = {
+  safari: {
+    arrowLabel: "Condividi è qui sotto",
+    intro: "Su iPhone e iPad bastano pochi tocchi in Safari.",
+    steps: [
+      <>Tocca <strong>Condividi</strong> <ShareIcon /> nella barra di Safari (se non lo vedi, tocca prima <strong>•••</strong>).</>,
+      addToHome,
+    ],
+    note: "PalaPadel comparirà tra le app con la sua icona.",
+  },
+  chrome: {
+    arrowLabel: "Condividi è qui in alto",
+    intro: "Stai usando Chrome: si installa da qui, senza passare da Safari.",
+    steps: [
+      <>Tocca <strong>Condividi</strong> <ShareIcon /> in alto a destra, nella barra dell'indirizzo (oppure nel menu <strong>•••</strong> in basso).</>,
+      addToHome,
+    ],
+    note: "Se non trovi l'opzione, aggiorna iPhone e Chrome all'ultima versione, oppure apri questa pagina con Safari.",
+  },
+  edge: {
+    arrowLabel: "Menu ••• qui sotto",
+    intro: "Stai usando Edge: si installa da qui, senza passare da Safari.",
+    steps: [
+      <>Tocca il menu <strong>•••</strong> in basso e poi <strong>Condividi</strong> <ShareIcon />.</>,
+      addToHome,
+    ],
+    note: "Se non trovi l'opzione, aggiorna iPhone ed Edge all'ultima versione, oppure apri questa pagina con Safari.",
+  },
+  firefox: {
+    arrowLabel: "Menu ☰ qui sotto",
+    intro: "Stai usando Firefox: si installa da qui, senza passare da Safari.",
+    steps: [
+      <>Tocca il menu <strong>☰</strong> in basso e poi <strong>Condividi</strong> <ShareIcon />.</>,
+      addToHome,
+    ],
+    note: "Se non trovi l'opzione, aggiorna iPhone e Firefox all'ultima versione, oppure apri questa pagina con Safari.",
+  },
+  google: {
+    arrowLabel: "",
+    intro: "L'app Google non permette di installare i siti: apri prima PalaPadel in Safari o Chrome.",
+    steps: [
+      <>Tocca <strong>Condividi</strong> <ShareIcon /> o il menu <strong>•••</strong> e scegli <strong>Apri in Safari</strong> (o in Chrome).</>,
+      <>Poi tocca di nuovo <strong>Installa app</strong> in alto: ti mostreremo i passaggi per quel browser.</>,
+    ],
+    note: "In alternativa copia l'indirizzo della pagina e incollalo in Safari o Chrome.",
+  },
+  inapp: {
+    arrowLabel: "Menu ••• qui in alto",
+    intro: "Hai aperto il link dentro un'app (Instagram, Facebook...): da qui non si può installare.",
+    steps: [
+      <>Tocca il menu <strong>•••</strong> in alto a destra e scegli <strong>Apri nel browser</strong> (o <strong>Apri in Safari</strong>).</>,
+      <>Poi tocca di nuovo <strong>Installa app</strong> in alto: ti mostreremo i passaggi per quel browser.</>,
+    ],
+    note: "In alternativa copia l'indirizzo della pagina e incollalo in Safari o Chrome.",
+  },
+};
+
+/** Freccia animata verso il tasto del browser da toccare (fuori dalla pagina, sul bordo). */
+function GuideArrow({ spot, label }: { spot: ArrowSpot; label: string }) {
+  const atBottom = spot.startsWith("bottom");
+  const position =
+    spot === "bottom-center"
+      ? "bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 items-center"
+      : spot === "bottom-right"
+        ? "bottom-[calc(0.75rem+env(safe-area-inset-bottom))] right-3 items-end"
+        : "top-[calc(0.5rem+env(safe-area-inset-top))] right-3 items-end";
+  const Icon = atBottom ? ArrowDown : ArrowUp;
+  return (
+    <div aria-hidden="true" className={`pointer-events-none fixed z-[60] flex flex-col gap-1 ${position}`}>
+      {!atBottom && <Icon size={44} strokeWidth={3} className="animate-bounce text-[#BBFF5E] drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]" />}
+      <span className="rounded-full bg-[#BBFF5E] px-3 py-1 text-xs font-extrabold text-[#081208] shadow-lg">{label}</span>
+      {atBottom && <Icon size={44} strokeWidth={3} className="animate-bounce text-[#BBFF5E] drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]" />}
+    </div>
   );
 }

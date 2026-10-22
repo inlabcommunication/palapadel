@@ -84,13 +84,20 @@ export function AnalyticsPage() {
       {totals ? (
         <>
           <div className="grid grid-cols-2 gap-2 mb-4">
-            <Metric label="Dispositivi" value={totals.devices} />
+            <Metric label="Dispositivi attivi (30 gg)" value={totals.devices} />
+            <Metric label="Dispositivi nuovi (30 gg)" value={totals.devicesNew} />
             <Metric label="Sessioni" value={totals.sessions} />
             <Metric label="Installazioni" value={totals.installs} />
             <Metric label="Eventi" value={totals.eventsTotal} />
             <Metric label="Push consentite" value={totals.notificationPermissionGranted} />
             <Metric label="Push negate" value={totals.notificationPermissionDenied} />
           </div>
+          <p className="-mt-2 mb-4 text-[11.5px] leading-relaxed text-[rgba(251,243,222,0.55)]">
+            I dispositivi sono una stima per eccesso: lo stesso telefono conta più volte se apre PalaPadel da
+            browser diversi (Safari, app installata, link da WhatsApp o Instagram) e su iPhone viene ricontato
+            dopo circa 7 giorni senza visite. Da quando sono partiti gli Analytics: {totals.devicesTotal ?? totals.devices} dispositivi.
+            Le visite alle anteprime di prova non vengono contate.
+          </p>
 
           <div className="mb-4">
             <p className="text-[11px] uppercase tracking-wider font-bold text-[rgba(251,243,222,0.50)] mb-2">Ultimi 30 giorni</p>

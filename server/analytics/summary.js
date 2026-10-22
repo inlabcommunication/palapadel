@@ -1,8 +1,8 @@
 import { getAdminApp, admin } from "../_lib/firebaseAdmin.js";
 import { requirePost, sendError, verifyCaller } from "../_lib/auth.js";
 import {
+  countAnalyticsDevices,
   getAnalyticsActorRole,
-  isCountedAnalyticsInstallation,
   shouldSkipAnalyticsRole,
 } from "../_lib/analyticsPolicy.js";
 import { parseBody, z } from "../_lib/validation.js";
@@ -48,7 +48,7 @@ export default async function handler(req, res) {
         return acc;
       },
       {
-        devices: installsSnap.docs.filter((doc) => isCountedAnalyticsInstallation(doc.data())).length,
+        ...devicesTotals(installsSnap, days),
         eventsTotal: 0,
         sessions: 0,
         installs: 0,
@@ -67,4 +67,9 @@ export default async function handler(req, res) {
   } catch (err) {
     sendError(res, err, "Errore interno durante il riepilogo analytics");
   }
+}
+
+function devicesTotals(installsSnap, days) {
+  const devices = countAnalyticsDevices(installsSnap.docs.map((doc) => doc.data()), days);
+  return { devices: devices.active, devicesNew: devices.new, devicesTotal: devices.total };
 }
