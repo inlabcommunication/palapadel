@@ -3,6 +3,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { ROLE_LABELS } from "../types";
 import { useNavigate } from "react-router-dom";
 import { CentralNotificationPanel } from "./CentralNotificationPanel";
+import { InstallAppButton } from "./InstallAppButton";
 
 export function TopBar() {
   const { authenticatedAppUser, viewMode, setViewMode, logout } = useAuth();
@@ -13,7 +14,7 @@ export function TopBar() {
       <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#BBFF5E]/40 to-transparent pointer-events-none" aria-hidden="true" />
       <div
         className={`relative flex items-center gap-2 px-4 py-2 max-w-[480px] mx-auto ${
-          authenticatedAppUser ? "min-h-[104px] justify-center pt-14" : "min-h-14 justify-end"
+          authenticatedAppUser ? "min-h-[104px] justify-center pt-14" : "min-h-14 justify-between"
         }`}
       >
         <img
@@ -55,13 +56,20 @@ export function TopBar() {
             </button>
           </div>
         ) : (
-          <button
-            onClick={() => navigate("/login")}
-            className="flex items-center text-xs font-semibold bg-[#0A0B08] border border-[rgba(251,243,222,0.18)] rounded-full px-3 py-1.5"
-          >
-            <Shield size={15} className="mr-1.5" />
-            Accedi
-          </button>
+          <>
+            {/* Accesso riservato allo staff: volutamente discreto. */}
+            <button
+              onClick={() => navigate("/login")}
+              aria-label="Accesso area gestione"
+              title="Accesso area gestione"
+              className="relative rounded-full p-2 text-[rgba(251,243,222,0.32)] hover:text-[rgba(251,243,222,0.7)] focus-visible:text-[#FBF3DE]"
+            >
+              <Shield size={15} />
+            </button>
+            <span className="relative">
+              <InstallAppButton variant="topbar" />
+            </span>
+          </>
         )}
       </div>
     </header>

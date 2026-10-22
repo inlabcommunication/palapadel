@@ -1,4 +1,5 @@
 import { useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { Download, Share, SquarePlus, X } from "lucide-react";
 import { getInstallMode, promptInstall, subscribeInstallState } from "../lib/pwaInstall";
 
@@ -7,7 +8,7 @@ import { getInstallMode, promptInstall, subscribeInstallState } from "../lib/pwa
  * (beforeinstallprompt), su iPhone/iPad mostra la guida "Condividi > Aggiungi alla
  * schermata Home". Non compare se l'app è già installata o non è installabile.
  */
-export function InstallAppButton() {
+export function InstallAppButton({ variant = "card" }: { variant?: "card" | "topbar" }) {
   const mode = useSyncExternalStore(subscribeInstallState, getInstallMode, () => null);
   const [iosGuideOpen, setIosGuideOpen] = useState(false);
 
@@ -23,6 +24,17 @@ export function InstallAppButton() {
 
   return (
     <>
+      {variant === "topbar" ? (
+        <button
+          type="button"
+          onClick={handleClick}
+          aria-label="Installa l'app PalaPadel"
+          className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#BBFF5E] px-3 py-1.5 text-xs font-bold text-[#081208] shadow-[0_0_0_3px_rgba(187,255,94,0.18)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#BBFF5E]"
+        >
+          <Download size={14} />
+          Installa<span className="hidden min-[380px]:inline">app</span>
+        </button>
+      ) : (
       <div className="mx-auto mb-5 flex max-w-md items-center gap-3 rounded-xl border border-[rgba(187,255,94,0.22)] bg-[#0A0B08] p-3">
         <img
           src="/icon-192.png"
@@ -43,8 +55,10 @@ export function InstallAppButton() {
           Installa PalaPadel
         </button>
       </div>
+      )}
 
-      {iosGuideOpen && (
+      {/* Portale su <body>: la guida deve stare sopra barra in alto e menu in basso. */}
+      {iosGuideOpen && createPortal(
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:items-center"
           onClick={() => setIosGuideOpen(false)}
@@ -103,7 +117,8 @@ export function InstallAppButton() {
               Ho capito
             </button>
           </section>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
