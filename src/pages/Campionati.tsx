@@ -578,7 +578,7 @@ function EditEditionForm({
     const typed = window.prompt(
       `"${label}" contiene dati: classifica, giornate, partite, tabellone o giocatrici.\n\n` +
         "Eliminandola definitivamente verranno cancellati anche tutti questi dati. Le squadre restano nell'anagrafica.\n" +
-        "Consiglio: scarica prima un backup da Utenti e impostazioni.\n\n" +
+        "Consiglio: scarica prima un backup da Utenti e impostazioni → Backup.\n\n" +
         `Per confermare scrivi esattamente: ${label}`
     );
     if (typed === null) return;
