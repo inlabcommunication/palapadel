@@ -10,8 +10,6 @@ import {
   canManageResults,
   canShareMatchday,
   canShareStandings,
-  canManageTournaments,
-  canOperateTournaments,
   canSendNotifications,
 } from "../shared/permissions.js";
 
@@ -23,8 +21,6 @@ test("Admin ha solo i permessi operativi previsti", () => {
   assert.equal(canEditMatchSchedule("admin"), true);
   assert.equal(canManageNews("admin"), false);
   assert.equal(canManageChampionships("admin"), false);
-  assert.equal(canManageTournaments("admin"), false);
-  assert.equal(canOperateTournaments("admin"), true);
   assert.equal(canSendNotifications("admin"), true);
 });
 
@@ -34,7 +30,6 @@ test("Result Manager non modifica struttura o calendario", () => {
   assert.equal(canCreateMatch("resultManager"), false);
   assert.equal(canEnrollExistingTeam("resultManager"), false);
   assert.equal(canEditMatchSchedule("resultManager"), false);
-  assert.equal(canOperateTournaments("resultManager"), false);
   assert.equal(canSendNotifications("resultManager"), false);
 });
 

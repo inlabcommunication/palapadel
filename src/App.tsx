@@ -26,7 +26,6 @@ const OperationalChampionshipsPage = lazy(() =>
 const GiornatePage = lazy(() => import("./pages/Giornate").then((m) => ({ default: m.GiornatePage })));
 const AnalyticsPage = lazy(() => import("./pages/Analytics").then((m) => ({ default: m.AnalyticsPage })));
 const AdminSettingsPage = lazy(() => import("./pages/AdminSettings").then((m) => ({ default: m.AdminSettingsPage })));
-const TorneiPage = lazy(() => import("./pages/Tornei").then((m) => ({ default: m.TorneiPage })));
 
 function PageLoading() {
   return <p className="px-4 py-8 text-sm text-[rgba(251,243,222,0.58)]">Caricamento...</p>;
@@ -86,8 +85,9 @@ export default function App() {
       <Route path="/" element={<HomePage />} />
       <Route path="/campionati" element={<CampionatiPage />} />
       <Route path="/campionati/:editionId" element={<CampionatiPage />} />
-      <Route path="/tornei" element={<TorneiPage />} />
-      <Route path="/news" element={<NewsPage />} />
+      {/* Area tornei rimossa: i vecchi link portano alla Home. */}
+      <Route path="/tornei" element={<Navigate to="/" replace />} />
+      <Route path="/news" element={appUser?.role === "superAdmin" ? <HomePage newsOnly /> : <NewsPage />} />
       <Route path="/storico" element={<Navigate to="/news" replace />} />
       <Route path="/albo" element={<AlboPage />} />
       <Route path="/notifiche" element={<NotifichePage />} />

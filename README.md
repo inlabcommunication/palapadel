@@ -1,4 +1,4 @@
-# PalaPadel - Web app tornei e campionati
+# PalaPadel - Web app campionati
 
 Web app per gestire campionati PalaPadel, squadre, giornate, risultati, classifiche, albo d'oro, news Home, notifiche push e analytics interni.
 
@@ -44,8 +44,6 @@ I ruoli vivono in `users/{uid}` su Firestore, non nei custom claims. `src/lib/pe
 | Correzioni operative della classifica di un'edizione | sì | sì | sì |
 | Iscrivere a un'edizione una squadra già esistente | sì | sì | no |
 | Creare giornate, creare/modificare/eliminare partite | sì | sì | no |
-| Tornei: gironi, turni e partite; tabellone finale | sì | sì | no |
-| Tornei: creare/modificare/eliminare il torneo e il suo logo | sì | no | no |
 | Inviare notifiche dal contesto (risultati, classifiche) | sì | sì | no |
 | Condividere classifica e giornata in PNG | sì | sì | sì |
 | Gestire campionati, edizioni, chiusura edizione e ordine | sì | no | no |
@@ -56,9 +54,13 @@ I ruoli vivono in `users/{uid}` su Firestore, non nei custom claims. `src/lib/pe
 | Impostazioni notifiche, bozze, programmazione e storico | sì | no | no |
 | Analytics, utenti e password, backup, annullamento operazioni | sì | no | no |
 
-La tabella riflette `shared/permissions.js`, `shared/tournamentPermissions.js`, i controlli degli endpoint in `server/` e le regole `storage.rules`.
+La tabella riflette `shared/permissions.js`, i controlli degli endpoint in `server/` e le regole `storage.rules`.
 
 Gli account con `disabled: true` non ereditano più i permessi di ruolo nelle regole Firestore e Storage.
+
+## Area tornei
+
+L'area tornei è stata rimossa dall'app (pagina, endpoint `/api/admin/tournament` e logica condivisa). I vecchi link a `/tornei` portano alla Home. Eventuali dati già presenti nelle collezioni `tournaments*` di Firestore non sono stati cancellati: restano inclusi nel backup e le regole Firestore/Storage non sono state modificate.
 
 ## Classifiche e import
 

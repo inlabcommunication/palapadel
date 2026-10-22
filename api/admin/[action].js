@@ -13,7 +13,6 @@ import femaleParticipant from "../../server/admin/female-participant.js";
 import hallOfFame from "../../server/admin/hall-of-fame.js";
 import bracket from "../../server/admin/bracket.js";
 import publicSettings from "../../server/admin/public-settings.js";
-import tournament from "../../server/admin/tournament.js";
 import purgeEdition from "../../server/admin/purge-edition.js";
 
 const handlers = {
@@ -32,7 +31,6 @@ const handlers = {
   "hall-of-fame": hallOfFame,
   bracket,
   "public-settings": publicSettings,
-  tournament,
   "purge-edition": purgeEdition,
 };
 

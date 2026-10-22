@@ -15,12 +15,6 @@ const PUBLIC_OFFLINE_COLLECTIONS = new Set([
   "historicalWins",
   "homeNews",
   "publicSettings",
-  "tournaments",
-  "tournamentGroups",
-  "tournamentTeams",
-  "tournamentGroupTeams",
-  "tournamentBracketRounds",
-  "tournamentBracketMatches",
 ]);
 
 function publicCacheKey(path: string, depsKey: React.DependencyList) {

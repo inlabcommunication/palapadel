@@ -24,10 +24,9 @@ import { CentralNotificationPanel } from "./CentralNotificationPanel";
 const sidebarItems = [
   { to: "/gestione", label: "Dashboard", icon: LayoutDashboard, match: (path: string, hash: string) => path === "/gestione" && !hash },
   { to: "/campionati", label: "Campionati e squadre", icon: Trophy, match: (path: string) => path.startsWith("/campionati") },
-  { to: "/tornei", label: "Tornei", icon: Trophy, match: (path: string) => path.startsWith("/tornei") },
   { to: "/giornate", label: "Giornate e partite", icon: CalendarDays, match: (path: string) => path === "/giornate" || path.startsWith("/gestione/edizione") },
   { to: "/albo", label: "Albo d'oro", icon: Award, match: (path: string) => path === "/albo" },
-  { to: "/#news", label: "PalaPadel News", icon: Newspaper, match: (path: string, hash: string) => path === "/" && (!hash || hash === "#news") },
+  { to: "/news", label: "PalaPadel News", icon: Newspaper, match: (path: string) => path === "/news" },
   { to: "/notifiche", label: "Notifiche", icon: Bell, match: (path: string) => path === "/notifiche" },
   { to: "/analytics", label: "Analytics", icon: BarChart3, match: (path: string) => path === "/analytics" },
   { to: "/utenti-impostazioni", label: "Utenti e impostazioni", icon: ShieldCheck, match: (path: string) => path === "/utenti-impostazioni" },

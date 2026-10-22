@@ -25,9 +25,7 @@ export type Permission =
   | "downloadBackup"
   | "viewAuditLog"
   | "undoOperation"
-  | "closeEdition"
-  | "manageTournaments"
-  | "operateTournaments";
+  | "closeEdition";
 
 export const ROLES: Readonly<Record<"SUPER_ADMIN" | "ADMIN" | "RESULT_MANAGER", CanonicalRole>>;
 export const PERMISSIONS: Readonly<Record<string, Permission>>;
@@ -51,6 +49,4 @@ export function canManageUsers(role: unknown): boolean;
 export function canReorderChampionships(role: unknown): boolean;
 export function canShareStandings(role: unknown): boolean;
 export function canShareMatchday(role: unknown): boolean;
-export function canManageTournaments(role: unknown): boolean;
-export function canOperateTournaments(role: unknown): boolean;
 export function canSendNotifications(role: unknown): boolean;
