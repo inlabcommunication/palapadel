@@ -39,7 +39,7 @@ export function AlboPage() {
   const teamTypes = types.filter(
     (type) =>
       type.hasTeams &&
-      ["serie-b", "serie-c", "principianti"].includes(type.badgeColor)
+      ["serie-a", "serie-b", "serie-c", "principianti"].includes(type.badgeColor)
   );
   const teamRows = groupHallOfFameRows(
     wins.filter((win) => !femaleTypeIds.has(win.typeId) && Boolean(win.teamId)),
