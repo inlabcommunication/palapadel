@@ -1,19 +1,9 @@
-import { useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { TopBar } from "./components/TopBar";
 import { BottomNav } from "./components/BottomNav";
 import { SuperAdminShell } from "./components/SuperAdminShell";
 import { HomePage } from "./pages/Home";
-import { CampionatiPage } from "./pages/Campionati";
-import { NewsPage } from "./pages/News";
-import { AlboPage } from "./pages/Albo";
-import { NotifichePage } from "./pages/Notifiche";
-import { LoginPage } from "./pages/Login";
-import { GestionePage, OperationalChampionshipsPage } from "./pages/Gestione";
-import { GiornatePage } from "./pages/Giornate";
-import { AnalyticsPage } from "./pages/Analytics";
-import { AdminSettingsPage } from "./pages/AdminSettings";
-import { TorneiPage } from "./pages/Tornei";
 import { useAuth } from "./contexts/AuthContext";
 import { canTrackAnalytics, configureAnalyticsContext, trackAnalyticsEvent } from "./lib/analyticsClient";
 import { bindForegroundNotificationTracking } from "./lib/notificationClient";
@@ -21,6 +11,26 @@ import { isSuperAdminWorkspacePath } from "./lib/superAdminRoutes";
 import { OfflineIndicator } from "./components/OfflineIndicator";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { AppFooter } from "./components/AppFooter";
+
+// La Home resta nel file principale; le altre pagine (comprese quelle di
+// amministrazione) vengono scaricate solo quando si aprono.
+const CampionatiPage = lazy(() => import("./pages/Campionati").then((m) => ({ default: m.CampionatiPage })));
+const NewsPage = lazy(() => import("./pages/News").then((m) => ({ default: m.NewsPage })));
+const AlboPage = lazy(() => import("./pages/Albo").then((m) => ({ default: m.AlboPage })));
+const NotifichePage = lazy(() => import("./pages/Notifiche").then((m) => ({ default: m.NotifichePage })));
+const LoginPage = lazy(() => import("./pages/Login").then((m) => ({ default: m.LoginPage })));
+const GestionePage = lazy(() => import("./pages/Gestione").then((m) => ({ default: m.GestionePage })));
+const OperationalChampionshipsPage = lazy(() =>
+  import("./pages/Gestione").then((m) => ({ default: m.OperationalChampionshipsPage }))
+);
+const GiornatePage = lazy(() => import("./pages/Giornate").then((m) => ({ default: m.GiornatePage })));
+const AnalyticsPage = lazy(() => import("./pages/Analytics").then((m) => ({ default: m.AnalyticsPage })));
+const AdminSettingsPage = lazy(() => import("./pages/AdminSettings").then((m) => ({ default: m.AdminSettingsPage })));
+const TorneiPage = lazy(() => import("./pages/Tornei").then((m) => ({ default: m.TorneiPage })));
+
+function PageLoading() {
+  return <p className="px-4 py-8 text-sm text-[rgba(251,243,222,0.58)]">Caricamento...</p>;
+}
 
 export default function App() {
   const location = useLocation();
@@ -71,6 +81,7 @@ export default function App() {
   }, [location.pathname, authenticatedAppUser?.role, authLoading, viewMode]);
 
   const routes = (
+    <Suspense fallback={<PageLoading />}>
     <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/campionati" element={<CampionatiPage />} />
@@ -87,6 +98,7 @@ export default function App() {
       <Route path="/analytics" element={<AnalyticsPage />} />
       <Route path="/utenti-impostazioni" element={<AdminSettingsPage />} />
     </Routes>
+    </Suspense>
   );
 
   if (appUser?.role === "superAdmin" && isSuperAdminWorkspacePath(location.pathname)) {

@@ -1,6 +1,7 @@
 import { getAdminApp, admin } from "../_lib/firebaseAdmin.js";
 import { HttpError, requirePost, sendError, verifyCaller } from "../_lib/auth.js";
 import { parseBody, z } from "../_lib/validation.js";
+import { findOrphanStoragePaths } from "../_lib/storageOrphans.js";
 
 const storagePath = z.string().trim().min(3).max(1000).refine(
   (path) => path.startsWith("home-news/") || path.startsWith("teams/") || path.startsWith("championship-types/") || path.startsWith("tournaments/"),
@@ -42,14 +43,11 @@ export default async function handler(req, res) {
         ...typesSnap.docs.map((doc) => doc.data().logoStoragePath).filter(Boolean),
         ...tournamentsSnap.docs.map((doc) => doc.data().logoStoragePath).filter(Boolean),
       ]);
-      const orphanPaths = filesResult[0]
-        .map((file) => file.name)
-        .filter((path) => (
-          path.startsWith("home-news/") ||
-          path.startsWith("teams/") ||
-          path.startsWith("championship-types/") ||
-          path.startsWith("tournaments/")
-        ) && !referenced.has(path));
+      const orphanPaths = findOrphanStoragePaths(
+        filesResult[0],
+        referenced,
+        ["home-news/", "teams/", "championship-types/", "tournaments/"]
+      );
       for (const path of orphanPaths.slice(0, 400)) {
         await enqueue(db, path, "File orfano rilevato dalla scansione periodica", caller.uid, timestamp);
       }

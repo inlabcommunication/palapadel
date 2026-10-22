@@ -22,8 +22,8 @@
 //   Non esistono partite da sommare: i punti importati sono l'intero valore mostrato,
 //   più eventuali correzioni manuali già presenti (preservate, mai perse).
 
-import admin from "firebase-admin";
-import { roleAllowed } from "../_lib/roles.js";
+import { getAdminApp, admin } from "../_lib/firebaseAdmin.js";
+import { HttpError, verifyCaller } from "../_lib/auth.js";
 import { computeMatchTotals } from "../_lib/standingsRules.js";
 import { documentId, parseBody, z } from "../_lib/validation.js";
 
@@ -45,35 +45,6 @@ const importSchema = z.object({
   mode2ThresholdMatchdayNumber: z.number().int().positive().optional(),
   mode2AbsentPolicy: z.enum(["keep", "retire", "remove"]).optional(),
 }).strict();
-
-function getAdminApp() {
-  if (admin.apps.length) return admin.app();
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || "{}");
-  return admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-}
-
-class HttpError extends Error {
-  constructor(status, message, details) {
-    super(message);
-    this.status = status;
-    this.details = details;
-  }
-}
-
-async function verifyCaller(app, req) {
-  const authHeader = req.headers.authorization || "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!idToken) throw new HttpError(401, "Token mancante");
-  const decoded = await admin.auth(app).verifyIdToken(idToken);
-  const callerSnap = await admin.firestore(app).doc(`users/${decoded.uid}`).get();
-  if (!callerSnap.exists) throw new HttpError(403, "Utente non registrato");
-  const callerData = callerSnap.data();
-  if (callerData.disabled) throw new HttpError(403, "Account disattivato");
-  if (!roleAllowed(callerData.role, ["superAdmin"])) {
-    throw new HttpError(403, "Solo admin o superAdmin possono importare la classifica");
-  }
-  return { uid: decoded.uid, role: callerData.role };
-}
 
 function normalizeName(name) {
   return (name || "")
@@ -507,7 +478,7 @@ export default async function handler(req, res) {
 
   try {
     const app = getAdminApp();
-    const auth = await verifyCaller(app, req);
+    const auth = await verifyCaller(app, req, ["superAdmin"], "Solo admin o superAdmin possono importare la classifica");
     const db = admin.firestore(app);
 
     const body = parseBody(importSchema, req.body);

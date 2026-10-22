@@ -15,43 +15,12 @@
 //   { matchId: string, status: "rinviata"|"annullata"|"da_giocare" } -> cambia stato, rimuove
 //                                                                       un eventuale risultato
 
-import admin from "firebase-admin";
+import { getAdminApp, admin } from "../_lib/firebaseAdmin.js";
+import { HttpError, verifyCaller } from "../_lib/auth.js";
 import { normalizeMatchChange, RESULT_VALUES } from "../_lib/matchStatus.js";
 import { enqueueNotificationEvent } from "../_lib/notificationEvents.js";
 import { computeStandingsUpdates } from "../_lib/standingsRules.js";
-import { normalizeRole, roleAllowed } from "../_lib/roles.js";
 import { documentId, parseBody, z } from "../_lib/validation.js";
-
-function getAdminApp() {
-  if (admin.apps.length) return admin.app();
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || "{}");
-  return admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-}
-
-class HttpError extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
-
-/** Fase 2 — verifica token, ruolo e che l'utente non sia disattivato. */
-async function verifyCaller(app, req) {
-  const authHeader = req.headers.authorization || "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!idToken) throw new HttpError(401, "Token mancante");
-
-  const decoded = await admin.auth(app).verifyIdToken(idToken);
-  const callerSnap = await admin.firestore(app).doc(`users/${decoded.uid}`).get();
-  if (!callerSnap.exists) throw new HttpError(403, "Utente non registrato");
-  const callerData = callerSnap.data();
-  if (callerData.disabled) throw new HttpError(403, "Account disattivato");
-  const role = callerData.role;
-  if (!roleAllowed(role, ["superAdmin", "admin", "resultManager"])) {
-    throw new HttpError(403, "Permessi insufficienti");
-  }
-  return { uid: decoded.uid, role: normalizeRole(role) };
-}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -61,7 +30,7 @@ export default async function handler(req, res) {
 
   try {
     const app = getAdminApp();
-    const auth = await verifyCaller(app, req).catch((err) => {
+    const auth = await verifyCaller(app, req, ["superAdmin", "admin", "resultManager"]).catch((err) => {
       throw err instanceof HttpError ? err : new HttpError(401, "Token non valido");
     });
 

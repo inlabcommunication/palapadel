@@ -1,6 +1,9 @@
+import { InstallAppButton } from "./InstallAppButton";
+
 export function AppFooter() {
   return (
     <footer className="mt-auto border-t border-[rgba(251,243,222,0.10)] px-4 pb-28 pt-5 xl:pb-6">
+      <InstallAppButton />
       <a
         href="https://www.instagram.com/inlab.communication/"
         target="_blank"

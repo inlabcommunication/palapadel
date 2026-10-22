@@ -3,6 +3,20 @@ import { HttpError, requirePost, sendError } from "../_lib/auth.js";
 import { getAnalyticsActorRole, shouldSkipAnalyticsRole } from "../_lib/analyticsPolicy.js";
 import { isValidInstallationId } from "../_lib/notifications.js";
 import { parseBody, z } from "../_lib/validation.js";
+import {
+  checkInstallationRate,
+  createIpRateLimiter,
+  getClientIp,
+  getDailyEventLimit,
+  isDailyLimitReached,
+} from "../_lib/analyticsRateLimit.js";
+
+const allowIp = createIpRateLimiter();
+
+// Proprietà piatte e brevi: niente oggetti annidati o testi lunghi salvati in Firestore.
+const propertiesSchema = z
+  .record(z.string().max(40), z.union([z.string().max(200), z.number(), z.boolean(), z.null()]))
+  .refine((value) => Object.keys(value).length <= 12, "Troppe proprietà");
 
 const ALLOWED_EVENTS = new Set([
   "session_start",
@@ -22,11 +36,12 @@ function todayKey(date = new Date()) {
 export default async function handler(req, res) {
   try {
     requirePost(req);
+    if (!allowIp(getClientIp(req))) throw new HttpError(429, "Troppe richieste");
     const body = parseBody(z.object({
       installationId: z.string().regex(/^[a-zA-Z0-9_-]{16,96}$/),
       eventType: z.enum(["session_start", "page_view", "pwa_installed", "notification_permission", "notification_subscribed", "notification_received", "notification_opened", "share_standings"]),
       route: z.string().max(160).nullable().optional(),
-      properties: z.record(z.string(), z.unknown()).optional(),
+      properties: propertiesSchema.optional(),
       userAgent: z.string().max(240).optional(),
       standalone: z.boolean().optional(),
       notificationPermission: z.enum(["default", "granted", "denied", "unsupported"]).optional(),
@@ -37,28 +52,28 @@ export default async function handler(req, res) {
     if (!ALLOWED_EVENTS.has(eventType)) throw new HttpError(400, "eventType non valido");
 
     const cleanProperties = properties && typeof properties === "object" ? properties : {};
+    // Il ruolo è dichiarato dal browser e non è verificabile (sendBeacon non porta il
+    // token): serve solo a escludere lo staff. Se arriva un ruolo escluso non si scrive
+    // nulla, così una dichiarazione falsa non può alterare né gonfiare i dati.
     const actorRole = getAnalyticsActorRole(body, cleanProperties);
-    const db = admin.firestore(getAdminApp());
-    const now = new Date();
-    const timestamp = now.toISOString();
     if (shouldSkipAnalyticsRole(actorRole)) {
-      await db.doc(`analyticsInstallations/${installationId}`).set(
-        {
-          installationId,
-          actorRole,
-          excludedFromAnalytics: true,
-          lastExcludedAt: timestamp,
-        },
-        { merge: true }
-      );
       res.status(200).json({ ok: true, skipped: true });
       return;
     }
 
+    const db = admin.firestore(getAdminApp());
+    const now = new Date();
+    const timestamp = now.toISOString();
     const day = todayKey(now);
     const eventRef = db.collection("analyticsEvents").doc();
     const installRef = db.doc(`analyticsInstallations/${installationId}`);
     const dailyRef = db.doc(`analyticsDaily/${day}`);
+
+    const [installSnap, dailySnap] = await Promise.all([installRef.get(), dailyRef.get()]);
+    const rate = checkInstallationRate(installSnap.exists ? installSnap.data() : null, now);
+    if (!rate.allowed || isDailyLimitReached(dailySnap.exists ? dailySnap.data() : null, getDailyEventLimit())) {
+      throw new HttpError(429, "Limite eventi analytics raggiunto");
+    }
 
     const event = {
       id: eventRef.id,
@@ -88,8 +103,8 @@ export default async function handler(req, res) {
       increments.notificationPermissionDenied = admin.firestore.FieldValue.increment(1);
     }
 
-    const installSnap = await installRef.get();
     const installData = {
+      ...rate.fields,
       installationId,
       lastSeenAt: timestamp,
       lastRoute: event.route,

@@ -545,10 +545,10 @@ function TeamExcelImportDialog({
         <label className="flex min-h-24 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-[rgba(251,243,222,0.22)] bg-[#123008] px-4 py-4 text-center">
           <Upload size={22} className="text-[#BBFF5E]" />
           <span className="text-sm font-bold">{reading ? "Lettura in corso..." : "Seleziona file Excel"}</span>
-          <span className="text-xs text-[rgba(251,243,222,0.55)]">{fileName || ".xlsx oppure .xls"}</span>
+          <span className="text-xs text-[rgba(251,243,222,0.55)]">{fileName || "file .xlsx"}</span>
           <input
             type="file"
-            accept=".xlsx,.xls"
+            accept=".xlsx"
             className="hidden"
             disabled={reading || importing}
             onChange={(event) => {
