@@ -14,6 +14,7 @@ import { getAdminApp, admin } from "../_lib/firebaseAdmin.js";
 import { HttpError, verifyCaller } from "../_lib/auth.js";
 import { normalizeMatchChange } from "../_lib/matchStatus.js";
 import { enqueueNotificationEvent } from "../_lib/notificationEvents.js";
+import { scoreMatchPredictionsSafely } from "../_lib/predictionScoring.js";
 import { computeStandingsUpdates } from "../_lib/standingsRules.js";
 import { documentId, parseBody, z } from "../_lib/validation.js";
 
@@ -148,6 +149,8 @@ export default async function handler(req, res) {
         timestamp: updatedAt,
       });
     });
+
+    await scoreMatchPredictionsSafely(db, entries.map((entry) => entry.matchId));
 
     let notification = null;
     if (notificationEvent) {

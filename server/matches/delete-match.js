@@ -8,6 +8,7 @@ import { getAdminApp, admin } from "../_lib/firebaseAdmin.js";
 import { HttpError, verifyCaller } from "../_lib/auth.js";
 import { computeStandingsUpdates } from "../_lib/standingsRules.js";
 import { documentId, parseBody, z } from "../_lib/validation.js";
+import { scoreMatchPredictionsSafely } from "../_lib/predictionScoring.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -49,6 +50,9 @@ export default async function handler(req, res) {
         timestamp: updatedAt,
       });
     });
+
+    // Pronostici della partita eliminata: punti tolti e pronostici cancellati.
+    await scoreMatchPredictionsSafely(db, [matchId]);
 
     res.status(200).json({ ok: true });
   } catch (err) {
