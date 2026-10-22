@@ -1,5 +1,5 @@
 import { getAdminApp, admin } from "../../server/_lib/firebaseAdmin.js";
-import { findOrphanStoragePaths } from "../../server/_lib/storageOrphans.js";
+import { findOrphanStoragePaths, loadStorageReferences, MAX_AUTO_ORPHANS } from "../../server/_lib/storageOrphans.js";
 
 export default async function handler(req, res) {
   const expected = process.env.CRON_SECRET;
@@ -13,22 +13,16 @@ export default async function handler(req, res) {
     const db = admin.firestore(app);
     const bucket = admin.storage(app).bucket();
     const timestamp = new Date().toISOString();
-    const [newsSnap, teamsSnap, typesSnap, filesResult] = await Promise.all([
-      db.collection("homeNews").get(),
-      db.collection("teams").get(),
-      db.collection("championshipTypes").get(),
-      bucket.getFiles(),
-    ]);
-    const referenced = new Set([
-      ...newsSnap.docs.map((doc) => doc.data().imageStoragePath).filter(Boolean),
-      ...teamsSnap.docs.map((doc) => doc.data().teamPhotoStoragePath).filter(Boolean),
-      ...typesSnap.docs.map((doc) => doc.data().logoStoragePath).filter(Boolean),
-    ]);
-    const orphans = findOrphanStoragePaths(
+    const [referenced, filesResult] = await Promise.all([loadStorageReferences(db), bucket.getFiles()]);
+    const found = findOrphanStoragePaths(
       filesResult[0],
       referenced,
       ["home-news/", "teams/", "championship-types/"]
-    ).slice(0, 400);
+    );
+    // Troppi file "orfani" in una volta: probabile errore nei riferimenti, non si
+    // mette nulla in coda e si lascia traccia nel log per una verifica manuale.
+    const aborted = found.length > MAX_AUTO_ORPHANS;
+    const orphans = aborted ? [] : found;
 
     for (const path of orphans) {
       const id = Buffer.from(path).toString("base64url").slice(0, 500);
@@ -45,8 +39,15 @@ export default async function handler(req, res) {
     const queue = await db.collection("storageCleanupQueue").where("status", "in", ["pending", "failed"]).limit(100).get();
     let deleted = 0;
     let failed = 0;
+    let skipped = 0;
     for (const itemDoc of queue.docs) {
       const item = itemDoc.data();
+      // Ultimo controllo: un file tornato in uso non si cancella mai.
+      if (referenced.has(item.storagePath)) {
+        await itemDoc.ref.update({ status: "skipped", lastAttemptAt: timestamp, lastError: "File ancora in uso: non eliminato" });
+        skipped += 1;
+        continue;
+      }
       try {
         await bucket.file(item.storagePath).delete({ ignoreNotFound: true });
         await itemDoc.ref.update({ status: "completed", completedAt: timestamp, lastError: null });
@@ -66,11 +67,11 @@ export default async function handler(req, res) {
       action: "storage_cleanup_periodic",
       entity: "storageCleanupQueue",
       before: { queued: queue.size },
-      after: { found: orphans.length, deleted, failed },
+      after: { found: found.length, aborted, deleted, failed, skipped },
       detail: "Controllo periodico file orfani",
       timestamp,
     });
-    res.status(200).json({ ok: true, found: orphans.length, deleted, failed });
+    res.status(200).json({ ok: true, found: found.length, aborted, deleted, failed, skipped });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Pulizia periodica non riuscita" });
