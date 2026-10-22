@@ -31,8 +31,6 @@ export const PERMISSIONS = Object.freeze({
   VIEW_AUDIT_LOG: "viewAuditLog",
   UNDO_OPERATION: "undoOperation",
   CLOSE_EDITION: "closeEdition",
-  MANAGE_TOURNAMENTS: "manageTournaments",
-  OPERATE_TOURNAMENTS: "operateTournaments",
 });
 
 const SUPER_ADMIN_PERMISSIONS = Object.freeze(Object.values(PERMISSIONS));
@@ -47,7 +45,6 @@ const ADMIN_PERMISSIONS = Object.freeze([
   PERMISSIONS.EDIT_MATCH_SCHEDULE,
   PERMISSIONS.SHARE_STANDINGS,
   PERMISSIONS.SHARE_MATCHDAY,
-  PERMISSIONS.OPERATE_TOURNAMENTS,
   PERMISSIONS.SEND_NOTIFICATIONS,
 ]);
 const RESULT_MANAGER_PERMISSIONS = Object.freeze([
@@ -93,6 +90,4 @@ export const canManageUsers = (role) => hasPermission(role, PERMISSIONS.MANAGE_U
 export const canReorderChampionships = (role) => hasPermission(role, PERMISSIONS.REORDER_CHAMPIONSHIPS);
 export const canShareStandings = (role) => hasPermission(role, PERMISSIONS.SHARE_STANDINGS);
 export const canShareMatchday = (role) => hasPermission(role, PERMISSIONS.SHARE_MATCHDAY);
-export const canManageTournaments = (role) => hasPermission(role, PERMISSIONS.MANAGE_TOURNAMENTS);
-export const canOperateTournaments = (role) => hasPermission(role, PERMISSIONS.OPERATE_TOURNAMENTS);
 export const canSendNotifications = (role) => hasPermission(role, PERMISSIONS.SEND_NOTIFICATIONS);

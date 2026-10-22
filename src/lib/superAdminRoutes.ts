@@ -3,7 +3,6 @@ export function isSuperAdminWorkspacePath(pathname: string) {
     pathname === "/" ||
     pathname.startsWith("/gestione") ||
     pathname.startsWith("/campionati") ||
-    pathname.startsWith("/tornei") ||
     pathname === "/albo" ||
     pathname === "/news" ||
     pathname === "/notifiche" ||

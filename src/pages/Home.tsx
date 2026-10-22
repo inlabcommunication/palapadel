@@ -99,7 +99,7 @@ export function HomePage({ newsOnly = false }: { newsOnly?: boolean }) {
             <Trophy size={11} /> Stagione in corso
           </span>
           <h1 className="font-display text-[26px] uppercase leading-[1.05] text-[#FBF3DE] max-w-[82%]">
-            Tornei, campionati
+            Campionati
             <br />e classifiche
           </h1>
           <p className="text-[12.5px] text-[rgba(251,243,222,0.6)] mt-2 max-w-[78%]">
