@@ -59,7 +59,7 @@ export function InstallAppButton() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 id="ios-install-title" className="text-lg font-extrabold">Installa PalaPadel</h2>
-                <p className="mt-1 text-xs text-[rgba(251,243,222,0.58)]">Su iPhone e iPad bastano due passaggi in Safari.</p>
+                <p className="mt-1 text-xs text-[rgba(251,243,222,0.58)]">Su iPhone e iPad bastano pochi tocchi in Safari.</p>
               </div>
               <button
                 type="button"
@@ -77,13 +77,14 @@ export function InstallAppButton() {
                 <span className="text-sm">
                   Tocca <strong>Condividi</strong>{" "}
                   <Share size={16} className="inline-block align-text-bottom text-[#BBFF5E]" aria-label="icona Condividi" />{" "}
-                  nella barra di Safari.
+                  nella barra di Safari (se non lo vedi, tocca prima <strong>•••</strong>).
                 </span>
               </li>
               <li className="flex items-center gap-3 rounded-lg border border-[rgba(251,243,222,0.12)] p-3">
                 <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#BBFF5E] text-xs font-extrabold text-[#081208]">2</span>
                 <span className="text-sm">
-                  Scorri e scegli <strong>Aggiungi alla schermata Home</strong>{" "}
+                  Tocca <strong>Visualizza altro</strong> (o scorri l'elenco) e scegli{" "}
+                  <strong>Aggiungi alla schermata Home</strong>{" "}
                   <SquarePlus size={16} className="inline-block align-text-bottom text-[#BBFF5E]" aria-label="icona Aggiungi" />,
                   poi conferma con <strong>Aggiungi</strong>.
                 </span>
