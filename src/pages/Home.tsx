@@ -16,7 +16,11 @@ import { BADGE_COLORS } from "../types";
 import { ChevronRight, AlertCircle, Plus, X, Pencil, Trash2, Trophy, Megaphone, CalendarDays, Newspaper } from "lucide-react";
 import { sortEditionsByTypeOrder } from "../lib/championshipOrder";
 
-export function HomePage() {
+/**
+ * newsOnly: mostra solo la sezione PALA PADEL NEWS (con gli strumenti di gestione),
+ * senza hero, campionati e albo. È la pagina "PalaPadel News" del Super Admin.
+ */
+export function HomePage({ newsOnly = false }: { newsOnly?: boolean }) {
   const navigate = useNavigate();
   const { appUser } = useAuth();
   const isAdmin = appUser?.role === "superAdmin";
@@ -78,6 +82,8 @@ export function HomePage() {
 
   return (
     <div className="p-4 pb-6">
+      {!newsOnly && (
+        <>
       {globalSettings?.publicNoticeEnabled && globalSettings.publicNotice && (
         <div role="status" className="mb-4 rounded-lg border border-[rgba(187,255,94,0.28)] bg-[#0A0B08] px-4 py-3 text-sm text-[#FBF3DE]">
           {globalSettings.publicNotice}
@@ -101,6 +107,9 @@ export function HomePage() {
           </p>
         </div>
       </div>
+
+        </>
+      )}
 
       <div id="news" className="scroll-mt-24 flex items-end justify-between gap-3 mb-3">
         <div>
@@ -211,6 +220,8 @@ export function HomePage() {
         </div>
       )}
 
+      {!newsOnly && (
+        <>
       <SectionTitle className="mt-8">CAMPIONATI IN CORSO</SectionTitle>
       <div className="grid gap-3 sm:grid-cols-2">
         {loading && <EmptyHint text="Carico i campionati..." />}
@@ -255,6 +266,9 @@ export function HomePage() {
           Apri Albo d'oro
         </button>
       </div>
+
+        </>
+      )}
 
       {selectedNews && <NewsModal news={selectedNews} onClose={() => setSelectedNews(null)} />}
 

@@ -87,7 +87,7 @@ export default function App() {
       <Route path="/campionati" element={<CampionatiPage />} />
       <Route path="/campionati/:editionId" element={<CampionatiPage />} />
       <Route path="/tornei" element={<TorneiPage />} />
-      <Route path="/news" element={<NewsPage />} />
+      <Route path="/news" element={appUser?.role === "superAdmin" ? <HomePage newsOnly /> : <NewsPage />} />
       <Route path="/storico" element={<Navigate to="/news" replace />} />
       <Route path="/albo" element={<AlboPage />} />
       <Route path="/notifiche" element={<NotifichePage />} />
