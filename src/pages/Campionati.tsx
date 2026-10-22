@@ -37,7 +37,8 @@ import { StandingsShareButton } from "../components/StandingsShareButton";
 import { parsePastedTable } from "../lib/parsePastedTable";
 import { resolveActiveMatchdayId } from "../lib/activeMatchday";
 import { closeEdition, reorderChampionshipTypes, setChampionshipVisibility } from "../lib/championshipAdminApi";
-import { createChampionshipEdition, deleteChampionshipEdition, updateChampionshipEdition } from "../lib/championshipApi";
+import { createChampionshipEdition, deleteChampionshipEdition, purgeChampionshipEdition, updateChampionshipEdition } from "../lib/championshipApi";
+import { BackendApiError } from "../lib/backendClient";
 import { createFemaleParticipant, deleteFemaleParticipant, recalculateFemaleParticipants, updateFemaleParticipant } from "../lib/femaleParticipantApi";
 import { sortChampionshipTypes } from "../lib/championshipOrder";
 
@@ -557,13 +558,47 @@ function EditEditionForm({
 
   const remove = async () => {
     const t = types.find((x) => x.id === edition.typeId);
-    if (!confirmDelete(`${t?.name} ${edition.season}`)) return;
+    const label = `${t?.name ?? ""} ${edition.season}`.trim();
+    if (!confirmDelete(label)) return;
     try {
       await deleteChampionshipEdition(edition.id);
       onDelete();
     } catch (err) {
+      // 409: l'edizione contiene dati. Si propone l'eliminazione definitiva completa.
+      if (err instanceof BackendApiError && err.status === 409) {
+        await purge(label);
+        return;
+      }
       console.error(err);
-      onDone("Errore nell'eliminazione.");
+      onDone(err instanceof Error ? err.message : "Errore nell'eliminazione.");
+    }
+  };
+
+  const purge = async (label: string) => {
+    const typed = window.prompt(
+      `"${label}" contiene dati: classifica, giornate, partite, tabellone o giocatrici.\n\n` +
+        "Eliminandola definitivamente verranno cancellati anche tutti questi dati. Le squadre restano nell'anagrafica.\n" +
+        "Consiglio: scarica prima un backup da Utenti e impostazioni.\n\n" +
+        `Per confermare scrivi esattamente: ${label}`
+    );
+    if (typed === null) return;
+    if (typed.trim().replace(/\s+/g, " ").toLocaleLowerCase("it") !== label.replace(/\s+/g, " ").toLocaleLowerCase("it")) {
+      onDone("Testo di conferma non corretto: edizione non eliminata.");
+      return;
+    }
+    const removeHallOfFame =
+      edition.status === "conclusa" &&
+      window.confirm(
+        "Eliminare anche la vittoria di questa edizione dall'Albo d'oro?\n\nOK = elimina anche dall'Albo d'oro\nAnnulla = mantieni l'Albo d'oro"
+      );
+    try {
+      const result = await purgeChampionshipEdition({ editionId: edition.id, confirmation: typed, removeHallOfFame });
+      const total = Object.values(result.deleted).reduce((sum, count) => sum + count, 0);
+      onDone(`Edizione eliminata definitivamente (${total} elementi collegati rimossi).`);
+      onDelete();
+    } catch (err) {
+      console.error(err);
+      onDone(err instanceof Error ? err.message : "Errore nell'eliminazione definitiva.");
     }
   };
 
