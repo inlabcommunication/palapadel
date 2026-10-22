@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { where } from "firebase/firestore";
 import { useCollection } from "../hooks/useCollection";
+import { TeamExcelImportDialog } from "../components/TeamExcelImportDialog";
 import { useAuth } from "../contexts/AuthContext";
 import { confirmDelete } from "../lib/confirmDelete";
 import { compareStandingRows } from "../lib/standingsEngine";
@@ -18,7 +19,7 @@ import {
 } from "../lib/standingsAdminApi";
 import { computeTeamEditionStats } from "../lib/teamStats";
 import { matchTeamName, findDuplicateImportedNames } from "../lib/teamNameMatch";
-import { Plus, Pencil, Trash2, Settings, X, Upload, ChevronDown, ChevronUp, Lock, RefreshCw, Trophy, Calendar, Clock, Ban, Eye, EyeOff } from "lucide-react";
+import { Plus, Pencil, Trash2, Settings, X, Upload, FileSpreadsheet, ChevronDown, ChevronUp, Lock, RefreshCw, Trophy, Calendar, Clock, Ban, Eye, EyeOff } from "lucide-react";
 import type {
   ChampionshipEdition,
   ChampionshipType,
@@ -667,6 +668,7 @@ function TeamStandings({
   const { data: teams } = useCollection<Team>("teams");
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showTeamExcel, setShowTeamExcel] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [showLive, setShowLive] = useState(false);
@@ -962,6 +964,20 @@ function TeamStandings({
             >
               <Plus size={15} /> Aggiungi squadra a questa classifica
             </button>
+          )}
+
+          <button onClick={() => setShowTeamExcel(true)} className="flex items-center gap-1.5 text-[13px] font-semibold text-[#BBFF5E]">
+            <FileSpreadsheet size={15} /> Importa squadre da Excel in questo campionato
+          </button>
+          {showTeamExcel && (
+            <TeamExcelImportDialog
+              edition={{ id: editionId, typeId: edition.typeId, label: `${championshipName} ${edition.season}` }}
+              onClose={() => setShowTeamExcel(false)}
+              onDone={(msg) => {
+                setShowTeamExcel(false);
+                showToast(msg);
+              }}
+            />
           )}
 
           {showImport ? (
