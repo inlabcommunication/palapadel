@@ -28,7 +28,7 @@ export interface ChampionshipType {
   id: string;
   name: string;
   hasTeams: boolean;
-  badgeColor: "serie-b" | "serie-c" | "principianti" | "femminile" | string;
+  badgeColor: "serie-a" | "serie-b" | "serie-c" | "principianti" | "femminile" | string;
   logoUrl?: string;
   logoStoragePath?: string;
   logoAlt?: string;
@@ -274,6 +274,7 @@ export interface AuditLogEntry {
 }
 
 export const BADGE_COLORS: Record<string, { bg: string; text: string; label: string }> = {
+  "serie-a": { bg: "#F6E3A1", text: "#7A5A00", label: "oro" },
   "serie-b": { bg: "#E5E7EB", text: "#374151", label: "argento" },
   "serie-c": { bg: "#E7D3C2", text: "#7C4A26", label: "bronzo" },
   principianti: { bg: "#D8F0DB", text: "#1F6B34", label: "verde" },
