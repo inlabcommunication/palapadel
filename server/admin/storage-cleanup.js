@@ -1,7 +1,7 @@
 import { getAdminApp, admin } from "../_lib/firebaseAdmin.js";
 import { HttpError, requirePost, sendError, verifyCaller } from "../_lib/auth.js";
 import { parseBody, z } from "../_lib/validation.js";
-import { findOrphanStoragePaths } from "../_lib/storageOrphans.js";
+import { findOrphanStoragePaths, loadStorageReferences } from "../_lib/storageOrphans.js";
 
 const storagePath = z.string().trim().min(3).max(1000).refine(
   (path) => path.startsWith("home-news/") || path.startsWith("teams/") || path.startsWith("championship-types/") || path.startsWith("tournaments/"),
@@ -30,19 +30,7 @@ export default async function handler(req, res) {
     }
 
     if (input.operation === "scan") {
-      const [newsSnap, teamsSnap, typesSnap, tournamentsSnap, filesResult] = await Promise.all([
-        db.collection("homeNews").get(),
-        db.collection("teams").get(),
-        db.collection("championshipTypes").get(),
-        db.collection("tournaments").get(),
-        bucket.getFiles(),
-      ]);
-      const referenced = new Set([
-        ...newsSnap.docs.map((doc) => doc.data().imageStoragePath).filter(Boolean),
-        ...teamsSnap.docs.map((doc) => doc.data().teamPhotoStoragePath).filter(Boolean),
-        ...typesSnap.docs.map((doc) => doc.data().logoStoragePath).filter(Boolean),
-        ...tournamentsSnap.docs.map((doc) => doc.data().logoStoragePath).filter(Boolean),
-      ]);
+      const [referenced, filesResult] = await Promise.all([loadStorageReferences(db), bucket.getFiles()]);
       const orphanPaths = findOrphanStoragePaths(
         filesResult[0],
         referenced,
@@ -55,11 +43,21 @@ export default async function handler(req, res) {
       return;
     }
 
-    const queueSnap = await db.collection("storageCleanupQueue").where("status", "in", ["pending", "failed"]).limit(100).get();
+    const [queueSnap, referenced] = await Promise.all([
+      db.collection("storageCleanupQueue").where("status", "in", ["pending", "failed"]).limit(100).get(),
+      loadStorageReferences(db),
+    ]);
     let deleted = 0;
     let failed = 0;
+    let skipped = 0;
     for (const doc of queueSnap.docs) {
       const item = doc.data();
+      // Un file ancora citato da un documento non si cancella mai.
+      if (referenced.has(item.storagePath)) {
+        await doc.ref.update({ status: "skipped", lastAttemptAt: new Date().toISOString(), lastError: "File ancora in uso: non eliminato" });
+        skipped += 1;
+        continue;
+      }
       try {
         await bucket.file(item.storagePath).delete({ ignoreNotFound: true });
         await doc.ref.update({ status: "completed", completedAt: new Date().toISOString(), lastError: null });
@@ -80,10 +78,10 @@ export default async function handler(req, res) {
       entity: "storageCleanupQueue",
       detail: JSON.stringify({ role: caller.role }),
       before: { queued: queueSnap.size },
-      after: { deleted, failed },
+      after: { deleted, failed, skipped },
       timestamp: new Date().toISOString(),
     });
-    res.status(200).json({ ok: true, deleted, failed });
+    res.status(200).json({ ok: true, deleted, failed, skipped });
   } catch (err) {
     sendError(res, err, "Errore durante la pulizia Storage");
   }

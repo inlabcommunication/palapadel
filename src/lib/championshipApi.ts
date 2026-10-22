@@ -20,3 +20,7 @@ export const updateChampionshipEdition = (input: { editionId: string; typeId: st
   postToBackend<{ ok: true }>("/api/admin/championship", { operation: "updateEdition", ...input });
 export const deleteChampionshipEdition = (editionId: string) =>
   postToBackend<{ ok: true }>("/api/admin/championship", { operation: "deleteEdition", editionId });
+
+/** Eliminazione definitiva: edizione + classifica, giornate, partite, tabellone e Femminile. */
+export const purgeChampionshipEdition = (input: { editionId: string; confirmation: string; removeHallOfFame: boolean }) =>
+  postToBackend<{ ok: true; deleted: Record<string, number> }>("/api/admin/purge-edition", input);
