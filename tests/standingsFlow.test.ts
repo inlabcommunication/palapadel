@@ -91,7 +91,7 @@ test("admin può creare/eliminare partite e giornate, correggere risultati", () 
   assert.equal(p.canDeleteMatches, true);
   assert.equal(p.canEditResults, true);
   assert.equal(p.canManageMatchdays, true);
-  assert.equal(p.canCreateHomeNewsDraft, false);
+  assert.equal(p.canCreateHomeNewsDraft, true);
 });
 
 test("il resultManager può modificare i risultati ma non creare o eliminare partite/giornate", () => {

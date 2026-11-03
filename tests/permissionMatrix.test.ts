@@ -19,7 +19,7 @@ test("Admin ha solo i permessi operativi previsti", () => {
   assert.equal(canCreateMatch("admin"), true);
   assert.equal(canEnrollExistingTeam("admin"), true);
   assert.equal(canEditMatchSchedule("admin"), true);
-  assert.equal(canManageNews("admin"), false);
+  assert.equal(canManageNews("admin"), true);
   assert.equal(canManageChampionships("admin"), false);
   assert.equal(canSendNotifications("admin"), true);
 });
