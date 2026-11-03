@@ -23,7 +23,7 @@ export default async function handler(req, res) {
   try {
     requirePost(req);
     const app = getAdminApp();
-    const caller = await verifyCaller(app, req, ["superAdmin"]);
+    const caller = await verifyCaller(app, req, ["superAdmin", "admin"]);
     const input = parseBody(schema, req.body);
     const db = admin.firestore(app);
     const ref = db.doc(`homeNews/${input.newsId}`);
