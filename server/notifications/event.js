@@ -7,7 +7,7 @@ export default async function handler(req, res) {
   try {
     requirePost(req);
     const app = getAdminApp();
-    const caller = await verifyCaller(app, req, ["superAdmin"]);
+    const caller = await verifyCaller(app, req, ["superAdmin", "admin"]);
     const input = parseBody(z.object({
       event: notificationEventSchema,
       idempotencyKey: z.string().trim().min(1).max(120).optional(),
