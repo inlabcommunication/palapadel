@@ -15,6 +15,7 @@ import type { ChampionshipEdition, ChampionshipType, ContentStatus, HomeNews, Ma
 import { BADGE_COLORS } from "../types";
 import { ChevronRight, AlertCircle, Plus, X, Pencil, Trash2, Trophy, Megaphone, CalendarDays, Newspaper } from "lucide-react";
 import { sortEditionsByTypeOrder } from "../lib/championshipOrder";
+import { canManageNews } from "../lib/permissions";
 
 /**
  * newsOnly: mostra solo la sezione PALA PADEL NEWS (con gli strumenti di gestione),
@@ -24,6 +25,8 @@ export function HomePage({ newsOnly = false }: { newsOnly?: boolean }) {
   const navigate = useNavigate();
   const { appUser } = useAuth();
   const isAdmin = appUser?.role === "superAdmin";
+  // Gestione news: superAdmin e admin (permesso MANAGE_NEWS in shared/permissions.js).
+  const canNews = canManageNews(appUser?.role);
 
   const { data: types } = useCollection<ChampionshipType>("championshipTypes");
   const editionsQuery = useCollection<ChampionshipEdition>(
@@ -34,8 +37,8 @@ export function HomePage({ newsOnly = false }: { newsOnly?: boolean }) {
   const { data: editions, loading, error: editionsError } = editionsQuery;
   const { data: news, loading: newsLoading } = useCollection<HomeNews>(
     "homeNews",
-    isAdmin ? [] : [where("status", "==", "pubblicato")],
-    [isAdmin]
+    canNews ? [] : [where("status", "==", "pubblicato")],
+    [canNews]
   );
   const { data: publicSettings } = useCollection<PublicSettings>("publicSettings");
   const globalSettings = publicSettings.find((item) => item.id === "global");
@@ -59,7 +62,7 @@ export function HomePage({ newsOnly = false }: { newsOnly?: boolean }) {
     .slice(0, 3);
 
   const publishedNews = getPublishedNewsForHome(news);
-  const draftNews = isAdmin
+  const draftNews = canNews
     ? news
         .filter((n) => n.status === "bozza")
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -118,7 +121,7 @@ export function HomePage({ newsOnly = false }: { newsOnly?: boolean }) {
             {HOME_NEWS_SUBTITLE}
           </p>
         </div>
-        {isAdmin && (
+        {canNews && (
           <button onClick={() => setShowNewsForm((v) => !v)} className="flex items-center gap-1 text-xs font-semibold text-[#BBFF5E] shrink-0">
             {showNewsForm ? <X size={14} /> : <Plus size={14} />}
             {showNewsForm ? "Annulla" : "Nuova"}
@@ -126,7 +129,7 @@ export function HomePage({ newsOnly = false }: { newsOnly?: boolean }) {
         )}
       </div>
 
-      {showNewsForm && isAdmin && (
+      {showNewsForm && canNews && (
         <NewsForm
           onDone={(msg) => {
             showToast(msg);
@@ -155,7 +158,7 @@ export function HomePage({ newsOnly = false }: { newsOnly?: boolean }) {
               <NewsCard
                 news={mainNews}
                 featured
-                isAdmin={isAdmin}
+                isAdmin={canNews}
                 onRead={() => setSelectedNews(mainNews)}
                 onEdit={() => setEditingNewsId(mainNews.id)}
                 onDelete={() => removeNews(mainNews)}
@@ -178,7 +181,7 @@ export function HomePage({ newsOnly = false }: { newsOnly?: boolean }) {
                   <NewsCard
                     key={n.id}
                     news={n}
-                    isAdmin={isAdmin}
+                    isAdmin={canNews}
                     onRead={() => setSelectedNews(n)}
                     onEdit={() => setEditingNewsId(n.id)}
                     onDelete={() => removeNews(n)}
@@ -209,7 +212,7 @@ export function HomePage({ newsOnly = false }: { newsOnly?: boolean }) {
                 <NewsCard
                   key={n.id}
                   news={n}
-                  isAdmin={isAdmin}
+                  isAdmin={canNews}
                   onRead={() => setSelectedNews(n)}
                   onEdit={() => setEditingNewsId(n.id)}
                   onDelete={() => removeNews(n)}
