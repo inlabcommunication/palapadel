@@ -4,7 +4,7 @@ import { TopBar } from "./components/TopBar";
 import { BottomNav } from "./components/BottomNav";
 import { SuperAdminShell } from "./components/SuperAdminShell";
 import { HomePage } from "./pages/Home";
-import { useAuth } from "./contexts/AuthContext";
+import { canManageNews } from "./lib/permissions";
 import { canTrackAnalytics, configureAnalyticsContext, trackAnalyticsEvent } from "./lib/analyticsClient";
 import { bindForegroundNotificationTracking } from "./lib/notificationClient";
 import { isSuperAdminWorkspacePath } from "./lib/superAdminRoutes";
@@ -87,7 +87,7 @@ export default function App() {
       <Route path="/campionati/:editionId" element={<CampionatiPage />} />
       {/* Area tornei rimossa: i vecchi link portano alla Home. */}
       <Route path="/tornei" element={<Navigate to="/" replace />} />
-      <Route path="/news" element={appUser?.role === "superAdmin" ? <HomePage newsOnly /> : <NewsPage />} />
+      <Route path="/news" element={canManageNews(appUser?.role) ? <HomePage newsOnly /> : <NewsPage />} />
       <Route path="/storico" element={<Navigate to="/news" replace />} />
       <Route path="/albo" element={<AlboPage />} />
       <Route path="/notifiche" element={<NotifichePage />} />
