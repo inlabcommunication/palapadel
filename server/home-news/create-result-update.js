@@ -22,7 +22,7 @@ export default async function handler(req, res) {
 
   try {
     const app = getAdminApp();
-    const auth = await verifyCaller(app, req, ["superAdmin"], "Solo il superAdmin può creare un aggiornamento Home");
+    const auth = await verifyCaller(app, req, ["superAdmin", "admin"], "Solo superAdmin e admin possono creare un aggiornamento Home");
     const db = admin.firestore(app);
 
     const { matchIds, editionId, matchdayId, typeName, season } = parseBody(z.object({
