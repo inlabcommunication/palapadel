@@ -4,6 +4,7 @@ import { TopBar } from "./components/TopBar";
 import { BottomNav } from "./components/BottomNav";
 import { SuperAdminShell } from "./components/SuperAdminShell";
 import { HomePage } from "./pages/Home";
+import { useAuth } from "./contexts/AuthContext";
 import { canManageNews } from "./lib/permissions";
 import { canTrackAnalytics, configureAnalyticsContext, trackAnalyticsEvent } from "./lib/analyticsClient";
 import { bindForegroundNotificationTracking } from "./lib/notificationClient";
