@@ -9,7 +9,7 @@ export interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 }
 
-export type InstallMode = "prompt" | "ios" | null;
+export type InstallMode = "prompt" | "ios" | "samsung" | null;
 
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
 let installed = false;
@@ -57,6 +57,29 @@ export function isIpad(): boolean {
   return /iPad/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
 }
 
+/**
+ * Samsung Internet su Android. Quando installa un sito crea un pacchetto Android
+ * proprio, impostato per una versione vecchia di Android: sui telefoni recenti
+ * Google Play Protect lo blocca ("App non sicura bloccata"). Chrome invece crea un
+ * pacchetto firmato da Google che passa i controlli, quindi da Samsung Internet
+ * mandiamo l'utente a installare con Chrome.
+ */
+export function isSamsungInternetAndroid(userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent): boolean {
+  return /Android/i.test(userAgent) && /SamsungBrowser\//i.test(userAgent);
+}
+
+/**
+ * Link che su Android apre la stessa pagina in Chrome. Se Chrome non c'è, il
+ * browser resta sulla pagina indicata come fallback.
+ */
+export function getChromeIntentUrl(href: string): string {
+  const url = new URL(href);
+  return (
+    `intent://${url.host}${url.pathname}${url.search}#Intent;scheme=${url.protocol.replace(":", "")};package=com.android.chrome;` +
+    `S.browser_fallback_url=${encodeURIComponent(url.href)};end`
+  );
+}
+
 export type ArrowSpot = "bottom-center" | "bottom-right" | "top-right";
 
 /**
@@ -72,6 +95,8 @@ export function getIosArrowSpot(browser: IosBrowser, ipad = isIpad()): ArrowSpot
 
 export function getInstallMode(): InstallMode {
   if (installed || isRunningStandalone()) return null;
+  // Prima del prompt: anche se Samsung Internet lo offre, l'app installata verrebbe bloccata.
+  if (isSamsungInternetAndroid()) return "samsung";
   if (deferredPrompt) return "prompt";
   if (isIos()) return "ios";
   return null;
