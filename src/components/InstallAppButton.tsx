@@ -1,8 +1,9 @@
 import { useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
-import { ArrowDown, ArrowUp, Download, Share, SquarePlus, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Chrome, Download, Share, SquarePlus, X } from "lucide-react";
 import {
+  getChromeIntentUrl,
   getInstallMode,
   getIosArrowSpot,
   getIosBrowser,
@@ -15,11 +16,13 @@ import {
 /**
  * Pulsante "Installa PalaPadel": su Android/desktop apre il prompt nativo
  * (beforeinstallprompt), su iPhone/iPad mostra la guida "Condividi > Aggiungi alla
- * schermata Home". Non compare se l'app è già installata o non è installabile.
+ * schermata Home", su Samsung Internet (Android) spiega di installare da Chrome
+ * perché Play Protect blocca l'app creata da Samsung. Non compare se l'app è già installata o non è installabile.
  */
 export function InstallAppButton({ variant = "card" }: { variant?: "card" | "topbar" }) {
   const mode = useSyncExternalStore(subscribeInstallState, getInstallMode, () => null);
   const [iosGuideOpen, setIosGuideOpen] = useState(false);
+  const [samsungGuideOpen, setSamsungGuideOpen] = useState(false);
   const iosBrowser = getIosBrowser();
   const arrowSpot = getIosArrowSpot(iosBrowser);
 
@@ -28,6 +31,10 @@ export function InstallAppButton({ variant = "card" }: { variant?: "card" | "top
   const handleClick = () => {
     if (mode === "ios") {
       setIosGuideOpen(true);
+      return;
+    }
+    if (mode === "samsung") {
+      setSamsungGuideOpen(true);
       return;
     }
     void promptInstall().catch((err) => console.error("Installazione PWA non riuscita", err));
@@ -117,6 +124,63 @@ export function InstallAppButton({ variant = "card" }: { variant?: "card" | "top
             >
               Ho capito
             </button>
+          </section>
+        </div>,
+        document.body
+      )}
+
+      {samsungGuideOpen && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:items-center"
+          onClick={() => setSamsungGuideOpen(false)}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="samsung-install-title"
+            className="w-full max-w-md rounded-lg border border-[rgba(251,243,222,0.14)] bg-[#0A0B08] p-4 text-left"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 id="samsung-install-title" className="text-lg font-extrabold">Installa PalaPadel con Chrome</h2>
+                <p className="mt-1 text-xs text-[rgba(251,243,222,0.58)]">
+                  Da Samsung Internet l'app viene bloccata da Google Play Protect. Con Chrome si installa senza avvisi.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSamsungGuideOpen(false)}
+                aria-label="Chiudi"
+                className="rounded-full p-2 hover:bg-[rgba(251,243,222,0.08)]"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <ol className="mt-4 flex flex-col gap-2">
+              {[
+                <>Tocca <strong>Apri in Chrome</strong> qui sotto.</>,
+                <>In Chrome tocca <strong>Installa app</strong> in alto (oppure menu <strong>⋮</strong> e <strong>Installa app</strong>).</>,
+              ].map((step, index) => (
+                <li key={index} className="flex items-center gap-3 rounded-lg border border-[rgba(251,243,222,0.12)] p-3">
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#BBFF5E] text-xs font-extrabold text-[#081208]">{index + 1}</span>
+                  <span className="text-sm">{step}</span>
+                </li>
+              ))}
+            </ol>
+
+            <p className="mt-3 text-[11px] text-[rgba(251,243,222,0.50)]">
+              Se avevi già provato da Samsung Internet e compare l'avviso, tocca Ok: non è successo niente al telefono.
+            </p>
+
+            <a
+              href={getChromeIntentUrl(window.location.href)}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#BBFF5E] py-2.5 text-sm font-bold text-[#081208]"
+            >
+              <Chrome size={16} />
+              Apri in Chrome
+            </a>
           </section>
         </div>,
         document.body
