@@ -3,6 +3,7 @@ import { HttpError, requirePost, sendError, verifyCaller } from "../_lib/auth.js
 import { buildNotificationPayload, defaultNotificationSettings, resolveNotificationMode } from "../_lib/notifications.js";
 import { documentId, parseBody, z } from "../_lib/validation.js";
 import { findBracketWinnerMatch } from "../../shared/bracketWinner.js";
+import { rankStandings } from "../../shared/standingsRanking.js";
 
 export default async function handler(req, res) {
   try {
@@ -29,22 +30,24 @@ export default async function handler(req, res) {
       let winnerName;
 
       if (type.hasTeams) {
-        const [entriesSnap, teamsSnap] = await Promise.all([
+        const [entriesSnap, teamsSnap, matchesSnap] = await Promise.all([
           transaction.get(db.collection("editionTeams").where("editionId", "==", editionId)),
           transaction.get(db.collection("teams")),
+          transaction.get(db.collection("matches").where("editionId", "==", editionId)),
         ]);
         const teams = new Map(teamsSnap.docs.map((doc) => [doc.id, doc.data()]));
-        const entries = entriesSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })).sort((a, b) => {
-          const aInactive = a.status !== "normale";
-          const bInactive = b.status !== "normale";
-          if (aInactive !== bInactive) return aInactive ? 1 : -1;
-          return b.points - a.points || (a.order ?? 0) - (b.order ?? 0);
-        });
+        // Stesso ordine della classifica nell'app: punti, partite giocate, scontri
+        // diretti, differenza game, ordine manuale.
+        const entries = rankStandings(
+          entriesSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+          matchesSnap.docs.map((doc) => doc.data())
+        );
         frozenStandings = entries.map((entry) => ({
           id: entry.teamId,
           name: teams.get(entry.teamId)?.name ?? "Squadra eliminata",
           points: entry.points,
           played: entry.played,
+          gamesDiff: entry.gamesDiff,
           status: entry.status,
         }));
         const winner = entries.find((entry) => entry.status === "normale");

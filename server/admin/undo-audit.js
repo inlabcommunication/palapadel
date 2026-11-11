@@ -40,6 +40,7 @@ export default async function handler(req, res) {
         transaction.update(matchRef, {
           status: audit.before.status,
           result: audit.before.result ?? admin.firestore.FieldValue.delete(),
+          sets: audit.before.sets ?? admin.firestore.FieldValue.delete(),
           updatedAt: timestamp,
           updatedBy: caller.uid,
         });

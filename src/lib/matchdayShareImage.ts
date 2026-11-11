@@ -6,6 +6,8 @@ export interface MatchdayShareMatch {
   homeTeam: string;
   awayTeam: string;
   result?: string;
+  /** Game dei set, es. "6-1 4-6 6-2" (vuoto per i risultati senza set). */
+  sets?: string;
   status: string;
   matchDate?: string;
   matchTime?: string;
@@ -140,6 +142,11 @@ function drawPage(input: MatchdayShareInput, matches: MatchdayShareMatch[], page
     ctx.fillStyle = match.status === "conclusa" ? "#BBFF5E" : match.status === "rinviata" ? "#FF9B6B" : "#FBF3DE";
     ctx.font = "900 42px Inter, Arial, sans-serif";
     ctx.fillText(statusText(match), 940, y + 88);
+    if (match.status === "conclusa" && match.sets) {
+      ctx.fillStyle = "rgba(251,243,222,0.78)";
+      ctx.font = "700 24px Inter, Arial, sans-serif";
+      ctx.fillText(match.sets, 940, y + 126, 200);
+    }
     ctx.textAlign = "left";
 
     const meta = matchMetaParts(match);

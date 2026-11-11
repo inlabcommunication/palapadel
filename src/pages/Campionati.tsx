@@ -5,7 +5,7 @@ import { useCollection } from "../hooks/useCollection";
 import { TeamExcelImportDialog } from "../components/TeamExcelImportDialog";
 import { useAuth } from "../contexts/AuthContext";
 import { confirmDelete } from "../lib/confirmDelete";
-import { compareStandingRows } from "../lib/standingsEngine";
+import { compareStandingRows, formatSets, rankStandings } from "../lib/standingsEngine";
 import { importStandings, importFemaleStandings, StandingsApiError, type ImportStandingsRow, type ImportFemaleRow } from "../lib/standingsApi";
 import {
   addEntriesToStandings,
@@ -646,6 +646,12 @@ function EditEditionForm({
 
 /* =========================== Classifica squadre (con gestione contestuale) =========================== */
 
+/** Differenza game con il segno (+5, -3, 0); "—" se non disponibile. */
+function formatGamesDiff(diff?: number) {
+  if (diff === undefined) return "—";
+  return diff > 0 ? `+${diff}` : String(diff);
+}
+
 function TeamStandings({
   edition,
   championshipName,
@@ -666,6 +672,12 @@ function TeamStandings({
     [editionId]
   );
   const { data: teams } = useCollection<Team>("teams");
+  // Servono per gli spareggi: scontri diretti e differenza game.
+  const { data: editionMatches } = useCollection<Match>(
+    "matches",
+    [where("editionId", "==", editionId)],
+    [editionId]
+  );
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showTeamExcel, setShowTeamExcel] = useState(false);
@@ -678,14 +690,17 @@ function TeamStandings({
 
   const isFrozen = edition.status === "conclusa" && !!edition.frozenStandings;
 
-  const rows = editionTeams
-    .map((et) => ({ ...et, team: teams.find((t) => t.id === et.teamId) }))
-    .sort(compareStandingRows);
+  const rows = rankStandings(
+    editionTeams.map((et) => ({ ...et, team: teams.find((t) => t.id === et.teamId) })),
+    editionMatches
+  );
 
   const moveTiedTeam = async (entryId: string, direction: -1 | 1) => {
     const entry = rows.find((row) => row.id === entryId);
     if (!entry) return;
-    const tied = rows.filter((row) => row.points === entry.points);
+    // Ordine manuale solo tra squadre pari in tutti i criteri (punti, partite,
+    // scontri diretti, differenza game).
+    const tied = rows.filter((row) => row.tieGroup === entry.tieGroup);
     const index = tied.findIndex((row) => row.id === entryId);
     const target = index + direction;
     if (target < 0 || target >= tied.length) return;
@@ -764,6 +779,7 @@ function TeamStandings({
             <span className="w-6">#</span>
             <span className="flex-1">Squadra</span>
             <span className="w-10 text-center">PG</span>
+            <span className="w-10 text-center" title="Differenza game">DG</span>
             <span className="w-14 text-center">Pt</span>
           </div>
           {frozenRows.map((r, i) => (
@@ -784,6 +800,7 @@ function TeamStandings({
                 {r.name}
               </button>
               <span className="w-10 text-center">{r.played ?? "—"}</span>
+              <span className="w-10 text-center text-[rgba(251,243,222,0.72)]">{formatGamesDiff(r.gamesDiff)}</span>
               <span className="w-14 text-center">
                 {r.status === "normale" ? (
                   <span className="font-display text-[15px] text-[#BBFF5E]">{r.points}</span>
@@ -835,6 +852,7 @@ function TeamStandings({
           <span className="w-6">#</span>
           <span className="flex-1">Squadra</span>
           <span className="w-10 text-center">PG</span>
+          <span className="w-10 text-center" title="Differenza game">DG</span>
           <span className="w-14 text-center">Pt</span>
           {isAdmin && <span className="w-28" />}
         </div>
@@ -869,6 +887,7 @@ function TeamStandings({
                 {r.team?.name}
               </button>
               <span className="w-10 text-center">{r.played}</span>
+              <span className="w-10 text-center text-[rgba(251,243,222,0.72)]">{formatGamesDiff(r.gamesDiff)}</span>
               <span className="w-14 text-center">
                 {r.status === "normale" ? (
                   <span className="font-display text-[15px] text-[#BBFF5E]">{r.points}</span>
@@ -882,8 +901,8 @@ function TeamStandings({
                 <div className="flex w-28 items-center justify-end gap-1">
                   <button
                     type="button"
-                    aria-label={`Sposta ${r.team?.name ?? "squadra"} in alto tra le squadre a pari punti`}
-                    disabled={reorderingTie || i === 0 || rows[i - 1]?.points !== r.points}
+                    aria-label={`Sposta ${r.team?.name ?? "squadra"} in alto tra le squadre a pari merito`}
+                    disabled={reorderingTie || i === 0 || rows[i - 1]?.tieGroup !== r.tieGroup}
                     onClick={() => moveTiedTeam(r.id, -1)}
                     className="rounded p-1 text-[#BBFF5E] disabled:opacity-20"
                   >
@@ -891,8 +910,8 @@ function TeamStandings({
                   </button>
                   <button
                     type="button"
-                    aria-label={`Sposta ${r.team?.name ?? "squadra"} in basso tra le squadre a pari punti`}
-                    disabled={reorderingTie || i === rows.length - 1 || rows[i + 1]?.points !== r.points}
+                    aria-label={`Sposta ${r.team?.name ?? "squadra"} in basso tra le squadre a pari merito`}
+                    disabled={reorderingTie || i === rows.length - 1 || rows[i + 1]?.tieGroup !== r.tieGroup}
                     onClick={() => moveTiedTeam(r.id, 1)}
                     className="rounded p-1 text-[#BBFF5E] disabled:opacity-20"
                   >
@@ -908,6 +927,9 @@ function TeamStandings({
         )}
         {rows.length === 0 && <p className="px-3.5 py-2.5 text-[12.5px] text-[rgba(251,243,222,0.50)]">Nessuna squadra iscritta.</p>}
       </div>
+      <p className="mt-2 text-[11px] text-[rgba(251,243,222,0.50)]">
+        A pari punti: meno partite giocate (PG), poi scontri diretti, poi differenza game (DG).
+      </p>
 
       {!isAdmin && (
         <div className="mt-3">
@@ -1291,7 +1313,10 @@ function PublicCalendar({ edition }: { edition: ChampionshipEdition }) {
                 )}
               </div>
               {m.status === "conclusa" && m.result && (
-                <span className="font-display text-[15px] text-[#BBFF5E] shrink-0">{m.result}</span>
+                <span className="shrink-0 text-right">
+                  <span className="font-display text-[15px] text-[#BBFF5E]">{m.result}</span>
+                  {m.sets && <span className="block text-[11px] text-[rgba(251,243,222,0.65)]">{formatSets(m.sets)}</span>}
+                </span>
               )}
               {m.status === "da_giocare" && (
                 <span className="text-[12px] text-[rgba(251,243,222,0.50)] font-semibold shrink-0">VS</span>

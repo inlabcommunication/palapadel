@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp, Plus, Pencil, X } from "lucide-react";
 import type { EditionTeam, Match, ParticipationStatus, Team } from "../types";
 import { addEntriesToStandings, reorderTiedStandings, setTeamStatus, updateStandingsEntry } from "../lib/standingsAdminApi";
 import { StandingsShareButton } from "./StandingsShareButton";
+import { rankStandings } from "../lib/standingsEngine";
 
 interface Props {
   editionId: string;
@@ -42,8 +43,8 @@ export function OperationalStandings({
 
   const teamName = (teamId: string) => teams.find((team) => team.id === teamId)?.name ?? "Squadra eliminata";
   const rows = useMemo(
-    () => [...entries].sort((a, b) => b.points - a.points || a.order - b.order),
-    [entries]
+    () => rankStandings(entries, matches),
+    [entries, matches]
   );
   const availableTeams = teams
     .filter((team) => !entries.some((entry) => entry.teamId === team.id))
@@ -85,7 +86,7 @@ export function OperationalStandings({
   const moveTiedTeam = async (entryId: string, direction: -1 | 1) => {
     const entry = rows.find((row) => row.id === entryId);
     if (!entry) return;
-    const tied = rows.filter((row) => row.points === entry.points);
+    const tied = rows.filter((row) => row.tieGroup === entry.tieGroup);
     const index = tied.findIndex((row) => row.id === entryId);
     const target = index + direction;
     if (target < 0 || target >= tied.length) return;
@@ -141,6 +142,7 @@ export function OperationalStandings({
               <tr>
                 <th className="p-2">#</th><th className="p-2">Squadra</th><th className="p-2">PT</th>
                 <th className="p-2">PG</th><th className="p-2">V</th><th className="p-2">P</th>
+                <th className="p-2" title="Game vinti - game persi">Game</th>
                 <th className="p-2">Stato</th>{canEdit && <th className="p-2">Azioni</th>}
               </tr>
             </thead>
@@ -153,20 +155,22 @@ export function OperationalStandings({
                     <td className="p-2 font-semibold">{teamName(entry.teamId)}</td>
                     <td className="p-2 font-bold text-[#BBFF5E]">{entry.points}</td>
                     <td className="p-2">{entry.played}</td><td className="p-2">{calculated.won}</td>
-                    <td className="p-2">{calculated.lost}</td><td className="p-2">{entry.status}</td>
+                    <td className="p-2">{calculated.lost}</td>
+                    <td className="p-2">{entry.gamesWon}-{entry.gamesLost} ({entry.gamesDiff > 0 ? `+${entry.gamesDiff}` : entry.gamesDiff})</td>
+                    <td className="p-2">{entry.status}</td>
                     {canEdit && (
                       <td className="p-2">
                         <button
-                          aria-label={`Sposta ${teamName(entry.teamId)} in alto tra le squadre a pari punti`}
-                          disabled={reorderingTie || index === 0 || rows[index - 1]?.points !== entry.points}
+                          aria-label={`Sposta ${teamName(entry.teamId)} in alto tra le squadre a pari merito`}
+                          disabled={reorderingTie || index === 0 || rows[index - 1]?.tieGroup !== entry.tieGroup}
                           onClick={() => moveTiedTeam(entry.id, -1)}
                           className="rounded-md p-1.5 text-[#BBFF5E] disabled:opacity-20"
                         >
                           <ChevronUp size={14} />
                         </button>
                         <button
-                          aria-label={`Sposta ${teamName(entry.teamId)} in basso tra le squadre a pari punti`}
-                          disabled={reorderingTie || index === rows.length - 1 || rows[index + 1]?.points !== entry.points}
+                          aria-label={`Sposta ${teamName(entry.teamId)} in basso tra le squadre a pari merito`}
+                          disabled={reorderingTie || index === rows.length - 1 || rows[index + 1]?.tieGroup !== entry.tieGroup}
                           onClick={() => moveTiedTeam(entry.id, 1)}
                           className="rounded-md p-1.5 text-[#BBFF5E] disabled:opacity-20"
                         >

@@ -13,6 +13,7 @@
 import { getAdminApp, admin } from "../_lib/firebaseAdmin.js";
 import { HttpError, verifyCaller } from "../_lib/auth.js";
 import { documentId, parseBody, z } from "../_lib/validation.js";
+import { formatSets } from "../../shared/matchSets.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -76,7 +77,10 @@ export default async function handler(req, res) {
       }
 
       const lines = matches
-        .map((m) => `${teamNameById.get(m.data.team1Id) ?? "—"} ${m.data.result} ${teamNameById.get(m.data.team2Id) ?? "—"}`)
+        .map((m) => {
+          const sets = formatSets(m.data.sets);
+          return `${teamNameById.get(m.data.team1Id) ?? "—"} ${m.data.result} ${teamNameById.get(m.data.team2Id) ?? "—"}${sets ? ` (${sets})` : ""}`;
+        })
         .join("\n");
       const title = matches.length === 1 ? `Risultato — ${typeName ?? ""}`.trim() : `Risultati giornata — ${typeName ?? ""}`.trim();
 

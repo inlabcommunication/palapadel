@@ -1,6 +1,11 @@
 import type { Match } from "../types";
 import { getStandingPointsFromResult as getSharedStandingPointsFromResult } from "../../shared/standingPoints.js";
 
+// Ordine della classifica a squadre (punti, partite giocate, scontri diretti, differenza
+// game, ordine manuale) e set/game delle partite: regole condivise con il server.
+export { rankStandings, computeGamesByTeam } from "../../shared/standingsRanking.js";
+export { evaluateSets, formatSets, getMatchGames, isValidSetScore } from "../../shared/matchSets.js";
+
 /**
  * Punti classifica associati a ciascuno dei 4 risultati ammessi. Questa è l'UNICA
  * fonte autorevole per la conversione risultato -> punti: nessun altro punto del

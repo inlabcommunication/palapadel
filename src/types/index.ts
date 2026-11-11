@@ -10,6 +10,12 @@ export function normalizeRole(role: unknown): Role | null {
 
 export type EditionStatus = "bozza" | "attiva" | "conclusa" | "nascosta";
 export type ParticipationStatus = "normale" | "ritirata" | "squalificata";
+/** Game di un set: es. { team1: 6, team2: 4 }. */
+export interface SetScore {
+  team1: number;
+  team2: number;
+}
+
 export type MatchStatus = "da_giocare" | "conclusa" | "rinviata" | "annullata";
 export type ContentStatus = "bozza" | "pubblicato";
 
@@ -67,6 +73,7 @@ export interface FrozenStandingRow {
   name: string; // nome al momento del congelamento
   points: number;
   played?: number; // PG, solo campionati a squadre
+  gamesDiff?: number; // differenza game, solo campionati a squadre (edizioni chiuse dopo l'introduzione dei set)
   stages?: number; // Tappe, solo femminile
   status: ParticipationStatus;
 }
@@ -173,6 +180,8 @@ export interface Match {
   team1Id: string;
   team2Id: string;
   result?: "2-0" | "2-1" | "1-2" | "0-2";
+  /** Game di ogni set (2 o 3 set). Assente nei risultati salvati prima dell'introduzione dei set. */
+  sets?: SetScore[];
   status: MatchStatus;
   matchDate?: string;
   matchTime?: string;

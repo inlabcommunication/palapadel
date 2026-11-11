@@ -11,7 +11,11 @@
 // su Vercel con il JSON della chiave di servizio.
 //
 // Body atteso:
-//   { matchId: string, result: "2-0"|"2-1"|"1-2"|"0-2" }             -> conclude la partita
+//   { matchId: string, sets: [{ team1, team2 }, ...] }                -> conclude la partita con
+//                                                                       set e game (2 o 3 set);
+//                                                                       il risultato si ricava dai set
+//   { matchId: string, result: "2-0"|"2-1"|"1-2"|"0-2" }             -> conclude la partita (vecchio
+//                                                                       formato, senza game)
 //   { matchId: string, status: "rinviata"|"annullata"|"da_giocare" } -> cambia stato, rimuove
 //                                                                       un eventuale risultato
 
@@ -20,7 +24,8 @@ import { HttpError, verifyCaller } from "../_lib/auth.js";
 import { normalizeMatchChange, RESULT_VALUES } from "../_lib/matchStatus.js";
 import { enqueueNotificationEvent } from "../_lib/notificationEvents.js";
 import { computeStandingsUpdates } from "../_lib/standingsRules.js";
-import { documentId, parseBody, z } from "../_lib/validation.js";
+import { formatSets } from "../../shared/matchSets.js";
+import { documentId, parseBody, setsSchema, z } from "../_lib/validation.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -34,12 +39,13 @@ export default async function handler(req, res) {
       throw err instanceof HttpError ? err : new HttpError(401, "Token non valido");
     });
 
-    const { matchId, result, status } = parseBody(z.union([
+    const { matchId, result, sets, status } = parseBody(z.union([
+      z.object({ matchId: documentId, sets: setsSchema }).strict(),
       z.object({ matchId: documentId, result: z.enum(["2-0", "2-1", "1-2", "0-2"]) }).strict(),
       z.object({ matchId: documentId, status: z.enum(["rinviata", "annullata", "da_giocare"]) }).strict(),
     ]), req.body);
 
-    const normalized = normalizeMatchChange({ result, status });
+    const normalized = normalizeMatchChange({ result, sets, status });
     if (!normalized.ok) {
       throw new HttpError(400, `${normalized.error}. Risultati ammessi: ${RESULT_VALUES.join(", ")}`);
     }
@@ -77,6 +83,7 @@ export default async function handler(req, res) {
 
       const newStatus = normalized.status;
       const newResult = normalized.result === null ? admin.firestore.FieldValue.delete() : normalized.result;
+      const newSets = normalized.sets === null ? admin.firestore.FieldValue.delete() : normalized.sets;
 
       // Fase 3 — rilegge/ricalcola SEMPRE tutte le partite valide dell'edizione dentro la
       // stessa transazione, mai una somma incrementale sul singolo risultato.
@@ -85,7 +92,7 @@ export default async function handler(req, res) {
 
       const allMatches = matchesSnap.docs.map((d) => {
         const data = d.data();
-        if (d.id === matchId) return { ...data, status: newStatus, result: normalized.result ?? undefined };
+        if (d.id === matchId) return { ...data, status: newStatus, result: normalized.result ?? undefined, sets: normalized.sets ?? undefined };
         return data;
       });
       const standingsUpdates = computeStandingsUpdates(editionTeamsSnap.docs, allMatches);
@@ -107,13 +114,13 @@ export default async function handler(req, res) {
         notificationEvent = {
           type: eventType,
           title: eventType === "correction" ? "Risultato corretto" : "Risultato partita",
-          body: `${team1Name} ${normalized.result} ${team2Name}`,
+          body: `${team1Name} ${normalized.result} ${team2Name}${normalized.sets ? ` (${formatSets(normalized.sets)})` : ""}`.slice(0, 220),
           url: `/campionati/${editionId}`,
           editionId,
         };
       }
 
-      t.update(matchRef, { status: newStatus, result: newResult, updatedAt, updatedBy: auth.uid });
+      t.update(matchRef, { status: newStatus, result: newResult, sets: newSets, updatedAt, updatedBy: auth.uid });
       for (const u of standingsUpdates) t.update(u.ref, u.data);
       t.update(editionRef, {
         lastRecalculatedAt: updatedAt,
@@ -124,8 +131,8 @@ export default async function handler(req, res) {
         actor: auth.uid,
         action: actionType,
         detail: JSON.stringify({ role: auth.role, editionId, matchdayId: before.matchdayId, matchId }),
-        before: { status: before.status, result: before.result ?? null },
-        after: { status: newStatus, result: normalized.result },
+        before: { status: before.status, result: before.result ?? null, sets: before.sets ?? null },
+        after: { status: newStatus, result: normalized.result, sets: normalized.sets },
         timestamp: updatedAt,
       });
     });
@@ -135,7 +142,7 @@ export default async function handler(req, res) {
       try {
         notification = await enqueueNotificationEvent(app, notificationEvent, {
           createdBy: auth.uid,
-          idempotencyKey: `match-${matchId}-${notificationEvent.type}-${normalized.result}`,
+          idempotencyKey: `match-${matchId}-${notificationEvent.type}-${normalized.result}${normalized.sets ? `-${formatSets(normalized.sets).replace(/ /g, "_")}` : ""}`,
           sourceRef: `matches/${matchId}`,
         });
         const notificationStatus =

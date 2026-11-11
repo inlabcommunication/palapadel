@@ -7,6 +7,7 @@ test("save-bulk accetta il contratto richiesto con status completed e risultato"
     ok: true,
     status: "conclusa",
     result: "2-1",
+    sets: null,
   });
 });
 
@@ -15,16 +16,19 @@ test("save-bulk mappa scheduled/postponed/cancelled sui valori Firestore esisten
     ok: true,
     status: "da_giocare",
     result: null,
+    sets: null,
   });
   assert.deepEqual(normalizeMatchChange({ result: null, status: "postponed" }), {
     ok: true,
     status: "rinviata",
     result: null,
+    sets: null,
   });
   assert.deepEqual(normalizeMatchChange({ result: null, status: "cancelled" }), {
     ok: true,
     status: "annullata",
     result: null,
+    sets: null,
   });
 });
 

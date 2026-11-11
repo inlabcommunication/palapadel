@@ -1,3 +1,4 @@
+import type { SetScore } from "../types";
 import { postToBackend, BackendApiError } from "./backendClient";
 
 /**
@@ -12,9 +13,10 @@ import { postToBackend, BackendApiError } from "./backendClient";
 export const MatchApiError = BackendApiError;
 export type MatchApiError = BackendApiError;
 
+/** Risultato con i game di ogni set: il 2-0 / 2-1 lo ricava il server dai set. */
 export interface SaveMatchResultInput {
   matchId: string;
-  result: "2-0" | "2-1" | "1-2" | "0-2";
+  sets: SetScore[];
 }
 
 export interface SetMatchStatusInput {
@@ -27,6 +29,7 @@ export type ApiMatchStatus = "scheduled" | "completed" | "postponed" | "cancelle
 export interface BulkEntry {
   matchId: string;
   result: "2-0" | "2-1" | "1-2" | "0-2" | null;
+  sets?: SetScore[] | null;
   status: ApiMatchStatus;
 }
 
