@@ -104,6 +104,7 @@ export default async function handler(req, res) {
               team2Id: nextTeam2Id,
               status: nextStatus,
               result: nextStatus === "conclusa" ? before.result : undefined,
+              sets: nextStatus === "conclusa" ? before.sets : undefined,
             }
           : d.data()
       );
@@ -118,7 +119,7 @@ export default async function handler(req, res) {
         court: nextCourt,
         notes: nextNotes,
         status: nextStatus,
-        ...(nextStatus !== "conclusa" ? { result: admin.firestore.FieldValue.delete() } : {}),
+        ...(nextStatus !== "conclusa" ? { result: admin.firestore.FieldValue.delete(), sets: admin.firestore.FieldValue.delete() } : {}),
         updatedAt: timestamp,
         updatedBy: auth.uid,
       });

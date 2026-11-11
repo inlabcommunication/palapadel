@@ -132,7 +132,8 @@ export default async function handler(req, res) {
       const allMatchesAfter = allMatchesSnap.docs.map((d) => {
         const data = d.data();
         const change = changedById.get(d.id);
-        return change ? { ...data, status: change.status, result: change.result ?? undefined } : data;
+        // Risultato d'ufficio (ritiro/squalifica): i set della partita giocata non valgono più.
+        return change ? { ...data, status: change.status, result: change.result ?? undefined, sets: undefined } : data;
       });
 
       const editionTeamsSnap = await t.get(db.collection("editionTeams").where("editionId", "==", editionId));
@@ -142,6 +143,7 @@ export default async function handler(req, res) {
         t.update(c.ref, {
           status: c.change.status,
           result: c.change.result ?? admin.firestore.FieldValue.delete(),
+          sets: admin.firestore.FieldValue.delete(),
           updatedAt: timestamp,
           updatedBy: auth.uid,
         });

@@ -6,6 +6,8 @@
 // Body atteso: { matchdayId, editionId, entries: [{ matchId, result, status }] }
 // status API: "scheduled"|"completed"|"postponed"|"cancelled".
 // result: null salvo status "completed", dove deve essere uno tra "2-0"|"2-1"|"1-2"|"0-2".
+// sets (facoltativo, con status "completed"): [{ team1, team2 }, ...] 2 o 3 set con i game;
+// se presente, il risultato viene ricavato dai set.
 // Per compatibilita accetta anche i vecchi stati Firestore italiani e li normalizza.
 // Permette quindi, nella stessa chiamata, di inserire risultati, correggerli, rinviare,
 // annullare e riaprire più partite della stessa giornata - anche quelle già concluse.
@@ -15,7 +17,7 @@ import { HttpError, verifyCaller } from "../_lib/auth.js";
 import { normalizeMatchChange } from "../_lib/matchStatus.js";
 import { enqueueNotificationEvent } from "../_lib/notificationEvents.js";
 import { computeStandingsUpdates } from "../_lib/standingsRules.js";
-import { documentId, parseBody, z } from "../_lib/validation.js";
+import { documentId, parseBody, setsSchema, z } from "../_lib/validation.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -33,6 +35,7 @@ export default async function handler(req, res) {
       entries: z.array(z.object({
         matchId: documentId,
         result: z.enum(["2-0", "2-1", "1-2", "0-2"]).nullable(),
+        sets: setsSchema.nullable().optional(),
         status: z.enum(["scheduled", "completed", "postponed", "cancelled", "da_giocare", "conclusa", "rinviata", "annullata"]),
       }).strict()).min(1).max(200),
       idempotencyKey: z.string().trim().max(120).optional(),
@@ -97,6 +100,7 @@ export default async function handler(req, res) {
           before: data,
           newStatus: normalized.status,
           newResult: normalized.result,
+          newSets: normalized.sets,
         });
       });
       if (invalidEntries.length > 0) {
@@ -121,7 +125,7 @@ export default async function handler(req, res) {
       const allMatches = matchesSnap.docs.map((d) => {
         const data = d.data();
         const change = changeByMatchId.get(d.id);
-        if (change) return { ...data, status: change.newStatus, result: change.newResult ?? undefined };
+        if (change) return { ...data, status: change.newStatus, result: change.newResult ?? undefined, sets: change.newSets ?? undefined };
         return data;
       });
 
@@ -132,6 +136,7 @@ export default async function handler(req, res) {
         t.update(e.ref, {
           status: e.newStatus,
           result: e.newResult ?? admin.firestore.FieldValue.delete(),
+          sets: e.newSets ?? admin.firestore.FieldValue.delete(),
           updatedAt,
           updatedBy: auth.uid,
         });
@@ -143,8 +148,8 @@ export default async function handler(req, res) {
         actor: auth.uid,
         action: "bulk_matchday_update",
         detail: JSON.stringify({ role: auth.role, editionId, matchdayId }),
-        before: normalizedEntries.map((e) => ({ matchId: e.matchId, status: e.before.status, result: e.before.result ?? null })),
-        after: normalizedEntries.map((e) => ({ matchId: e.matchId, status: e.newStatus, result: e.newResult })),
+        before: normalizedEntries.map((e) => ({ matchId: e.matchId, status: e.before.status, result: e.before.result ?? null, sets: e.before.sets ?? null })),
+        after: normalizedEntries.map((e) => ({ matchId: e.matchId, status: e.newStatus, result: e.newResult, sets: e.newSets })),
         timestamp: updatedAt,
       });
     });

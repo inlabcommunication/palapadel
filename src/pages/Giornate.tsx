@@ -23,10 +23,12 @@ import { ScheduleImportPanel } from "../components/ScheduleImportPanel";
 import { setActiveMatchday } from "../lib/championshipAdminApi";
 import { OperationalStandings } from "../components/OperationalStandings";
 import { BracketSection } from "../components/BracketSection";
-import type { ChampionshipEdition, ChampionshipType, EditionTeam, Team, Matchday, Match, MatchStatus } from "../types";
+import { SetsInput } from "../components/SetsInput";
+import { draftFromSets, evaluateDraft, formatMatchScore, type DraftSet } from "../lib/matchSetsDraft";
+import { formatSets } from "../lib/standingsEngine";
+import type { ChampionshipEdition, ChampionshipType, EditionTeam, Team, Matchday, Match, MatchStatus, SetScore } from "../types";
 import { ArrowLeft, Plus, Clock, Ban, Trash2, X, Pencil, ChevronDown, CalendarDays } from "lucide-react";
 
-const RESULT_OPTIONS: NonNullable<Match["result"]>[] = ["2-0", "2-1", "1-2", "0-2"];
 
 const STATUS_TO_API: Record<MatchStatus, ApiMatchStatus> = {
   da_giocare: "scheduled",
@@ -418,12 +420,12 @@ function MatchdayDetail({
    * vengono salvati insieme in modo atomico. Il frontend non tocca più Firestore per
    * risultato/stato e non scrive più l'audit log da solo.
    */
-  const saveResult = async (match: Match, result: string) => {
+  const saveResult = async (match: Match, sets: SetScore[], result: NonNullable<Match["result"]>) => {
     if (savingMatchId) return; // previene il doppio clic
     setSavingMatchId(match.id);
     try {
-      await saveMatchResult({ matchId: match.id, result: result as Match["result"] & string });
-      setPendingNotify({ ...match, result: result as Match["result"], status: "conclusa" });
+      await saveMatchResult({ matchId: match.id, sets });
+      setPendingNotify({ ...match, result, sets, status: "conclusa" });
     } catch (err) {
       console.error(err);
       const msg = err instanceof MatchApiError ? err.message : "Errore nel salvataggio del risultato.";
@@ -468,16 +470,16 @@ function MatchdayDetail({
   // Fase 4 — l'aggiornamento massivo mostra TUTTE le partite (anche già concluse) e
   // permette per ciascuna: un risultato, "Da giocare", "Rinviata", "Annullata". Solo le
   // partite effettivamente cambiate rispetto allo stato attuale vengono inviate.
-  type BulkChoice = { kind: "result"; value: NonNullable<Match["result"]> } | { kind: "status"; value: MatchStatus };
+  type BulkChoice = { kind: "result"; value: NonNullable<Match["result"]>; sets: SetScore[] } | { kind: "status"; value: MatchStatus };
   const [bulkChoices, setBulkChoices] = useState<Record<string, BulkChoice>>({});
   const [bulkReview, setBulkReview] = useState<
-    { matchId: string; team1: string; team2: string; beforeStatus: MatchStatus; beforeResult?: string; afterStatus: string; afterResult: string | null }[] | null
+    { matchId: string; team1: string; team2: string; beforeStatus: MatchStatus; beforeResult?: string; afterStatus: string; afterResult: string | null; afterSets: SetScore[] | null }[] | null
   >(null);
 
   const currentChoiceLabel = (m: Match): string => {
     const choice = bulkChoices[m.id];
-    if (!choice) return m.status === "conclusa" && m.result ? m.result : STATUS_LABELS[m.status];
-    return choice.kind === "result" ? choice.value : STATUS_LABELS[choice.value];
+    if (!choice) return m.status === "conclusa" && m.result ? formatMatchScore(m) : STATUS_LABELS[m.status];
+    return choice.kind === "result" ? formatMatchScore({ result: choice.value, sets: choice.sets }) : STATUS_LABELS[choice.value];
   };
 
   const openBulkReview = () => {
@@ -487,16 +489,19 @@ function MatchdayDetail({
         if (!choice) return null;
         const afterStatus = choice.kind === "result" ? "conclusa" : choice.value;
         const afterResult = choice.kind === "result" ? choice.value : null;
-        const isSame = m.status === afterStatus && (m.result ?? null) === afterResult;
+        const afterSets = choice.kind === "result" ? choice.sets : null;
+        const isSame =
+          m.status === afterStatus && (m.result ?? null) === afterResult && formatSets(m.sets) === formatSets(afterSets);
         if (isSame) return null;
         return {
           matchId: m.id,
           team1: teamName(m.team1Id),
           team2: teamName(m.team2Id),
           beforeStatus: m.status,
-          beforeResult: m.result,
+          beforeResult: m.result ? formatMatchScore(m) : undefined,
           afterStatus,
           afterResult,
+          afterSets,
         };
       })
       .filter((c): c is NonNullable<typeof c> => c !== null);
@@ -515,6 +520,7 @@ function MatchdayDetail({
       const entries = bulkReview.map((c) => ({
         matchId: c.matchId,
         result: c.afterResult ? (c.afterResult as NonNullable<Match["result"]>) : null,
+        sets: c.afterSets,
         status: c.afterResult ? "completed" : STATUS_TO_API[c.afterStatus as MatchStatus],
       }));
       // Fase 4/11: un'unica chiamata atomica al backend per tutta la giornata. Se anche
@@ -525,7 +531,7 @@ function MatchdayDetail({
         .filter((m) => bulkReview.some((c) => c.matchId === m.id && c.afterResult))
         .map((m) => {
           const change = bulkReview.find((c) => c.matchId === m.id)!;
-          return { ...m, result: change.afterResult as Match["result"], status: "conclusa" as const };
+          return { ...m, result: change.afterResult as Match["result"], sets: change.afterSets ?? undefined, status: "conclusa" as const };
         });
 
       if (createNews && completed.length > 0) {
@@ -585,6 +591,7 @@ function MatchdayDetail({
               homeTeam: teamName(match.team1Id),
               awayTeam: teamName(match.team2Id),
               result: match.result,
+              sets: formatSets(match.sets),
               status: match.status,
               matchDate: match.matchDate,
               matchTime: match.matchTime,
@@ -598,7 +605,7 @@ function MatchdayDetail({
       {pendingNotify && (
         <div className="bg-[#123008] border border-[rgba(251,243,222,0.18)] rounded-2xl p-3.5 mb-3">
           <p className="text-[13px] font-semibold mb-2">
-            {teamName(pendingNotify.team1Id)} {pendingNotify.result} {teamName(pendingNotify.team2Id)}
+            {teamName(pendingNotify.team1Id)} {formatMatchScore(pendingNotify)} {teamName(pendingNotify.team2Id)}
           </p>
           {canCreateHomeNewsDraft ? (
             <>
@@ -629,7 +636,7 @@ function MatchdayDetail({
                 <p className="font-semibold mb-1">{c.team1} vs {c.team2}</p>
                 <p className="text-[rgba(251,243,222,0.58)]">
                   Stato: {STATUS_LABELS[c.beforeStatus]} → {STATUS_LABELS[c.afterStatus as MatchStatus]}
-                  {" · "}Risultato: {c.beforeResult ?? "—"} → {c.afterResult ?? "—"}
+                  {" · "}Risultato: {c.beforeResult ?? "—"} → {c.afterResult ? formatMatchScore({ result: c.afterResult as Match["result"], sets: c.afterSets ?? undefined }) : "—"}
                 </p>
               </div>
             ))}
@@ -669,12 +676,12 @@ function MatchdayDetail({
                     {teamName(m.team1Id)} vs {teamName(m.team2Id)}
                     <span className="text-[rgba(251,243,222,0.50)] font-normal"> · attuale: {currentChoiceLabel(m)}</span>
                   </p>
-                  <div className="flex gap-1.5 mb-1 flex-wrap items-center">
-                    <BulkScoreSelectors
+                  <div className="flex gap-1.5 mb-1 flex-wrap items-end">
+                    <BulkSetsInput
                       match={m}
                       homeName={teamName(m.team1Id)}
                       awayName={teamName(m.team2Id)}
-                      onValid={(value) => setBulkChoices((previous) => ({ ...previous, [m.id]: { kind: "result", value } }))}
+                      onValid={(value, sets) => setBulkChoices((previous) => ({ ...previous, [m.id]: { kind: "result", value, sets } }))}
                       onInvalid={() => setBulkChoices((previous) => {
                         if (previous[m.id]?.kind !== "result") return previous;
                         const next = { ...previous };
@@ -726,7 +733,7 @@ function MatchdayDetail({
               canEditResults={canEditResults}
               canDeleteMatches={canDeleteMatches}
               saving={savingMatchId === m.id}
-              onSaveResult={(result) => saveResult(m, result)}
+              onSaveResult={(sets, result) => saveResult(m, sets, result)}
               onRemove={() => removeMatch(m)}
               onSetStatus={(status) => changeStatus(m, status)}
               canEditSchedule={canCreateMatches}
@@ -828,7 +835,7 @@ function MatchRow({
   canEditResults: boolean;
   canDeleteMatches: boolean;
   saving: boolean;
-  onSaveResult: (result: string) => void;
+  onSaveResult: (sets: SetScore[], result: NonNullable<Match["result"]>) => void;
   onRemove: () => void;
   onSetStatus: (status: MatchStatus) => void;
   canEditSchedule: boolean;
@@ -857,17 +864,16 @@ function MatchRow({
   const [court, setCourt] = useState(match.court ?? "");
   const [notes, setNotes] = useState(match.notes ?? "");
   const [editStatus, setEditStatus] = useState<MatchStatus>(match.status);
-  const initialScore = match.result?.split("-").map(Number) ?? [];
-  const [homeScore, setHomeScore] = useState<number | "">(initialScore[0] ?? "");
-  const [awayScore, setAwayScore] = useState<number | "">(initialScore[1] ?? "");
+  const [draftSets, setDraftSets] = useState<DraftSet[]>(() => draftFromSets(match.sets));
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
-  const selectedResult = `${homeScore}-${awayScore}`;
-  const resultIsValid = RESULT_OPTIONS.includes(selectedResult as (typeof RESULT_OPTIONS)[number]);
+  const evaluation = evaluateDraft(draftSets);
+  const resultIsValid = evaluation.state === "valid";
 
   const submitResult = () => {
-    if (!resultIsValid) return;
-    if (!window.confirm(`Confermi il risultato ${teamName(match.team1Id)} ${selectedResult} ${teamName(match.team2Id)}?`)) return;
-    onSaveResult(selectedResult);
+    if (evaluation.state !== "valid") return;
+    const score = formatMatchScore({ result: evaluation.result, sets: evaluation.sets });
+    if (!window.confirm(`Confermi il risultato ${teamName(match.team1Id)} ${score} ${teamName(match.team2Id)}?`)) return;
+    onSaveResult(evaluation.sets, evaluation.result);
     setCorrecting(false);
   };
 
@@ -878,7 +884,10 @@ function MatchRow({
           {teamName(match.team1Id)} <span className="text-[rgba(251,243,222,0.50)]">vs</span> {teamName(match.team2Id)}
         </p>
         {match.status === "conclusa" && match.result && (
-          <span className="font-display text-[15px] text-[#BBFF5E] shrink-0">{match.result}</span>
+          <span className="shrink-0 text-right">
+            <span className="font-display text-[15px] text-[#BBFF5E]">{match.result}</span>
+            {match.sets && <span className="block text-[11px] text-[rgba(251,243,222,0.65)]">{formatSets(match.sets)}</span>}
+          </span>
         )}
         {match.status === "rinviata" && (
           <span className="flex items-center gap-1 text-[11px] text-[#FF9B6B] shrink-0">
@@ -933,35 +942,20 @@ function MatchRow({
 
       {match.status === "da_giocare" && canEditResults && (
         <div className="mb-3 rounded-lg bg-[#123008] p-3">
-          <div className="grid grid-cols-[minmax(0,1fr)_64px_16px_64px_minmax(0,1fr)] items-center gap-2">
-            <span className="truncate text-right text-xs font-semibold">{teamName(match.team1Id)}</span>
-            <ScoreSelect label={`Set vinti da ${teamName(match.team1Id)}`} value={homeScore} onChange={setHomeScore} />
-            <span className="text-center font-bold">-</span>
-            <ScoreSelect label={`Set vinti da ${teamName(match.team2Id)}`} value={awayScore} onChange={setAwayScore} />
-            <span className="truncate text-xs font-semibold">{teamName(match.team2Id)}</span>
-          </div>
+          <SetsInput team1Name={teamName(match.team1Id)} team2Name={teamName(match.team2Id)} value={draftSets} onChange={setDraftSets} />
           <button onClick={submitResult} disabled={saving || !resultIsValid}
             className="mt-3 w-full rounded-lg bg-lime py-2 text-xs font-bold text-[#081208] disabled:cursor-not-allowed disabled:opacity-40">
             {saving ? "Salvataggio..." : "Salva risultato"}
           </button>
-          {homeScore !== "" && awayScore !== "" && !resultIsValid && (
-            <p className="mt-2 text-center text-[11px] text-[#FF9B6B]">Risultato non valido. Sono ammessi 2-0, 2-1, 1-2 e 0-2.</p>
-          )}
         </div>
       )}
 
       {match.status === "conclusa" && canEditResults && correcting && (
         <div className="mb-2">
           <p className="text-[11px] text-[rgba(251,243,222,0.50)] mb-1.5">
-            Risultato attuale: <strong className="text-[rgba(251,243,222,0.85)]">{match.result}</strong> — scegli il nuovo risultato
+            Risultato attuale: <strong className="text-[rgba(251,243,222,0.85)]">{formatMatchScore(match)}</strong> — inserisci i game di ogni set
           </p>
-          <div className="grid grid-cols-[1fr_64px_16px_64px_1fr] items-center gap-2">
-            <span className="truncate text-right text-xs">{teamName(match.team1Id)}</span>
-            <ScoreSelect label="Nuovo punteggio squadra di casa" value={homeScore} onChange={setHomeScore} />
-            <span className="text-center">-</span>
-            <ScoreSelect label="Nuovo punteggio squadra ospite" value={awayScore} onChange={setAwayScore} />
-            <span className="truncate text-xs">{teamName(match.team2Id)}</span>
-          </div>
+          <SetsInput team1Name={teamName(match.team1Id)} team2Name={teamName(match.team2Id)} value={draftSets} onChange={setDraftSets} />
           <button onClick={submitResult} disabled={saving || !resultIsValid} className="mt-2 w-full rounded-lg bg-lime py-2 text-xs font-bold text-[#081208] disabled:opacity-40">
             Conferma correzione
           </button>
@@ -1012,7 +1006,7 @@ function MatchRow({
   );
 }
 
-function BulkScoreSelectors({
+function BulkSetsInput({
   match,
   homeName,
   awayName,
@@ -1022,35 +1016,20 @@ function BulkScoreSelectors({
   match: Match;
   homeName: string;
   awayName: string;
-  onValid: (result: NonNullable<Match["result"]>) => void;
+  onValid: (result: NonNullable<Match["result"]>, sets: SetScore[]) => void;
   onInvalid: () => void;
 }) {
-  const initial = match.result?.split("-").map(Number) ?? [];
-  const [home, setHome] = useState<number | "">(initial[0] ?? "");
-  const [away, setAway] = useState<number | "">(initial[1] ?? "");
-  const update = (nextHome: number | "", nextAway: number | "") => {
-    const result = `${nextHome}-${nextAway}`;
-    if (RESULT_OPTIONS.includes(result as NonNullable<Match["result"]>)) onValid(result as NonNullable<Match["result"]>);
+  const [draft, setDraft] = useState<DraftSet[]>(() => draftFromSets(match.sets));
+  const change = (next: DraftSet[]) => {
+    setDraft(next);
+    const evaluation = evaluateDraft(next);
+    if (evaluation.state === "valid") onValid(evaluation.result, evaluation.sets);
     else onInvalid();
   };
   return (
-    <div className="mr-2 grid grid-cols-[64px_12px_64px] items-center gap-1">
-      <ScoreSelect label={`Set vinti da ${homeName}`} value={home} onChange={(value) => { setHome(value); update(value, away); }} />
-      <span className="text-center">-</span>
-      <ScoreSelect label={`Set vinti da ${awayName}`} value={away} onChange={(value) => { setAway(value); update(home, value); }} />
+    <div className="mr-2">
+      <SetsInput team1Name={homeName} team2Name={awayName} value={draft} onChange={change} compact />
     </div>
-  );
-}
-
-function ScoreSelect({ label, value, onChange }: { label: string; value: number | ""; onChange: (value: number | "") => void }) {
-  return (
-    <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value === "" ? "" : Number(event.target.value))}
-      className="h-11 w-16 rounded-lg border border-[rgba(251,243,222,0.18)] bg-[#0A0B08] text-center text-lg font-bold text-[#FBF3DE] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#BBFF5E]">
-      <option value="">-</option>
-      <option value="0">0</option>
-      <option value="1">1</option>
-      <option value="2">2</option>
-    </select>
   );
 }
 

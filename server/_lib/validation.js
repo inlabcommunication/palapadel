@@ -9,6 +9,14 @@ export const optionalTime = z
   .union([z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Ora non valida"), z.literal(""), z.null()])
   .optional();
 
+// Set di una partita: 2 o 3 set con i game di ciascuna squadra (es. 6-1, 4-6, 6-2).
+// La correttezza del punteggio (6-4, 7-5, 7-6, terzo set solo se 1-1...) la controlla
+// shared/matchSets.js tramite normalizeMatchChange.
+export const setsSchema = z
+  .array(z.object({ team1: z.number().int().min(0).max(7), team2: z.number().int().min(0).max(7) }).strict())
+  .min(2)
+  .max(3);
+
 export const notificationType = z.enum(["match_result", "standings_update", "correction", "winner", "news"]);
 export const notificationMode = z.enum(["disabled", "ask", "automatic", "draft"]);
 export const notificationEventSchema = z.object({

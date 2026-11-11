@@ -1,3 +1,5 @@
+import { evaluateSets } from "../../shared/matchSets.js";
+
 export const RESULT_VALUES = ["2-0", "2-1", "1-2", "0-2"];
 
 export const API_STATUS_TO_STORED = {
@@ -28,6 +30,17 @@ export function normalizeApiStatus(status) {
 }
 
 export function normalizeMatchChange(entry) {
+  const hasSets = entry.sets !== undefined && entry.sets !== null;
+  let sets = null;
+  if (hasSets) {
+    const evaluated = evaluateSets(entry.sets);
+    if (!evaluated.ok) return { ok: false, error: evaluated.error };
+    if (entry.result !== undefined && entry.result !== null && entry.result !== evaluated.result) {
+      return { ok: false, error: `il risultato ${entry.result} non corrisponde ai set (${evaluated.result})` };
+    }
+    sets = entry.sets.map((set) => ({ team1: set.team1, team2: set.team2 }));
+    entry = { ...entry, result: evaluated.result };
+  }
   const hasResult = entry.result !== undefined && entry.result !== null;
   const hasStatus = entry.status !== undefined && entry.status !== null && entry.status !== "";
   const status = hasStatus ? normalizeApiStatus(entry.status) : hasResult ? "conclusa" : null;
@@ -49,5 +62,6 @@ export function normalizeMatchChange(entry) {
     ok: true,
     status,
     result: status === "conclusa" ? entry.result : null,
+    sets: status === "conclusa" ? sets : null,
   };
 }
