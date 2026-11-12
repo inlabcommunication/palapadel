@@ -1146,8 +1146,10 @@ function TeamProfileModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Fase 7 — foto di gruppo della squadra: grande, orizzontale (16:9), object-cover.
-            Se manca, un placeholder sportivo con le iniziali (mai un logo/avatar quadrato). */}
-        <div className="relative w-full aspect-video bg-[#123008]">
+            Se manca, un placeholder sportivo con le iniziali (mai un logo/avatar quadrato).
+            overflow-hidden: con lo zoom (teamPhotoScale) la foto non deve uscire dal riquadro
+            e coprire il nome della squadra. */}
+        <div className="relative w-full aspect-video overflow-hidden bg-[#123008]">
           {team?.teamPhotoUrl ? (
             <img
               src={team.teamPhotoUrl}
