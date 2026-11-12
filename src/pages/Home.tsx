@@ -7,7 +7,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase";
 import { confirmDelete } from "../lib/confirmDelete";
 import { deleteHomeNewsImage, getNewsExcerpt, getNewsImageAlt, uploadHomeNewsImage } from "../lib/homeNewsImageUpload";
-import { getPublishedNewsForHome, HOME_NEWS_SUBTITLE, HOME_NEWS_TITLE } from "../lib/homePresentation";
+import { getHomeNewsPreview, getPublishedNewsForHome, HOME_NEWS_SUBTITLE, HOME_NEWS_TITLE } from "../lib/homePresentation";
 import { notifyNotificationEvent } from "../lib/notificationClient";
 import { deleteHomeNews as deleteHomeNewsRecord, removeHomeNewsImage, saveHomeNews } from "../lib/homeNewsApi";
 import type { PublicSettings } from "../lib/publicSettingsApi";
@@ -61,7 +61,10 @@ export function HomePage({ newsOnly = false }: { newsOnly?: boolean }) {
     .sort((a, b) => (a.season < b.season ? 1 : -1))
     .slice(0, 3);
 
-  const publishedNews = getPublishedNewsForHome(news);
+  // In Home solo le ultime news (HOME_NEWS_LIMIT); nella pagina News (newsOnly) tutte.
+  const allPublishedNews = getPublishedNewsForHome(news);
+  const publishedNews = newsOnly ? allPublishedNews : getHomeNewsPreview(news);
+  const hiddenNewsCount = allPublishedNews.length - publishedNews.length;
   const draftNews = canNews
     ? news
         .filter((n) => n.status === "bozza")
@@ -191,6 +194,15 @@ export function HomePage({ newsOnly = false }: { newsOnly?: boolean }) {
             </div>
           )}
         </div>
+      )}
+
+      {hiddenNewsCount > 0 && (
+        <button
+          onClick={() => navigate("/news")}
+          className="mt-4 w-full rounded-full border border-[rgba(187,255,94,0.35)] py-2.5 text-sm font-bold text-[#BBFF5E] hover:bg-[rgba(187,255,94,0.08)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#BBFF5E]"
+        >
+          Tutte le news ({allPublishedNews.length})
+        </button>
       )}
 
       {draftNews.length > 0 && (

@@ -2,6 +2,8 @@ import type { HomeNews } from "../types";
 
 export const HOME_SECTION_ORDER = ["hero", "news", "championships", "albo"] as const;
 export const HOME_NEWS_TITLE = "PALA PADEL NEWS";
+/** Quante news pubblicate mostra la Home: le altre restano nella pagina News. */
+export const HOME_NEWS_LIMIT = 3;
 export const HOME_NEWS_SUBTITLE = "Risultati, aggiornamenti e novità dal mondo PalaPadel.";
 
 export function isPublicNews(item: HomeNews, now = new Date()): boolean {
@@ -17,6 +19,11 @@ export function isPublicNews(item: HomeNews, now = new Date()): boolean {
     publishedTime <= now.getTime() &&
     (expiresTime === null || !Number.isFinite(expiresTime) || expiresTime > now.getTime())
   );
+}
+
+/** Le ultime HOME_NEWS_LIMIT news pubblicate, dalla più recente. */
+export function getHomeNewsPreview(news: HomeNews[], now = new Date()): HomeNews[] {
+  return getPublishedNewsForHome(news, now).slice(0, HOME_NEWS_LIMIT);
 }
 
 export function getPublishedNewsForHome(news: HomeNews[], now = new Date()): HomeNews[] {
