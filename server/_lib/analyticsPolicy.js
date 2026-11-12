@@ -34,3 +34,12 @@ export function countAnalyticsDevices(installations, days, now = Date.now()) {
     total: counted.length,
   };
 }
+
+/**
+ * Primo giorno (AAAA-MM-GG, UTC come le chiavi di analyticsDaily) incluso in un
+ * periodo di `days` giorni che finisce oggi: con days = 30, oggi e i 29 giorni prima.
+ * Serve a filtrare per data reale, non "gli ultimi N giorni con attività".
+ */
+export function analyticsPeriodStartKey(days, now = Date.now()) {
+  return new Date(now - (days - 1) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
