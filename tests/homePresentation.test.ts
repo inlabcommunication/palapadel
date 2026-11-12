@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { getPublishedNewsForHome, HOME_NEWS_SUBTITLE, HOME_NEWS_TITLE, HOME_SECTION_ORDER } from "../src/lib/homePresentation.ts";
+import { getHomeNewsPreview, getPublishedNewsForHome, HOME_NEWS_SUBTITLE, HOME_NEWS_TITLE, HOME_SECTION_ORDER } from "../src/lib/homePresentation.ts";
 import type { HomeNews } from "../src/types";
 
 test("la Home mette le news prima dei campionati e poi l'Albo d'oro", () => {
@@ -41,4 +41,18 @@ test("la parte pubblica esclude news disattivate, eliminate, scadute o programma
   ];
 
   assert.deepEqual(getPublishedNewsForHome(news, now).map((item) => item.id), ["valid"]);
+});
+
+test("la Home mostra solo le ultime 3 news pubblicate, le altre restano nella pagina News", () => {
+  const news: HomeNews[] = [1, 2, 3, 4, 5].map((day) => ({
+    id: `n${day}`,
+    title: `News ${day}`,
+    body: "Testo visibile",
+    date: `2026-07-0${day}`,
+    status: "pubblicato",
+  }));
+  news.push({ id: "draft", title: "Bozza", body: "Non pubblicata", date: "2026-07-09", status: "bozza" });
+
+  assert.deepEqual(getHomeNewsPreview(news).map((item) => item.id), ["n5", "n4", "n3"]);
+  assert.equal(getPublishedNewsForHome(news).length, 5);
 });
