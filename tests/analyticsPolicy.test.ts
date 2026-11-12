@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { isAnalyticsExcludedRole, shouldTrackAnalyticsForRole } from "../src/lib/analyticsPolicy.ts";
 import {
+  analyticsPeriodStartKey,
   getAnalyticsActorRole,
   isCountedAnalyticsInstallation,
   normalizeAnalyticsRole,
@@ -45,4 +46,10 @@ test("dispositivi: attivi e nuovi nel periodo, totale da sempre, staff escluso",
     { lastSeenAt: "data non valida" },
   ];
   assert.deepEqual(countAnalyticsDevices(installs, 30, now), { active: 2, new: 1, total: 4 });
+});
+
+test("il periodo di 30 giorni va per data, oggi compreso", () => {
+  const now = Date.parse("2026-11-12T10:00:00Z");
+  assert.equal(analyticsPeriodStartKey(30, now), "2026-10-14");
+  assert.equal(analyticsPeriodStartKey(1, now), "2026-11-12");
 });
