@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/news/:id", "destination": "/api/home-news/share-page?id=:id" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "crons": [

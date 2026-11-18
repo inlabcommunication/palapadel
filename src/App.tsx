@@ -89,6 +89,8 @@ export default function App() {
       {/* Area tornei rimossa: i vecchi link portano alla Home. */}
       <Route path="/tornei" element={<Navigate to="/" replace />} />
       <Route path="/news" element={canManageNews(appUser?.role) ? <HomePage newsOnly /> : <NewsPage />} />
+      {/* Link condiviso di una singola news: apre direttamente quell'articolo. */}
+      <Route path="/news/:newsId" element={canManageNews(appUser?.role) ? <HomePage newsOnly /> : <NewsPage />} />
       <Route path="/storico" element={<Navigate to="/news" replace />} />
       <Route path="/albo" element={<AlboPage />} />
       <Route path="/notifiche" element={<NotifichePage />} />

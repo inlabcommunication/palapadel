@@ -5,6 +5,7 @@ export function isSuperAdminWorkspacePath(pathname: string) {
     pathname.startsWith("/campionati") ||
     pathname === "/albo" ||
     pathname === "/news" ||
+    pathname.startsWith("/news/") ||
     pathname === "/notifiche" ||
     pathname === "/analytics"
     || pathname === "/giornate"
