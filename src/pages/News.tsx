@@ -3,6 +3,7 @@ import { ChevronRight, Megaphone, Newspaper, X } from "lucide-react";
 import { useCollection } from "../hooks/useCollection";
 import { useSelectedNews } from "../hooks/useSelectedNews";
 import { NewsSocialBar } from "../components/NewsSocialBar";
+import { NewsLikeButton } from "../components/NewsLikeButton";
 import { getNewsExcerpt, getNewsImageAlt } from "../lib/homeNewsImagePolicy";
 import { getPublishedNewsForHome } from "../lib/homePresentation";
 import type { HomeNews } from "../types";
@@ -56,13 +57,16 @@ export function NewsPage() {
               <p className="mt-2 text-[13px] leading-relaxed text-[rgba(251,243,222,0.66)]">
                 {getNewsExcerpt(item.body, index === 0 ? 220 : 130)}
               </p>
-              <button
-                type="button"
-                onClick={() => openNews(item)}
-                className="mt-3 inline-flex items-center gap-1 text-[12.5px] font-bold text-[#BBFF5E]"
-              >
-                Leggi tutto <ChevronRight size={14} />
-              </button>
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => openNews(item)}
+                  className="inline-flex items-center gap-1 text-[12.5px] font-bold text-[#BBFF5E]"
+                >
+                  Leggi tutto <ChevronRight size={14} />
+                </button>
+                <NewsLikeButton news={item} compact />
+              </div>
             </div>
           </article>
         ))}

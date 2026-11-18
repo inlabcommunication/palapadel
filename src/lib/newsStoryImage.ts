@@ -37,6 +37,19 @@ async function loadCanvasImage(url?: string): Promise<HTMLImageElement | null> {
   }
 }
 
+/**
+ * Copertina della news. Prima tramite il server dell'app (stesso indirizzo, quindi il
+ * canvas la può usare), poi direttamente come riserva (es. immagini già sullo stesso sito).
+ */
+async function loadNewsCover(news: HomeNews): Promise<HTMLImageElement | null> {
+  if (!news.imageUrl) return null;
+  if (news.id && !news.imageUrl.startsWith("/")) {
+    const viaServer = await loadImageElement(`/api/home-news/cover?id=${encodeURIComponent(news.id)}`);
+    if (viaServer) return viaServer;
+  }
+  return loadCanvasImage(news.imageUrl);
+}
+
 function drawCover(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: number, y: number, w: number, h: number, positionY = 50) {
   const ratio = Math.max(w / image.naturalWidth, h / image.naturalHeight);
   const sw = w / ratio;
@@ -105,7 +118,7 @@ export async function generateNewsStoryImage(news: HomeNews, shareUrl: string): 
   // Foto della news (o riquadro verde) nella parte alta.
   const photoY = 230;
   const photoH = 640;
-  const [photo, logo] = await Promise.all([loadCanvasImage(news.imageUrl), loadCanvasImage("/palapadel-club-transparent.png")]);
+  const [photo, logo] = await Promise.all([loadNewsCover(news), loadCanvasImage("/palapadel-club-transparent.png")]);
   ctx.save();
   ctx.beginPath();
   ctx.roundRect(60, photoY, W - 120, photoH, 36);
