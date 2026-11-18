@@ -1,7 +1,8 @@
-import { useState } from "react";
 import { where } from "firebase/firestore";
 import { ChevronRight, Megaphone, Newspaper, X } from "lucide-react";
 import { useCollection } from "../hooks/useCollection";
+import { useSelectedNews } from "../hooks/useSelectedNews";
+import { NewsSocialBar } from "../components/NewsSocialBar";
 import { getNewsExcerpt, getNewsImageAlt } from "../lib/homeNewsImagePolicy";
 import { getPublishedNewsForHome } from "../lib/homePresentation";
 import type { HomeNews } from "../types";
@@ -11,8 +12,8 @@ export function NewsPage() {
     where("status", "==", "pubblicato"),
   ]);
   const { data: news, loading, error } = newsQuery;
-  const [selectedNews, setSelectedNews] = useState<HomeNews | null>(null);
   const publishedNews = getPublishedNewsForHome(news);
+  const { selectedNews, open: openNews, close: closeNews } = useSelectedNews(publishedNews);
 
   return (
     <div className="p-4 pb-6">
@@ -57,7 +58,7 @@ export function NewsPage() {
               </p>
               <button
                 type="button"
-                onClick={() => setSelectedNews(item)}
+                onClick={() => openNews(item)}
                 className="mt-3 inline-flex items-center gap-1 text-[12.5px] font-bold text-[#BBFF5E]"
               >
                 Leggi tutto <ChevronRight size={14} />
@@ -70,7 +71,7 @@ export function NewsPage() {
       {selectedNews && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6"
-          onClick={() => setSelectedNews(null)}
+          onClick={closeNews}
         >
           <article
             role="dialog"
@@ -89,7 +90,7 @@ export function NewsPage() {
                 <button
                   type="button"
                   aria-label="Chiudi dettaglio news"
-                  onClick={() => setSelectedNews(null)}
+                  onClick={closeNews}
                   className="rounded-full bg-[rgba(251,243,222,0.08)] p-2"
                 >
                   <X size={17} />
@@ -101,6 +102,7 @@ export function NewsPage() {
               <p className="mt-4 whitespace-pre-line text-[14px] leading-relaxed text-[rgba(251,243,222,0.74)]">
                 {selectedNews.body}
               </p>
+              <NewsSocialBar news={selectedNews} />
             </div>
           </article>
         </div>

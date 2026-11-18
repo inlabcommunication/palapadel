@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { collection, doc, where } from "firebase/firestore";
 import { ImageUploadField } from "../components/ImageUploadField";
+import { NewsSocialBar } from "../components/NewsSocialBar";
+import { useSelectedNews } from "../hooks/useSelectedNews";
 import { useCollection } from "../hooks/useCollection";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase";
 import { confirmDelete } from "../lib/confirmDelete";
 import { deleteHomeNewsImage, getNewsExcerpt, getNewsImageAlt, uploadHomeNewsImage } from "../lib/homeNewsImageUpload";
-import { getHomeNewsPreview, getPublishedNewsForHome, HOME_NEWS_SUBTITLE, HOME_NEWS_TITLE } from "../lib/homePresentation";
+import { getHomeNewsPreview, getPublishedNewsForHome, isPublicNews, HOME_NEWS_SUBTITLE, HOME_NEWS_TITLE } from "../lib/homePresentation";
 import { notifyNotificationEvent } from "../lib/notificationClient";
 import { deleteHomeNews as deleteHomeNewsRecord, removeHomeNewsImage, saveHomeNews } from "../lib/homeNewsApi";
 import type { PublicSettings } from "../lib/publicSettingsApi";
@@ -41,11 +43,11 @@ export function HomePage({ newsOnly = false }: { newsOnly?: boolean }) {
     [canNews]
   );
   const { data: publicSettings } = useCollection<PublicSettings>("publicSettings");
+  const { selectedNews, open: openNews, close: closeNews } = useSelectedNews(news);
   const globalSettings = publicSettings.find((item) => item.id === "global");
 
   const [showNewsForm, setShowNewsForm] = useState(false);
   const [editingNewsId, setEditingNewsId] = useState<string | null>(null);
-  const [selectedNews, setSelectedNews] = useState<HomeNews | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const showToast = (msg: string) => {
     setToast(msg);
@@ -162,7 +164,7 @@ export function HomePage({ newsOnly = false }: { newsOnly?: boolean }) {
                 news={mainNews}
                 featured
                 isAdmin={canNews}
-                onRead={() => setSelectedNews(mainNews)}
+                onRead={() => openNews(mainNews)}
                 onEdit={() => setEditingNewsId(mainNews.id)}
                 onDelete={() => removeNews(mainNews)}
               />
@@ -185,7 +187,7 @@ export function HomePage({ newsOnly = false }: { newsOnly?: boolean }) {
                     key={n.id}
                     news={n}
                     isAdmin={canNews}
-                    onRead={() => setSelectedNews(n)}
+                    onRead={() => openNews(n)}
                     onEdit={() => setEditingNewsId(n.id)}
                     onDelete={() => removeNews(n)}
                   />
@@ -225,7 +227,7 @@ export function HomePage({ newsOnly = false }: { newsOnly?: boolean }) {
                   key={n.id}
                   news={n}
                   isAdmin={canNews}
-                  onRead={() => setSelectedNews(n)}
+                  onRead={() => openNews(n)}
                   onEdit={() => setEditingNewsId(n.id)}
                   onDelete={() => removeNews(n)}
                 />
@@ -285,7 +287,7 @@ export function HomePage({ newsOnly = false }: { newsOnly?: boolean }) {
         </>
       )}
 
-      {selectedNews && <NewsModal news={selectedNews} onClose={() => setSelectedNews(null)} />}
+      {selectedNews && <NewsModal news={selectedNews} onClose={closeNews} />}
 
       {toast && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-[#0A0B08] text-[#FBF3DE] border border-[rgba(187,255,94,0.3)] px-4 py-2.5 rounded-full text-[12.5px] max-w-[90%] text-center z-20">
@@ -377,6 +379,7 @@ function NewsImage({ news, featured }: { news: HomeNews; featured: boolean }) {
 }
 
 function NewsModal({ news, onClose }: { news: HomeNews; onClose: () => void }) {
+  const showSocial = isPublicNews(news);
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -412,6 +415,8 @@ function NewsModal({ news, onClose }: { news: HomeNews; onClose: () => void }) {
           </div>
           <h3 id="home-news-modal-title" className="font-display text-[26px] sm:text-[38px] leading-[1.05] text-[#FBF3DE]">{news.title}</h3>
           <p className="whitespace-pre-line text-[14px] sm:text-[15px] text-[rgba(251,243,222,0.72)] mt-4 leading-relaxed">{news.body}</p>
+          {/* Mi piace e condivisione solo per le news pubbliche (non per le bozze). */}
+          {showSocial && <NewsSocialBar news={news} />}
         </div>
       </article>
     </div>

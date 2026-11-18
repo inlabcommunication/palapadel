@@ -86,8 +86,8 @@ export function AnalyticsPage() {
           <div className="grid grid-cols-2 gap-2 mb-4">
             <Metric label="Dispositivi attivi (30 gg)" value={totals.devices} />
             <Metric label="Dispositivi nuovi (30 gg)" value={totals.devicesNew} />
-            <Metric label="Sessioni" value={totals.sessions} />
-            <Metric label="Installazioni" value={totals.installs} />
+            <Metric label="Sessioni (30 gg)" value={totals.sessions} />
+            <Metric label="Installazioni (30 gg)" value={totals.installs} />
             <Metric label="Eventi" value={totals.eventsTotal} />
             <Metric label="Push consentite" value={totals.notificationPermissionGranted} />
             <Metric label="Push negate" value={totals.notificationPermissionDenied} />

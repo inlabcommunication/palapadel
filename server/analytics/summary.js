@@ -1,6 +1,7 @@
 import { getAdminApp, admin } from "../_lib/firebaseAdmin.js";
 import { requirePost, sendError, verifyCaller } from "../_lib/auth.js";
 import {
+  analyticsPeriodStartKey,
   countAnalyticsDevices,
   getAnalyticsActorRole,
   shouldSkipAnalyticsRole,
@@ -16,7 +17,9 @@ export default async function handler(req, res) {
     const { days } = parseBody(z.object({ days: z.number().int().min(1).max(90).default(30) }).strict(), req.body);
 
     const [dailySnap, installsSnap, recentEventsSnap, notificationSnap] = await Promise.all([
-      db.collection("analyticsDaily").orderBy("day", "desc").limit(days).get(),
+      // Solo i giorni del periodo richiesto (per data), non gli ultimi N documenti:
+      // nei giorni senza visite il documento non esiste e il limite andava più indietro.
+      db.collection("analyticsDaily").where("day", ">=", analyticsPeriodStartKey(days)).orderBy("day", "desc").get(),
       db.collection("analyticsInstallations").get(),
       db.collection("analyticsEvents").orderBy("createdAt", "desc").limit(50).get(),
       db.collection("notificationHistory").orderBy("createdAt", "desc").limit(50).get(),

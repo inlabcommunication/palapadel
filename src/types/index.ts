@@ -244,6 +244,8 @@ export interface HomeNews {
   publishedAt?: string;
   expiresAt?: string;
   deletedAt?: string;
+  /** Numero di "mi piace" (uno per dispositivo), aggiornato solo dal server. */
+  likeCount?: number;
 }
 
 /**

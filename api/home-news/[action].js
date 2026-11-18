@@ -1,10 +1,14 @@
 import createResultUpdate from "../../server/home-news/create-result-update.js";
 import deleteNews from "../../server/home-news/delete.js";
+import like from "../../server/home-news/like.js";
+import sharePage from "../../server/home-news/share-page.js";
 import upsert from "../../server/home-news/upsert.js";
 
 const handlers = {
   "create-result-update": createResultUpdate,
   delete: deleteNews,
+  like,
+  "share-page": sharePage,
   upsert,
 };
 
