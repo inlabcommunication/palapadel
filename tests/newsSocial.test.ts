@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { escapeHtml, injectNewsMeta, isPublicNewsData, newsLikeDocId } from "../server/_lib/newsSocial.js";
+import { escapeHtml, injectNewsMeta, isAllowedCoverUrl, isPublicNewsData, newsLikeDocId } from "../server/_lib/newsSocial.js";
 import { getFacebookShareUrl, getNewsShareUrl, getWhatsAppShareUrl } from "../src/lib/newsShareLinks.ts";
 import { wrapText } from "../src/lib/newsStoryImage.ts";
 
@@ -48,4 +48,13 @@ test("il testo dell'immagine per le Storie va a capo e si tronca con i puntini",
   assert.equal(lines.length, 2);
   assert.ok(lines[1].endsWith("…"));
   assert.ok(lines.every((line) => measure(line) <= 80));
+});
+
+test("la copertina passa dal server solo se è su Firebase/Google Storage", () => {
+  assert.equal(isAllowedCoverUrl("https://firebasestorage.googleapis.com/v0/b/x.appspot.com/o/news%2Fa.jpg?alt=media&token=t"), true);
+  assert.equal(isAllowedCoverUrl("https://storage.googleapis.com/x.appspot.com/news/a.jpg"), true);
+  assert.equal(isAllowedCoverUrl("http://firebasestorage.googleapis.com/a.jpg"), false);
+  assert.equal(isAllowedCoverUrl("https://example.com/a.jpg"), false);
+  assert.equal(isAllowedCoverUrl("https://firebasestorage.googleapis.com.evil.com/a.jpg"), false);
+  assert.equal(isAllowedCoverUrl(undefined), false);
 });

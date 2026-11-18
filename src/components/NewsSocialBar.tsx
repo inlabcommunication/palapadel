@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, Download, Facebook, Heart, Instagram, Link2, MessageCircle, Share2, X } from "lucide-react";
+import { Check, Download, Facebook, Instagram, Link2, MessageCircle, Share2, X } from "lucide-react";
 import type { HomeNews } from "../types";
-import { copyText, hasLikedNews, setNewsLike } from "../lib/newsSocial";
+import { copyText } from "../lib/newsSocial";
+import { NewsLikeButton } from "./NewsLikeButton";
 import { getFacebookShareUrl, getNewsShareUrl, getWhatsAppShareUrl } from "../lib/newsShareLinks";
 import { generateNewsStoryImage, type GeneratedNewsStory } from "../lib/newsStoryImage";
 
@@ -12,40 +13,16 @@ import { generateNewsStoryImage, type GeneratedNewsStory } from "../lib/newsStor
  * il pannello di condivisione del sistema.
  */
 export function NewsSocialBar({ news }: { news: HomeNews }) {
-  const [liked, setLiked] = useState(() => hasLikedNews(news.id));
-  const [countOverride, setCountOverride] = useState<number | null>(null);
-  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [storyOpen, setStoryOpen] = useState(false);
   const shareUrl = getNewsShareUrl(news.id);
-  const count = countOverride ?? Math.max(0, news.likeCount ?? 0);
   const canNativeShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
 
-  // Il totale aggiornato arriva anche dalla lettura in tempo reale della news.
-  useEffect(() => setCountOverride(null), [news.likeCount]);
   useEffect(() => {
     if (!message) return;
     const timer = window.setTimeout(() => setMessage(null), 2600);
     return () => window.clearTimeout(timer);
   }, [message]);
-
-  const toggleLike = async () => {
-    if (saving) return;
-    const next = !liked;
-    setLiked(next);
-    setCountOverride(Math.max(0, count + (next ? 1 : -1)));
-    setSaving(true);
-    try {
-      const serverCount = await setNewsLike(news.id, next);
-      if (serverCount !== null) setCountOverride(serverCount);
-    } catch (err) {
-      setLiked(!next);
-      setCountOverride(null);
-      setMessage(err instanceof Error ? err.message : "Mi piace non salvato.");
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const copyLink = async () => {
     setMessage((await copyText(shareUrl)) ? "Link copiato." : "Copia non riuscita.");
@@ -64,19 +41,7 @@ export function NewsSocialBar({ news }: { news: HomeNews }) {
 
   return (
     <div className="mt-5 border-t border-[rgba(251,243,222,0.10)] pt-4">
-      <button
-        type="button"
-        onClick={toggleLike}
-        aria-pressed={liked}
-        aria-label={liked ? "Togli mi piace" : "Metti mi piace"}
-        className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#BBFF5E] ${
-          liked ? "border-[#FF6B8A] bg-[rgba(255,107,138,0.14)] text-[#FF8FA6]" : "border-[rgba(251,243,222,0.2)] text-[#FBF3DE]"
-        }`}
-      >
-        <Heart size={17} fill={liked ? "currentColor" : "none"} />
-        {liked ? "Ti piace" : "Mi piace"}
-        <span className="tabular-nums text-[rgba(251,243,222,0.7)]">{count}</span>
-      </button>
+      <NewsLikeButton news={news} onError={setMessage} />
 
       <p className="mt-4 mb-1.5 text-[11px] font-bold uppercase tracking-wider text-[rgba(251,243,222,0.5)]">Condividi</p>
       <div className={`grid gap-1 ${canNativeShare ? "grid-cols-5" : "grid-cols-4"}`}>

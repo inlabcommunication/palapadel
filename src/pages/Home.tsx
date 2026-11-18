@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { collection, doc, where } from "firebase/firestore";
 import { ImageUploadField } from "../components/ImageUploadField";
+import { NewsLikeButton } from "../components/NewsLikeButton";
 import { NewsSocialBar } from "../components/NewsSocialBar";
 import { useSelectedNews } from "../hooks/useSelectedNews";
 import { useCollection } from "../hooks/useCollection";
@@ -332,9 +333,12 @@ function NewsCard({
           {news.body}
         </p>
         <div className="flex items-center justify-between gap-3 mt-3">
-          <button onClick={onRead} className="flex items-center gap-1 text-[#BBFF5E] text-[12.5px] font-bold">
-            Leggi tutto <ChevronRight size={14} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={onRead} className="flex items-center gap-1 text-[#BBFF5E] text-[12.5px] font-bold">
+              Leggi tutto <ChevronRight size={14} />
+            </button>
+            {isPublicNews(news) && <NewsLikeButton news={news} compact />}
+          </div>
           {isAdmin && (
             <div className="flex items-center gap-3">
               <button onClick={onEdit} className="flex items-center gap-1 text-[#BBFF5E] text-xs font-semibold">

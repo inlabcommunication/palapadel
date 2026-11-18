@@ -56,3 +56,13 @@ export function injectNewsMeta(html, { title, description, imageUrl, url }) {
     .replace(/<meta name="description"[^>]*>/, `<meta name="description" content="${safeDescription}" />`)
     .replace("</head>", `    ${tags}\n  </head>`);
 }
+
+/** Solo foto caricate su Firebase/Google Storage: il server non scarica indirizzi qualsiasi. */
+export function isAllowedCoverUrl(value) {
+  try {
+    const url = new URL(String(value ?? ""));
+    return url.protocol === "https:" && ["firebasestorage.googleapis.com", "storage.googleapis.com"].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
